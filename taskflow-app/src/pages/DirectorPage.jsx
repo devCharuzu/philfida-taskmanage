@@ -557,9 +557,10 @@ function StatusTimes({ task: t }) {
   function fmtDT(iso) {
     if (!iso) return null
     const d = new Date(iso)
+    const gmt8Date = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
     return {
-      date: d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time: d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }),
+      date: gmt8Date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time: gmt8Date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }),
     }
   }
   const assigned  = fmtDT(t.CreatedAt)

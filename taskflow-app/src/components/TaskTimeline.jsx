@@ -32,11 +32,14 @@ const STATUS_STEPS = [
 
 function fmt(iso) {
   if (!iso) return null
-  const d       = new Date(iso)
-  const now     = new Date()
-  const diffMs  = now - d
+  const d = new Date(iso)
+  // Convert to GMT+8 timezone
+  const gmt8Date = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+  const now = new Date()
+  const nowGMT8 = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+  const diffMs = nowGMT8 - gmt8Date
   const diffMin = Math.floor(diffMs / 60000)
-  const diffHr  = Math.floor(diffMs / 3600000)
+  const diffHr = Math.floor(diffMs / 3600000)
   const diffDay = Math.floor(diffMs / 86400000)
 
   let relative
@@ -44,14 +47,14 @@ function fmt(iso) {
   else if (diffMin < 60) relative = `${diffMin}m ago`
   else if (diffHr  < 24) relative = `${diffHr}h ago`
   else if (diffDay <  7) relative = `${diffDay}d ago`
-  else relative = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+  else relative = gmt8Date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
 
-  const exact = d.toLocaleString('en-PH', {
+  const exact = gmt8Date.toLocaleString('en-PH', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
   })
-  const dateOnly = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-  const timeOnly = d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+  const dateOnly = gmt8Date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+  const timeOnly = gmt8Date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
 
   return { relative, exact, dateOnly, timeOnly }
 }

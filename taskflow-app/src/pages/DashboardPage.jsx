@@ -123,22 +123,6 @@ export default function DashboardPage() {
         </nav>
 
         <PersonalCalendarSide />
-
-        {/* Quick stats */}
-        <div className="p-3 border-t border-slate-100 space-y-1.5">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1 mb-2">Quick Stats</p>
-          {[
-            { label: 'Active Tasks', val: activeCount,    color: 'bg-amber-500' },
-            { label: 'Completed',    val: completedCount, color: 'bg-emerald-600' },
-            { label: 'Total',        val: myTasks.length, color: 'bg-green-600' },
-          ].map(s => (
-            <div key={s.label} className="flex items-center gap-2 px-1">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.color}`} />
-              <span className="text-xs text-slate-500 flex-1">{s.label}</span>
-              <span className="text-xs font-bold text-slate-700">{s.val}</span>
-            </div>
-          ))}
-        </div>
       </aside>
 
       {/* ── MAIN ── */}
@@ -239,7 +223,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
       <p className="text-sm text-slate-500 mb-2 leading-relaxed">{t.Instructions}</p>
       {t.Deadline && (
         <div className="flex items-center gap-1.5 text-xs text-red-600 font-semibold mb-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
-          <i className="bi bi-clock-fill" />Deadline: {new Date(t.Deadline).toLocaleString()}
+          <i className="bi bi-clock-fill" />Deadline: {new Date(t.Deadline).toLocaleString('en-US', { timeZone: 'Asia/Manila' })}
         </div>
       )}
       <FileThumb fileLink={t.FileLink} onOpen={onOpenFile} />
