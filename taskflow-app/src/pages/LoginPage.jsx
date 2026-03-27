@@ -366,7 +366,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          <p className="text-center text-slate-400 text-xs mt-8">PhilFIDA Task Management System v2.0</p>
+          <p className="text-center text-slate-400 text-xs mt-8">All rights reserved.</p>
         </div>
       </div>
     </div>
