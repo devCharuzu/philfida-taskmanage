@@ -105,7 +105,7 @@ export default function LoginPage() {
           await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'D', runId: 'post-fix', location: 'LoginPage.jsx:processCallback', message: 'all callback attempts failed', data: {}, timestamp: Date.now() }) })
         } catch (_) {}
         // #endregion
-        setError('Google sign-in failed. Please try again.')
+        setError('Google sign-in completed but app could not establish session. Verify redirect URI in Supabase and Google OAuth settings, then try again.')
         setGoogleLoading(false)
         return
       }
@@ -150,13 +150,15 @@ export default function LoginPage() {
   // ── Google sign in ──────────────────────────────────────────
   async function handleGoogleSignIn() {
     setGoogleLoading(true); setError('')
-    try { await signInWithGoogle() }
-  catch (e) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'F', runId: 'post-fix', location: 'LoginPage.jsx:handleGoogleSignIn', message: 'signInWithGoogle threw before redirect', data: { errMessage: e?.message || null, errStatus: e?.status ?? null }, timestamp: Date.now() }) }).catch(() => {})
-    // #endregion
-    setError('Could not connect to Google. Please try again.'); setGoogleLoading(false)
-  }
+    try {
+      await signInWithGoogle()
+    } catch (e) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'F', runId: 'post-fix', location: 'LoginPage.jsx:handleGoogleSignIn', message: 'signInWithGoogle threw before redirect', data: { errMessage: e?.message || null, errStatus: e?.status ?? null }, timestamp: Date.now() }) }).catch(() => {})
+      // #endregion
+      setError(`Could not connect to Google. ${e?.message || ''} Please try again.`)
+      setGoogleLoading(false)
+    }
   }
 
   // ── Register ────────────────────────────────────────────────

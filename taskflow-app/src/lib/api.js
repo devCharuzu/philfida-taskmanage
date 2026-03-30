@@ -299,8 +299,10 @@ export async function signInWithGoogle() {
 
   const redirectTo =
     typeof window !== 'undefined'
-      ? `${window.location.origin}/`
+      ? `${window.location.origin}${window.location.pathname}`
       : ''
+
+  console.debug('[auth] signInWithGoogle redirectTo', redirectTo)
 
   // Get the OAuth URL from Supabase
   const { data, error } = await supabase.auth.signInWithOAuth({
