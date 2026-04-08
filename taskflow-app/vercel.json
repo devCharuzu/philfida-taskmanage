@@ -1,5 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/((?!assets/.*).*)", "destination": "/index.html" }
-  ]
+  "buildCommand": "npm ci && npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci --legacy-peer-deps"
 }
