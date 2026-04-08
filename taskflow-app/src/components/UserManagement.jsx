@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { updateUserAccountStatus, updateUserRole, deleteUser, getAllUsers, UNITS } from '../lib/api'
+import { updateUserAccountStatus, updateUserRole, deleteUser, getAllUsers, UNITS, OFFICES } from '../lib/api'
 
 const ROLE_COLORS = {
   Director:    'bg-purple-100 text-purple-700 border-purple-200',
@@ -30,9 +30,8 @@ export default function UserManagement({ users, onSync }) {
   const [deleteError,  setDeleteError]  = useState('')
   const [deleteLoading,setDeleteLoading]= useState(false)
 
-  const nonDirectors  = users.filter(u => u.Role !== 'Director')
-  const filtered      = filter === 'All' ? nonDirectors : nonDirectors.filter(u => u.AccountStatus === filter)
-  const pendingCount  = nonDirectors.filter(u => u.AccountStatus === 'Pending').length
+  const filteredUsers = filter === 'All' ? users : users.filter(u => u.AccountStatus === filter)
+  const pendingCount   = users.filter(u => u.AccountStatus === 'Pending').length
 
   async function handleApprove(userId) {
     setLoading(userId + '_approve')
@@ -128,9 +127,9 @@ export default function UserManagement({ users, onSync }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {filteredUsers.length === 0 ? (
                 <tr><td colSpan="5" className="text-center py-10 text-slate-400">No users in this category.</td></tr>
-              ) : filtered.map(u => (
+              ) : filteredUsers.map(u => (
                 <tr key={u.ID} className="group">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
@@ -207,16 +206,17 @@ export default function UserManagement({ users, onSync }) {
             <div className="p-5 space-y-4">
               <div>
                 <label className="label">Role</label>
-                <select className="input" value={editRole} onChange={e => setEditRole(e.target.value)}>
+                <select className="input" value={editRole} onChange={e => { setEditRole(e.target.value); setEditUnit('') }}>
                   <option value="Employee">Unit Personnel</option>
                   <option value="Unit Head">Unit Head</option>
+                  <option value="Director">Director</option>
                 </select>
               </div>
               <div>
-                <label className="label">Unit</label>
+                <label className="label">{editRole === 'Director' ? 'Office' : 'Unit'}</label>
                 <select className="input" value={editUnit} onChange={e => setEditUnit(e.target.value)}>
-                  <option value="">-- Select Unit --</option>
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
+                  <option value="">-- Select {editRole === 'Director' ? 'Office' : 'Unit'} --</option>
+                  {(editRole === 'Director' ? OFFICES : UNITS).map(u => <option key={u}>{u}</option>)}
                 </select>
               </div>
               <button onClick={handleSaveEdit} disabled={loading === editUser.ID + '_edit'} className="btn-primary w-full py-2.5">

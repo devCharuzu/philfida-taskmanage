@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { getAllUsers, registerUser, signInWithGoogle, exchangePkceAuthCode, handleGoogleCallback, UNITS } from '../lib/api'
+import { getAllUsers, registerUser, signInWithGoogle, exchangePkceAuthCode, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
 
 export default function LoginPage() {
   const [tab,         setTab]         = useState('login')
@@ -340,17 +340,18 @@ export default function LoginPage() {
                 <input className="input" type="email" placeholder="juan@philfida.gov.ph" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
               </div>
               <div>
-                <label className="label">Unit</label>
+                <label className="label">{regRole === 'Director' ? 'Office' : 'Unit'}</label>
                 <select className="input" value={regUnit} onChange={e => setRegUnit(e.target.value)} required>
-                  <option value="">-- Select Unit --</option>
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
+                  <option value="">-- Select {regRole === 'Director' ? 'Office' : 'Unit'} --</option>
+                  {(regRole === 'Director' ? OFFICES : UNITS).map(u => <option key={u}>{u}</option>)}
                 </select>
               </div>
               <div>
                 <label className="label">Role</label>
-                <select className="input" value={regRole} onChange={e => setRegRole(e.target.value)} required>
+                <select className="input" value={regRole} onChange={e => { setRegRole(e.target.value); setRegUnit('') }} required>
                   <option value="Employee">Unit Personnel</option>
                   <option value="Unit Head">Unit Head</option>
+                  <option value="Director">Director</option>
                 </select>
               </div>
               <div>
