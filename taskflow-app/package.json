@@ -1,6 +1,5 @@
 {
   "name": "taskflow-philfida",
-  "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -9,25 +8,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.44.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0",
-    "zustand": "^4.5.4"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    
-    "autoprefixer": "^10.4.20",
-
-    "fdir": "^6.5.0",
-    "postcss": "^8.4.41",
-    "rollup": "^4.0.0",
-    "tailwindcss": "^3.4.10",
-    
-
-
+    "@vitejs/plugin-react": "^4.2.0",
     "esbuild": "^0.28.0",
-    "vite": "^8.0.0",
-    "@vitejs/plugin-react": "^6.0.0"
+    "vite": "^5.0.0"
   }
 }
