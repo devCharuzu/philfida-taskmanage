@@ -8,9 +8,20 @@ import PresenceToggle from '../components/PresenceToggle'
 import PersonalCalendarSide from '../components/PersonalCalendarSide'
 import { getStatusBadgeClass } from '../lib/api'
 
-// Helper function to convert date to Philippines timezone
-function toPHTime(date) {
-  return new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+// Returns a YYYY-MM-DD string in PH time (Asia/Manila, UTC+8)
+// Never use .toISOString() for date keys — it always outputs UTC and will be off by a day
+function getPHDateString(date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(date)
+}
+
+// Returns { year, month (0-indexed), day } parts in PH time
+function getPHDateParts(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric', month: 'numeric', day: 'numeric'
+  }).formatToParts(date)
+  const get = type => parseInt(parts.find(p => p.type === type).value)
+  return { year: get('year'), month: get('month') - 1, day: get('day') }
 }
 
 function buildMonth(year, month) {
@@ -56,10 +67,10 @@ export default function PersonalCalendarPage() {
   const calKey = `pf_calendar_${uid}`
   const todoKey = `pf_todos_${uid}`
 
-  const now = toPHTime(new Date())
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth())
-  const [selectedDate, setSelectedDate] = useState(toPHTime(new Date()))
+  const { year: phYear, month: phMonth } = getPHDateParts(new Date())
+  const [year, setYear] = useState(phYear)
+  const [month, setMonth] = useState(phMonth)
+  const [selectedDate, setSelectedDate] = useState(getPHDateString(new Date()))
   const [events, setEvents] = useState(() => {
     try { return JSON.parse(localStorage.getItem(calKey) || '{}') } catch { return {} }
   })
@@ -103,7 +114,7 @@ export default function PersonalCalendarPage() {
       tasks.forEach(t => {
         if (!t.Deadline) return
         try {
-          const key = new Date(t.Deadline).toISOString().slice(0,10)
+          const key = getPHDateString(new Date(t.Deadline))
           const ev = { 
             id: `task-${t.TaskID}`, 
             title: t.Title || 'Task',
@@ -126,13 +137,12 @@ export default function PersonalCalendarPage() {
     setMonth(m => { const nm = m + 1; if (nm > 11) { setYear(y => y+1); return 0 } return nm })
   }
   function goToday() {
-    const t = toPHTime(new Date())
-    setYear(t.getFullYear()); setMonth(t.getMonth()); setSelectedDate(t)
+    const { year: y, month: m } = getPHDateParts(new Date())
+    setYear(y); setMonth(m); setSelectedDate(getPHDateString(new Date()))
   }
 
-  function addEvent(title, date) {
-    const key = new Date(date).toISOString().slice(0,10)
-    setEvents(prev => ({ ...prev, [key]: [...(prev[key]||[]), { id: Date.now(), title }] }))
+  function addEvent(title, dateKey) {
+    setEvents(prev => ({ ...prev, [dateKey]: [...(prev[dateKey]||[]), { id: Date.now(), title }] }))
   }
   function removeEvent(dateKey, id) {
     setEvents(prev => ({ ...prev, [dateKey]: (prev[dateKey]||[]).filter(e => e.id !== id) }))
@@ -145,7 +155,7 @@ export default function PersonalCalendarPage() {
   function removeTodo(id) { setTodos(prev => prev.filter(t => t.id !== id)) }
 
   const weeks = buildMonth(year, month)
-  const monthEvents = (d) => events[new Date(d).toISOString().slice(0,10)] || []
+  const monthEvents = (d) => events[getPHDateString(d)] || []
   const [showMonthPicker, setShowMonthPicker] = useState(false)
 
   return (
@@ -302,7 +312,7 @@ export default function PersonalCalendarPage() {
                 {weeks.map((week, wi) => (
                   <div key={wi} className="grid grid-cols-7 gap-2">
                     {week.map((d, di) => {
-                      const iso = d.toISOString().slice(0,10)
+                      const iso = getPHDateString(d)
                       const inMonth = d.getMonth() === month
                       const isCompletedRange = completedRanges.some(r => {
                         try {
@@ -314,11 +324,11 @@ export default function PersonalCalendarPage() {
                           return dd >= start && dd <= end
                         } catch (e) { return false }
                       })
-                      const isSelected = iso === selectedDate.toISOString().slice(0,10)
-                      const isToday = iso === toPHTime(new Date()).toISOString().slice(0,10)
+                      const isSelected = iso === selectedDate
+                      const isToday = iso === getPHDateString(new Date())
                       
                       return (
-                        <button key={di} onClick={() => setSelectedDate(new Date(d))}
+                        <button key={di} onClick={() => setSelectedDate(iso)}
                           className={`p-3 h-24 text-left rounded-xl border transition-all duration-200 hover:shadow-md hover:scale-105 ${
                             isCompletedRange 
                               ? 'bg-slate-100 text-slate-400 opacity-70 border-slate-200' 
@@ -373,9 +383,9 @@ export default function PersonalCalendarPage() {
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-green-100 p-5">
                 <h3 className="font-semibold text-green-900 text-sm mb-4 flex items-center gap-2">
                   <i className="bi bi-calendar-check text-green-600"></i>
-                  Tasks for {selectedDate.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })}
+                  Tasks for {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </h3>
-                <EventList events={events[new Date(selectedDate).toISOString().slice(0,10)] || []} onAdd={addEvent} onRemove={removeEvent} dateKey={new Date(selectedDate).toISOString().slice(0,10)} />
+                <EventList events={events[selectedDate] || []} onAdd={addEvent} onRemove={removeEvent} dateKey={selectedDate} />
               </div>
 
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-green-100 p-5">
