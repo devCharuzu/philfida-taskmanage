@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [profileOpen,  setProfileOpen]  = useState(false)
   const [settingsOpen,     setSettingsOpen]     = useState(false)
   const [profileEditOpen, setProfileEditOpen] = useState(() => !!session?._needsProfileSetup)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const profileRef = useRef()
 
   useEffect(() => {
@@ -54,8 +55,11 @@ export default function DashboardPage() {
   return (
     <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
 
+      {/* ── SIDEBAR OVERLAY (mobile) ── */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
+
       {/* ── SIDEBAR ── */}
-      <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col flex-shrink-0 h-full">
+      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 md:w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* Branding strip */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
@@ -67,7 +71,12 @@ export default function DashboardPage() {
             </div>
             <span className="text-white font-bold text-xs truncate">PhilFIDA TaskFlow</span>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
+              <i className="bi bi-x-lg text-base" />
+            </button>
+          </div>
         </div>
 
         {/* Profile */}
@@ -130,18 +139,16 @@ export default function DashboardPage() {
 
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-2xl" />
+          </button>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
             <span className="text-green-900 font-bold text-sm">TaskFlow</span>
           </div>
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <button onClick={logout} className="p-1.5 text-red-400 hover:text-red-600 transition-colors">
-              <i className="bi bi-box-arrow-left text-lg" />
-            </button>
-          </div>
+          <NotificationBell />
         </div>
 
         {/* Page top bar */}
@@ -159,7 +166,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Task feed */}
-        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4 pb-20 md:pb-4">
+        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
           <div className="max-w-2xl mx-auto space-y-3">
             {myTasks.length === 0 ? (
               <div className="bg-white rounded-xl border border-slate-200 text-center py-20 shadow-sm">
@@ -183,17 +190,7 @@ export default function DashboardPage() {
           </div>
         </main>
 
-        {/* Mobile bottom nav */}
-        <nav className="md:hidden flex bg-white border-t border-slate-200 flex-shrink-0 mobile-nav-safe">
-          <button className="flex-1 flex flex-col items-center gap-1 py-3 text-green-800">
-            <i className="bi bi-grid-fill text-xl" />
-            <span className="text-[10px] font-semibold">Tasks</span>
-          </button>
-          <button onClick={logout} className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-red-500 transition-colors">
-            <i className="bi bi-box-arrow-left text-xl" />
-            <span className="text-[10px] font-semibold">Sign Out</span>
-          </button>
-        </nav>
+
       </div>
 
       {chat         && <ChatModal taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}

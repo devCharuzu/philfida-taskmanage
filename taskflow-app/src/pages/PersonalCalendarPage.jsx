@@ -50,6 +50,7 @@ export default function PersonalCalendarPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profileEditOpen, setProfileEditOpen] = useState(false)
   const [presence, setPresence] = useState(session?.Status || 'Available')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const profileRef = useRef()
 
   useEffect(() => {
@@ -159,57 +160,59 @@ export default function PersonalCalendarPage() {
   const [showMonthPicker, setShowMonthPicker] = useState(false)
 
   return (
-    <div className="h-dvh flex overflow-hidden bg-gradient-to-br from-slate-50 to-green-50">
+    <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
+
+      {/* ── SIDEBAR OVERLAY (mobile) ── */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* SIDEBAR */}
-      <aside className="hidden lg:flex w-72 bg-white/80 backdrop-blur-sm border-r border-green-100 flex-col flex-shrink-0 h-full shadow-lg">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-green-100 flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#0f4c0f,#1a5d1a)' }}>
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
+      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 md:w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
               <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
-                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:#155414;">PF</span>' }} />
+                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:9px;font-weight:900;color:#155414;">PF</span>' }} />
             </div>
-            <div>
-              <span className="text-white font-bold text-sm">PhilFIDA TaskFlow</span>
-              <div className="text-green-200 text-[10px]">Calendar View</div>
-            </div>
+            <span className="text-white font-bold text-xs truncate">PhilFIDA TaskFlow</span>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
+              <i className="bi bi-x-lg text-base" />
+            </button>
+          </div>
         </div>
 
         <div className="relative flex-shrink-0" ref={profileRef}>
           <button
             onClick={() => setProfileOpen(o => !o)}
-            className="w-full flex items-center gap-3 px-6 py-4 border-b border-green-50 hover:bg-green-50/50 transition-all duration-200 group"
-            style={{ background: profileOpen ? 'linear-gradient(135deg,#f0fdf4,#dcfce7)' : undefined }}
+            className="w-full flex items-center gap-3 px-4 py-4 border-b border-slate-100 hover:bg-green-50 transition-colors group"
+            style={{ background: profileOpen ? '#f0faf0' : undefined }}
           >
-            <div className="relative">
-              <img
-                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
-                className="w-12 h-12 rounded-2xl flex-shrink-0 ring-2 ring-green-200 group-hover:ring-green-400 transition-all shadow-md"
-                alt={session?.Name}
-              />
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-            </div>
+            <img
+              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
+              className="w-10 h-10 rounded-xl flex-shrink-0 ring-2 ring-green-200 group-hover:ring-green-400 transition-all"
+              alt={session?.Name}
+            />
             <div className="min-w-0 text-left flex-1">
               <p className="font-bold text-green-900 text-sm truncate leading-none">{session?.Name}</p>
-              <p className="text-green-600 text-[11px] mt-1 font-medium">{session?.Designation || session?.Role}</p>
+              <p className="text-slate-400 text-[11px] mt-1">{session?.Designation || session?.Role}</p>
               <p className="text-slate-400 text-[10px] mt-0.5 truncate">{session?.Office || session?.Unit}</p>
             </div>
-            <i className={`bi bi-chevron-${profileOpen ? 'up' : 'down'} text-green-400 text-xs flex-shrink-0`} />
+            <i className={`bi bi-chevron-${profileOpen ? 'up' : 'down'} text-slate-300 text-xs flex-shrink-0`} />
           </button>
           {profileOpen && (
-            <div className="absolute left-0 right-0 top-full bg-white border border-green-100 shadow-2xl z-50 overflow-hidden mx-4 rounded-2xl">
-              <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
+            <div className="absolute left-0 right-0 top-full bg-white border border-slate-200 shadow-xl z-50 overflow-hidden mx-2 rounded-xl">
+              <div className="px-4 py-3 bg-green-50 border-b border-slate-100">
                 <p className="font-bold text-green-900 text-xs">{session?.Name}</p>
                 {session?.Designation && <p className="text-green-700 text-[10px] mt-0.5 font-semibold">{session?.Designation}</p>}
                 <p className="text-slate-400 text-[10px] mt-0.5">{session?.Office || session?.Unit}</p>
               </div>
-              <button onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-green-50 transition-colors text-left border-b border-green-50">
+              <button onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100">
                 <i className="bi bi-person-gear text-green-700 text-base" /> Edit Profile
               </button>
-              <button onClick={() => { setProfileOpen(false); setSettingsOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-green-50 transition-colors text-left border-b border-green-50">
+              <button onClick={() => { setProfileOpen(false); setSettingsOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100">
                 <i className="bi bi-gear-fill text-green-700 text-base" /> Settings
               </button>
               <button onClick={() => { useStore.getState().clearSession(); window.location.href = '/' }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors text-left">
@@ -219,13 +222,13 @@ export default function PersonalCalendarPage() {
           )}
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 py-2">Navigation</p>
-          <button onClick={() => navigate('/dashboard')} className="nav-item w-full text-left">
+          <button onClick={() => { navigate('/dashboard'); setSidebarOpen(false) }} className="nav-item w-full text-left">
             <i className="bi bi-grid-fill text-base" />
             <span className="flex-1 text-sm">My Assignments</span>
           </button>
-          <button onClick={() => navigate('/calendar')} className="nav-item w-full text-left active">
+          <button onClick={() => { navigate('/calendar'); setSidebarOpen(false) }} className="nav-item w-full text-left active">
             <i className="bi bi-calendar-event text-base" />
             <span className="flex-1 text-sm">My Calendar</span>
           </button>
@@ -238,38 +241,30 @@ export default function PersonalCalendarPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile top bar */}
-        <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur-sm border-b border-green-100 flex-shrink-0 shadow-sm">
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-2xl" />
+          </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-green-800 rounded-lg flex items-center justify-center overflow-hidden shadow-sm">
+            <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
             <span className="text-green-900 font-bold text-sm">TaskFlow</span>
           </div>
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <button onClick={() => { useStore.getState().clearSession(); window.location.href = '/' }} className="p-1.5 text-red-400 hover:text-red-600">
-              <i className="bi bi-box-arrow-left text-lg" />
-            </button>
-          </div>
+          <NotificationBell />
         </div>
 
         {/* Page top bar */}
-        <div className="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-green-100 bg-white/80 backdrop-blur-sm flex-shrink-0 gap-2 min-w-0 shadow-sm">
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
           <div className="min-w-0">
-            <h2 className="font-bold text-green-900 text-lg lg:text-xl leading-none">Team Calendar</h2>
-            <p className="text-slate-500 text-sm mt-1">View all team tasks and deadlines</p>
+            <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">My Calendar</h2>
+            <p className="text-slate-400 text-xs mt-1 truncate">{session?.Office || session?.Unit}</p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs text-green-700 font-medium">PH Time</span>
-            </div>
-            <PresenceToggle value={presence} userId={session?.ID} onChange={setPresence} />
-          </div>
+          <PresenceToggle value={presence} userId={session?.ID} onChange={setPresence} />
         </div>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 pb-20 lg:pb-6">
+        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
           <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-4 gap-6">
               <div className="xl:col-span-3 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-green-100 p-6">
               <div className="flex items-center justify-between mb-6">

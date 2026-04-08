@@ -43,6 +43,7 @@ export default function UnitHeadPage() {
   const [profileEditOpen,  setProfileEditOpen]  = useState(false)
   const [settingsOpen,     setSettingsOpen]     = useState(false)
   const [drawerOpen,   setDrawerOpen]  = useState(false)
+  const [sidebarOpen,  setSidebarOpen]  = useState(false)
   const profileRef = useRef()
 
   useEffect(() => {
@@ -96,8 +97,11 @@ export default function UnitHeadPage() {
   return (
     <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
 
+      {/* ── SIDEBAR OVERLAY (mobile) ── */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
+
       {/* ── SIDEBAR ── */}
-      <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col flex-shrink-0 h-full">
+      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 md:w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* Branding strip */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
@@ -109,7 +113,12 @@ export default function UnitHeadPage() {
             </div>
             <span className="text-white font-bold text-xs truncate">PhilFIDA TaskFlow</span>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
+              <i className="bi bi-x-lg text-base" />
+            </button>
+          </div>
         </div>
 
         {/* Profile */}
@@ -153,13 +162,13 @@ export default function UnitHeadPage() {
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 py-2">Navigation</p>
           {TABS.map(item => (
-            <button key={item.key} onClick={() => setTab(item.key)}
+            <button key={item.key} onClick={() => { setTab(item.key); setSidebarOpen(false) }}
               className={`nav-item w-full text-left ${tab === item.key ? 'active' : ''}`}>
               <i className={`bi ${item.icon} text-base`} />
               <span className="flex-1 text-sm">{item.label}</span>
             </button>
           ))}
-          <button onClick={() => navigate('/calendar')} className="nav-item w-full text-left">
+          <button onClick={() => { navigate('/calendar'); setSidebarOpen(false) }} className="nav-item w-full text-left">
             <i className="bi bi-calendar-event text-base" />
             <span className="flex-1 text-sm">My Calendar</span>
           </button>
@@ -173,18 +182,16 @@ export default function UnitHeadPage() {
 
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-2xl" />
+          </button>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
             <span className="text-green-900 font-bold text-sm">TaskFlow</span>
           </div>
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <button onClick={logout} className="p-1.5 text-red-400 hover:text-red-600">
-              <i className="bi bi-box-arrow-left text-lg" />
-            </button>
-          </div>
+          <NotificationBell />
         </div>
 
         {/* Page top bar */}
@@ -244,7 +251,7 @@ export default function UnitHeadPage() {
         )}
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4 pb-20 md:pb-4">
+        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
 
           {/* MY TASKS */}
           {tab === 'my-tasks' && (
@@ -328,21 +335,7 @@ export default function UnitHeadPage() {
           )}
         </main>
 
-        {/* Mobile bottom nav */}
-        <nav className="md:hidden flex bg-white border-t border-slate-200 flex-shrink-0 mobile-nav-safe">
-          {TABS.map(item => (
-            <button key={item.key} onClick={() => setTab(item.key)}
-              className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold transition-colors
-                ${tab === item.key ? 'text-green-800' : 'text-slate-400'}`}>
-              <i className={`bi ${item.icon} text-xl`} />
-              {item.label.split(' ')[0]}
-            </button>
-          ))}
-          <button onClick={() => setDrawerOpen(true)}
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold text-green-700">
-            <i className="bi bi-send-fill text-xl" />Assign
-          </button>
-        </nav>
+
       </div>
 
       {/* ── ASSIGN DRAWER ── */}

@@ -117,12 +117,10 @@ export default function DirectorPage() {
     <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
 
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
-      <aside className={`
-        absolute md:relative inset-y-0 left-0 z-40
-        w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0
-        transform transition-transform h-full
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-      `}>
+      {/* ── SIDEBAR OVERLAY (mobile) ── */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 md:w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* ── Branding + Notification row ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
@@ -134,8 +132,11 @@ export default function DirectorPage() {
             </div>
             <span className="text-white font-bold text-xs truncate">PhilFIDA TaskFlow</span>
           </div>
-          <div className="flex-shrink-0">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <NotificationBell />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
+              <i className="bi bi-x-lg text-base" />
+            </button>
           </div>
         </div>
 
@@ -220,27 +221,25 @@ export default function DirectorPage() {
         </div>
       </aside>
 
-      {sidebarOpen && <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* ── MAIN ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Mobile top bar — only visible on small screens */}
+        {/* Mobile top bar */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
-          <button onClick={() => setSidebarOpen(true)} className="p-1.5 text-slate-500 hover:text-green-800">
-            <i className="bi bi-list text-xl" />
+          <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-2xl" />
           </button>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
-              <img src="/philfida-logo.png" alt="PhilFIDA" className="w-5 h-5 object-contain"
-                onError={e => { e.target.style.display='none' }} />
+              <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
             <span className="text-green-900 font-bold text-sm">TaskFlow</span>
           </div>
           <NotificationBell />
         </div>
 
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        <main className="flex-1 overflow-y-auto pb-16">
 
           {/* ── MONITOR TAB ── */}
           {tab === 'monitor' && (
