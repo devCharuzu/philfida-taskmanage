@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { getAllUsers, registerUser, signInWithGoogle, exchangePkceAuthCode, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
+import { getAllUsers, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
 
 export default function LoginPage() {
   const [tab,         setTab]         = useState('login')
@@ -40,7 +40,6 @@ export default function LoginPage() {
     const sp = new URLSearchParams(window.location.search)
     const oauthErr = sp.get('error')
     const oauthErrDesc = sp.get('error_description')
-    const authCode = sp.get('code') || hashParams.get('code')
 
     if (oauthErr) {
       setGoogleLoading(true)
@@ -53,18 +52,8 @@ export default function LoginPage() {
     setGoogleLoading(true)
 
     async function processCallback() {
-      const { error: pkceError } = await exchangePkceAuthCode(authCode)
-      if (pkceError) {
-        window.history.replaceState({}, document.title, window.location.pathname)
-        setError(pkceError.message || 'Google sign-in failed. Please try again.')
-        setGoogleLoading(false)
-        return
-      }
-
-      if (!authCode && window.location.hash.includes('access_token')) {
-        await supabase.auth.getSession()
-      }
-
+      // Wait briefly for Supabase to initialize and detect the PKCE callback.
+      await new Promise(r => setTimeout(r, 200))
       window.history.replaceState({}, document.title, window.location.pathname)
 
       // Retry up to 5 times with 1s delay — allow session / app user row to settle

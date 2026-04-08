@@ -299,7 +299,7 @@ export async function signInWithGoogle() {
 
   const redirectTo =
     typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}`
+      ? window.location.origin
       : ''
 
   console.debug('[auth] signInWithGoogle redirectTo', redirectTo)
