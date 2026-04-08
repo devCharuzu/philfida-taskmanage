@@ -326,9 +326,7 @@ export async function signInWithGoogle() {
         if (ru) googleOAuthRedirectHost = new URL(decodeURIComponent(ru)).host
       }
     } catch (_) {}
-    fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'C', runId: 'post-fix', location: 'api.js:signInWithGoogle', message: 'signInWithOAuth result', data: { hasError: !!error, errMessage: error?.message || null, errStatus: error?.status ?? null, redirectToUsed: redirectTo, redirectOrigin: typeof window !== 'undefined' ? window.location.origin : null, oauthUrlHost: oauthHost, redirectToParam, googleOAuthRedirectHost }, timestamp: Date.now() }) }).catch(() => {})
   }
-  // #endregion
   if (error) throw error
 
   const url = new URL(data.url)
@@ -340,20 +338,12 @@ export async function signInWithGoogle() {
 export async function exchangePkceAuthCode(authCode) {
   if (!authCode) return { error: null }
   const { error } = await supabase.auth.exchangeCodeForSession(authCode)
-  // #region agent log
-  try {
-    await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'A', runId: 'post-fix', location: 'api.js:exchangePkceAuthCode', message: 'exchangeCodeForSession', data: { hasError: !!error, errMessage: error?.message || null, errStatus: error?.status ?? null }, timestamp: Date.now() }) })
-  } catch (_) {}
-  // #endregion
   return { error }
 }
 
 export async function handleGoogleCallback() {
   // Get Supabase auth session (handles PKCE code exchange automatically)
   const { data: { session: authSession }, error: sessionError } = await supabase.auth.getSession()
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'A', runId: 'pre-fix', location: 'api.js:handleGoogleCallback', message: 'getSession after callback', data: { hasSessionError: !!sessionError, sessionErrMessage: sessionError?.message || null, sessionErrName: sessionError?.name || null, hasAuthSession: !!authSession }, timestamp: Date.now() }) }).catch(() => {})
-  // #endregion
 
   if (sessionError) { console.error('Session error:', sessionError); return null }
   if (!authSession) { console.warn('No session found'); return null }
@@ -370,9 +360,6 @@ export async function handleGoogleCallback() {
 
   // Find existing user — match by email (case-insensitive)
   const { data: users, error: usersError } = await supabase.from('Users').select('*')
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'E', runId: 'pre-fix', location: 'api.js:handleGoogleCallback', message: 'Users select after google auth', data: { usersError: usersError?.message || null, usersErrorCode: usersError?.code || null }, timestamp: Date.now() }) }).catch(() => {})
-  // #endregion
   if (usersError) { console.error('Users fetch error:', usersError); return null }
 
   const existing = users?.find(u =>

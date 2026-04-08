@@ -44,9 +44,6 @@ export default function LoginPage() {
 
     if (oauthErr) {
       setGoogleLoading(true)
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'B', runId: 'post-fix', location: 'LoginPage.jsx:oauth-url-error', message: 'provider returned error query', data: { oauthErr, hasErrDesc: !!oauthErrDesc }, timestamp: Date.now() }) }).catch(() => {})
-      // #endregion
       window.history.replaceState({}, document.title, window.location.pathname)
       setError(oauthErrDesc || oauthErr)
       setGoogleLoading(false)
@@ -56,19 +53,8 @@ export default function LoginPage() {
     setGoogleLoading(true)
 
     async function processCallback() {
-      // #region agent log
-      try {
-        await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'A', runId: 'post-fix', location: 'LoginPage.jsx:oauth-callback', message: 'callback entry before exchange', data: { origin: window.location.origin, pathname: window.location.pathname, hasCodeParam: !!authCode, codeLen: authCode?.length ?? 0, codeFromHash: !sp.get('code') && !!hashParams.get('code'), hashHasAccessToken: window.location.hash.includes('access_token') }, timestamp: Date.now() }) })
-      } catch (_) {}
-      // #endregion
-
       const { error: pkceError } = await exchangePkceAuthCode(authCode)
       if (pkceError) {
-        // #region agent log
-        try {
-          await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'A', runId: 'post-fix', location: 'LoginPage.jsx:processCallback', message: 'pkce exchange failed', data: { errMessage: pkceError.message || null }, timestamp: Date.now() }) })
-        } catch (_) {}
-        // #endregion
         window.history.replaceState({}, document.title, window.location.pathname)
         setError(pkceError.message || 'Google sign-in failed. Please try again.')
         setGoogleLoading(false)
@@ -80,31 +66,16 @@ export default function LoginPage() {
       }
 
       window.history.replaceState({}, document.title, window.location.pathname)
-      // #region agent log
-      try {
-        await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'A', runId: 'post-fix', location: 'LoginPage.jsx:after-replaceState', message: 'url cleaned after exchange', data: { pathname: window.location.pathname }, timestamp: Date.now() }) })
-      } catch (_) {}
-      // #endregion
 
       // Retry up to 5 times with 1s delay — allow session / app user row to settle
       let result = null
       for (let i = 0; i < 5; i++) {
         result = await handleGoogleCallback()
-        // #region agent log
-        try {
-          await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'D', runId: 'post-fix', location: 'LoginPage.jsx:processCallback', message: 'handleGoogleCallback attempt', data: { attempt: i + 1, hasResult: !!result }, timestamp: Date.now() }) })
-        } catch (_) {}
-        // #endregion
         if (result) break
         await new Promise(r => setTimeout(r, 1000))
       }
 
       if (!result) {
-        // #region agent log
-        try {
-          await fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'D', runId: 'post-fix', location: 'LoginPage.jsx:processCallback', message: 'all callback attempts failed', data: {}, timestamp: Date.now() }) })
-        } catch (_) {}
-        // #endregion
         setError('Google sign-in completed but app could not establish session. Verify redirect URI in Supabase and Google OAuth settings, then try again.')
         setGoogleLoading(false)
         return
@@ -153,9 +124,6 @@ export default function LoginPage() {
     try {
       await signInWithGoogle()
     } catch (e) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/ea890d68-cfc2-490c-96ef-3e6da19b403c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hypothesisId: 'F', runId: 'post-fix', location: 'LoginPage.jsx:handleGoogleSignIn', message: 'signInWithGoogle threw before redirect', data: { errMessage: e?.message || null, errStatus: e?.status ?? null }, timestamp: Date.now() }) }).catch(() => {})
-      // #endregion
       setError(`Could not connect to Google. ${e?.message || ''} Please try again.`)
       setGoogleLoading(false)
     }
