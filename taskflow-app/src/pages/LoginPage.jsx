@@ -151,193 +151,332 @@ export default function LoginPage() {
 
   if (googleLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f0f4f0' }}>
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-green-200 border-t-green-700 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-green-900 font-semibold text-sm">Signing in with Google...</p>
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
+        {/* Animated background elements */}
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-green-400/10 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-yellow-400/10 rounded-full blur-3xl animate-pulse delay-1000" />
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl animate-pulse delay-500" />
+        </div>
+
+        <div className="relative z-10 text-center">
+          <div className="w-20 h-20 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-6" />
+          <p className="text-white font-semibold text-lg">Signing in with Google...</p>
+          <p className="text-green-200 text-sm mt-2">Please wait while we verify your account</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-screen relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
 
-      {/* LEFT PANEL */}
-      <div
-        className="relative flex flex-col justify-between md:w-[42%] lg:w-[38%] xl:w-1/3 min-h-[220px] md:min-h-screen px-8 py-10 md:px-12 md:py-14 overflow-hidden"
-        style={{ background: 'linear-gradient(160deg, #0a2e0a 0%, #155414 45%, #1a6e1a 100%)' }}
-      >
-        <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #4ade80, transparent)' }} />
-        <div className="absolute bottom-10 -right-16 w-64 h-64 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #86efac, transparent)' }} />
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-8 md:mb-12">
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden backdrop-blur-sm flex-shrink-0">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Bagong_Pilipinas_logo_%28DA%29.svg/200px-Bagong_Pilipinas_logo_%28DA%29.svg.png"
-                alt="DA" className="w-11 h-11 object-contain" onError={e => { e.target.style.display='none' }} />
-            </div>
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-white flex items-center justify-center overflow-hidden shadow-lg flex-shrink-0 p-1">
-              <img src="/philfida-logo.png" alt="PhilFIDA" className="w-full h-full object-contain"
-                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:#155414;text-align:center;line-height:1.1;">Phil<br/>FIDA</span>' }} />
-            </div>
-          </div>
-          <div>
-            <p className="text-green-300 text-xs font-semibold uppercase tracking-widest mb-2">Republic of the Philippines</p>
-            <h1 className="text-white font-bold leading-tight mb-1" style={{ fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.02em' }}>
-              Philippine Fiber Industry<br />Development Authority
-            </h1>
-            <p className="text-green-300 text-sm font-medium mt-3">Task Management System</p>
-            <div className="w-10 h-0.5 bg-yellow-400 mt-5 mb-6 rounded-full" />
-            <ul className="space-y-3 hidden md:block">
-              {['Assign and track personnel tasks', 'Real-time status updates', 'Secure file attachments', 'In-task messaging'].map(f => (
-                <li key={f} className="flex items-center gap-3 text-green-200 text-sm">
-                  <span className="w-5 h-5 rounded-full bg-green-500/30 border border-green-400/40 flex items-center justify-center flex-shrink-0">
-                    <i className="bi bi-check text-green-300 text-xs" />
-                  </span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-        <div className="relative z-10 mt-8 md:mt-0">
-          <p className="text-green-500 text-xs">© {new Date().getFullYear()} Philippine Fiber Industry Development Authority</p>
-        </div>
+      {/* Animated background elements */}
+      <div className="absolute inset-0">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-green-400/8 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 right-20 w-80 h-80 bg-yellow-400/8 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-blue-400/8 rounded-full blur-3xl animate-pulse delay-500" />
+        <div className="absolute top-1/4 right-1/4 w-48 h-48 bg-emerald-400/6 rounded-full blur-2xl animate-pulse delay-700" />
       </div>
 
-      {/* RIGHT PANEL */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-5 py-10 md:px-10 lg:px-16">
-        <div className="w-full max-w-md">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
-              {tab === 'login' ? 'Welcome back' : 'Create account'}
-            </h2>
-            <p className="text-slate-500 text-sm mt-1">
-              {tab === 'login' ? 'Sign in to your dashboard' : 'Submit your registration for approval'}
-            </p>
+      {/* Main content */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
+
+        {/* Login Card */}
+        <div className="w-full max-w-md lg:max-w-lg xl:max-w-xl">
+
+          {/* Header with logos */}
+          <div className="text-center mb-8">
+            <div className="flex justify-center items-center gap-4 mb-6">
+              {/* DA Logo */}
+              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center overflow-hidden shadow-lg">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Bagong_Pilipinas_logo_%28DA%29.svg/200px-Bagong_Pilipinas_logo_%28DA%29.svg.png"
+                  alt="Department of Agriculture" className="w-8 h-8 lg:w-10 lg:h-10 object-contain"
+                  onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<div class="w-6 h-6 lg:w-8 lg:h-8 bg-yellow-400 rounded-full flex items-center justify-center"><span class="text-xs font-bold text-green-800">DA</span></div>' }} />
+              </div>
+
+              {/* PhilFIDA Logo */}
+              <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl bg-white shadow-xl flex items-center justify-center overflow-hidden p-2">
+                <img src="/philfida-logo.png" alt="PhilFIDA" className="w-full h-full object-contain"
+                  onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<div class="text-center"><span class="text-lg lg:text-xl font-bold text-green-800">PhilFIDA</span></div>' }} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-green-200 text-xs font-semibold uppercase tracking-widest">Republic of the Philippines</p>
+              <h1 className="text-white font-bold text-xl lg:text-2xl xl:text-3xl leading-tight">
+                Philippine Fiber Industry<br />
+                <span className="text-yellow-300">Development Authority</span>
+              </h1>
+              <p className="text-green-200 text-sm lg:text-base font-medium mt-2">TaskFlow Management System</p>
+            </div>
           </div>
 
-          {/* Tab switcher */}
-          <div className="flex bg-slate-200/70 rounded-xl p-1 mb-6">
-            <button onClick={() => switchTab('login')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'login' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Sign In</button>
-            <button onClick={() => switchTab('register')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'register' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Register</button>
-          </div>
+          {/* Main Card */}
+          <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
 
-          {/* Alerts */}
-          {error && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-5">
-              <i className="bi bi-exclamation-circle-fill flex-shrink-0" />{error}
-            </div>
-          )}
-          {success && (
-            <div className="flex items-start gap-2 bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3 mb-5">
-              <i className="bi bi-check-circle-fill flex-shrink-0 mt-0.5" /><span>{success}</span>
-            </div>
-          )}
-
-          {/* ── SIGN IN ── */}
-          {tab === 'login' && (
-            <div className="space-y-4">
-
-              {/* Google Sign In */}
-              <button
-                onClick={handleGoogleSignIn}
-                disabled={googleLoading}
-                className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-700 font-semibold text-sm rounded-xl py-3 transition-all shadow-sm disabled:opacity-60"
-              >
-                <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
-                  <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.704H24v8.898h13.204c-.568 3.072-2.292 5.676-4.884 7.42v6.168h7.908c4.624-4.26 7.304-10.54 7.304-17.782z" fill="#4285F4"/>
-                  <path d="M24 48c6.636 0 12.204-2.196 16.272-5.952l-7.908-6.168c-2.196 1.476-5.004 2.34-8.364 2.34-6.432 0-11.88-4.344-13.824-10.176H2.016v6.372C6.072 42.9 14.448 48 24 48z" fill="#34A853"/>
-                  <path d="M10.176 28.044A14.88 14.88 0 019.396 24c0-1.392.24-2.748.672-4.02v-6.372H2.016A23.988 23.988 0 000 24c0 3.876.936 7.548 2.016 10.392l8.16-6.348z" fill="#FBBC05"/>
-                  <path d="M24 9.54c3.624 0 6.876 1.248 9.432 3.696l7.08-7.08C36.192 2.196 30.636 0 24 0 14.448 0 6.072 5.1 2.016 13.608l8.16 6.372C12.12 13.884 17.568 9.54 24 9.54z" fill="#EA4335"/>
-                </svg>
-                {googleLoading ? 'Connecting...' : 'Continue with Google'}
+            {/* Tab switcher */}
+            <div className="flex bg-slate-50/80 border-b border-slate-200/50">
+              <button onClick={() => switchTab('login')}
+                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
+                  tab === 'login'
+                    ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
+                    : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
+                }`}>
+                Sign In
               </button>
-
-              {/* Divider */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-slate-200" />
-                <span className="text-xs text-slate-400 font-medium">or sign in with ID</span>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-
-              {/* Manual login */}
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div>
-                  <label className="label">Personnel ID</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i className="bi bi-person-fill" /></span>
-                    <input className="input pl-9" placeholder="e.g. 001" value={loginId} onChange={e => setLoginId(e.target.value)} required />
-                  </div>
-                </div>
-                <div>
-                  <label className="label">Password</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i className="bi bi-lock-fill" /></span>
-                    <input className="input pl-9 pr-10" type={showPass ? 'text' : 'password'} placeholder="••••••••" value={loginPass} onChange={e => setLoginPass(e.target.value)} required />
-                    <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                      <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'}`} />
-                    </button>
-                  </div>
-                </div>
-                <button className="w-full py-3 text-white font-bold text-sm rounded-xl transition-all" style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }} disabled={loading}>
-                  {loading ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Signing in...</span> : 'Sign In'}
-                </button>
-              </form>
+              <button onClick={() => switchTab('register')}
+                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
+                  tab === 'register'
+                    ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
+                    : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
+                }`}>
+                Register
+              </button>
             </div>
-          )}
 
-          {/* ── REGISTER ── */}
-          {tab === 'register' && (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex items-start gap-2">
-                <i className="bi bi-info-circle-fill flex-shrink-0 mt-0.5" />
-                <span>Your account will be reviewed by the Director before you can log in. You can also <button type="button" onClick={handleGoogleSignIn} className="underline font-semibold">sign up with Google</button> to skip entering a password.</span>
-              </div>
-              <div>
-                <label className="label">Full Name</label>
-                <input className="input" placeholder="Juan dela Cruz" value={regName} onChange={e => setRegName(e.target.value)} required />
-              </div>
-              <div>
-                <label className="label">Personnel ID</label>
-                <input className="input" placeholder="e.g. 002" value={regId} onChange={e => setRegId(e.target.value)} required />
-              </div>
-              <div>
-                <label className="label">Email Address <span className="text-slate-400 normal-case font-normal">(Optional)</span></label>
-                <input className="input" type="email" placeholder="juan@philfida.gov.ph" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">{regRole === 'Director' ? 'Office' : 'Unit'}</label>
-                <select className="input" value={regUnit} onChange={e => setRegUnit(e.target.value)} required>
-                  <option value="">-- Select {regRole === 'Director' ? 'Office' : 'Unit'} --</option>
-                  {(regRole === 'Director' ? OFFICES : UNITS).map(u => <option key={u}>{u}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Role</label>
-                <select className="input" value={regRole} onChange={e => { setRegRole(e.target.value); setRegUnit('') }} required>
-                  <option value="Employee">Unit Personnel</option>
-                  <option value="Unit Head">Unit Head</option>
-                  <option value="Director">Director</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Password</label>
-                <div className="relative">
-                  <input className="input pr-10" type={showRegPass ? 'text' : 'password'} placeholder="Create a password" value={regPass} onChange={e => setRegPass(e.target.value)} required />
-                  <button type="button" onClick={() => setShowRegPass(!showRegPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    <i className={`bi bi-${showRegPass ? 'eye-slash' : 'eye'}`} />
+            {/* Form content */}
+            <div className="p-6 lg:p-8">
+
+              {/* Alerts */}
+              {error && (
+                <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-6">
+                  <i className="bi bi-exclamation-triangle-fill flex-shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+              {success && (
+                <div className="flex items-start gap-3 bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl px-4 py-3 mb-6">
+                  <i className="bi bi-check-circle-fill flex-shrink-0 mt-0.5" />
+                  <span>{success}</span>
+                </div>
+              )}
+
+              {/* SIGN IN TAB */}
+              {tab === 'login' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h2 className="text-xl lg:text-2xl font-bold text-slate-800 mb-2">Welcome Back</h2>
+                    <p className="text-slate-600 text-sm">Sign in to access your dashboard</p>
+                  </div>
+
+                  {/* Google Sign In */}
+                  <button
+                    onClick={handleGoogleSignIn}
+                    disabled={googleLoading}
+                    className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl py-3 px-4 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-60"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+                      <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.704H24v8.898h13.204c-.568 3.072-2.292 5.676-4.884 7.42v6.168h7.908c4.624-4.26 7.304-10.54 7.304-17.782z" fill="#4285F4"/>
+                      <path d="M24 48c6.636 0 12.204-2.196 16.272-5.952l-7.908-6.168c-2.196 1.476-5.004 2.34-8.364 2.34-6.432 0-11.88-4.344-13.824-10.176H2.016v6.372C6.072 42.9 14.448 48 24 48z" fill="#34A853"/>
+                      <path d="M10.176 28.044A14.88 14.88 0 019.396 24c0-1.392.24-2.748.672-4.02v-6.372H2.016A23.988 23.988 0 000 24c0 3.876.936 7.548 2.016 10.392l8.16-6.348z" fill="#FBBC05"/>
+                      <path d="M24 9.54c3.624 0 6.876 1.248 9.432 3.696l7.08-7.08C36.192 2.196 30.636 0 24 0 14.448 0 6.072 5.1 2.016 13.608l8.16 6.372C12.12 13.884 17.568 9.54 24 9.54z" fill="#EA4335"/>
+                    </svg>
+                    Continue with Google
                   </button>
-                </div>
-              </div>
-              <button className="w-full py-3 text-white font-bold text-sm rounded-xl transition-all" style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }} disabled={loading}>
-                {loading ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Submitting...</span> : 'Submit Registration'}
-              </button>
-            </form>
-          )}
 
-          <p className="text-center text-slate-400 text-xs mt-8">All rights reserved.</p>
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-4 bg-white text-slate-500 font-medium">or sign in with ID</span>
+                    </div>
+                  </div>
+
+                  {/* Manual login form */}
+                  <form onSubmit={handleLogin} className="space-y-5">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Personnel ID</label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <i className="bi bi-person-fill text-sm" />
+                        </div>
+                        <input
+                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          placeholder="Enter your Personnel ID"
+                          value={loginId}
+                          onChange={e => setLoginId(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <i className="bi bi-lock-fill text-sm" />
+                        </div>
+                        <input
+                          className="w-full pl-10 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          type={showPass ? 'text' : 'password'}
+                          placeholder="Enter your password"
+                          value={loginPass}
+                          onChange={e => setLoginPass(e.target.value)}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPass(!showPass)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'} text-sm`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      className="w-full py-3 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Signing in...
+                        </span>
+                      ) : (
+                        'Sign In'
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* REGISTER TAB */}
+              {tab === 'register' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h2 className="text-xl lg:text-2xl font-bold text-slate-800 mb-2">Create Account</h2>
+                    <p className="text-slate-600 text-sm">Submit your registration for approval</p>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <i className="bi bi-info-circle-fill text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium mb-1">Account Approval Required</p>
+                        <p>Your account will be reviewed by the Director before you can log in. You can also register with Google to skip entering a password.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleRegister} className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
+                        <input
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          placeholder="Juan dela Cruz"
+                          value={regName}
+                          onChange={e => setRegName(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Personnel ID</label>
+                        <input
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          placeholder="e.g. 001"
+                          value={regId}
+                          onChange={e => setRegId(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address <span className="text-slate-400 font-normal">(Optional)</span></label>
+                      <input
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                        type="email"
+                        placeholder="juan@philfida.gov.ph"
+                        value={regEmail}
+                        onChange={e => setRegEmail(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">{regRole === 'Director' ? 'Office' : 'Unit'}</label>
+                        <select
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          value={regUnit}
+                          onChange={e => setRegUnit(e.target.value)}
+                          required
+                        >
+                          <option value="">-- Select {regRole === 'Director' ? 'Office' : 'Unit'} --</option>
+                          {(regRole === 'Director' ? OFFICES : UNITS).map(u => <option key={u}>{u}</option>)}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Role</label>
+                        <select
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          value={regRole}
+                          onChange={e => { setRegRole(e.target.value); setRegUnit('') }}
+                          required
+                        >
+                          <option value="Employee">Unit Personnel</option>
+                          <option value="Unit Head">Unit Head</option>
+                          <option value="Director">Director</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+                      <div className="relative">
+                        <input
+                          className="w-full px-4 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          type={showRegPass ? 'text' : 'password'}
+                          placeholder="Create a secure password"
+                          value={regPass}
+                          onChange={e => setRegPass(e.target.value)}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegPass(!showRegPass)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          <i className={`bi bi-${showRegPass ? 'eye-slash' : 'eye'} text-sm`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      className="w-full py-3 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Submitting...
+                        </span>
+                      ) : (
+                        'Submit Registration'
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-center mt-6">
+            <p className="text-green-200 text-xs">
+              © {new Date().getFullYear()} Philippine Fiber Industry Development Authority
+            </p>
+            <p className="text-green-300 text-xs mt-1">Secure Government Task Management System</p>
+          </div>
         </div>
       </div>
     </div>
