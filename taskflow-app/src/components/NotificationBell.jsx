@@ -19,9 +19,9 @@ export default function NotificationBell() {
   const notifications = globalData.notifications
   const unread        = notifications.filter(n => n.IsRead === 'FALSE')
 
-  // ── Sound: fire when a truly NEW notification ID appears ────
+  // ── Sound: fire when a truly NEW unread notification ID appears ──
   useEffect(() => {
-    const currentIds = new Set(notifications.map(n => String(n.ID)))
+    const currentIds = new Set(unread.map(n => String(n.ID)))
 
     if (seenIdsRef.current === null) {
       // First load — just baseline, no sound
@@ -29,7 +29,6 @@ export default function NotificationBell() {
       return
     }
 
-    // Check for any ID we haven't seen before
     let hasNew = false
     currentIds.forEach(id => {
       if (!seenIdsRef.current.has(id)) hasNew = true
@@ -43,7 +42,7 @@ export default function NotificationBell() {
     }
 
     seenIdsRef.current = currentIds
-  }, [notifications])
+  }, [unread])
 
   // ── Auto mark as read when opened ───────────────────────────
   useEffect(() => {

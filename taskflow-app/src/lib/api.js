@@ -144,13 +144,30 @@ export async function editTask({ taskId, title, instructions, priority, category
   // History logged externally with actor name
 }
 
-export async function setTaskStatus(taskId, status, actorName = '') {
+export async function setTaskStatus(taskId, status, actorName = '', actorId = null) {
   const col = status === 'Received' ? 'ReceivedAt' : 'CompletedAt'
   const { error } = await supabase.from('Tasks').update({
     Status: status, [col]: new Date().toISOString(),
   }).eq('TaskID', taskId)
   if (error) throw error
   if (actorName) await logHistory(taskId, status, actorName)
+
+  if (['Received', 'Completed'].includes(status)) {
+    const { data: task } = await supabase.from('Tasks').select('*').eq('TaskID', taskId).single()
+    if (task) {
+      const msg = status === 'Received'
+        ? `✅ ${task.EmployeeName} accepted "${task.Title}"`
+        : `✅ ${task.EmployeeName} completed "${task.Title}"`
+
+      const { data: directors, error: dirError } = await supabase.from('Users').select('ID').ilike('Role', 'Director')
+      if (!dirError && directors?.length) {
+        await Promise.all(directors
+          .filter(d => String(d.ID) !== String(actorId || ''))
+          .map(d => createNotification(d.ID, msg, 'task', taskId))
+        )
+      }
+    }
+  }
 }
 
 export async function toggleArchive(taskId, archived) {
@@ -176,10 +193,26 @@ export async function addComment({ taskId, sender, message, files }) {
 
   const { data: task } = await supabase.from('Tasks').select('*').eq('TaskID', taskId).single()
   if (task) {
-    const notifyId = sender === task.EmployeeName ? null : task.EmployeeID
-    if (notifyId) {
-      const notifText = fileUrl ? '📎 Sent an attachment' : (message || '').substring(0, 50)
-      await createNotification(notifyId, `💬 New message on "${task.Title}": ${notifText}`, 'chat', taskId)
+    const notifText = fileUrl ? '📎 Sent an attachment' : (message || '').substring(0, 50)
+    const messageText = `💬 New message on "${task.Title}": ${notifText}`
+
+    const senderNorm = String(sender || '').trim().toLowerCase()
+    const employeeNameNorm = String(task.EmployeeName || '').trim().toLowerCase()
+    const isEmployeeSender = senderNorm === employeeNameNorm
+
+    if (isEmployeeSender) {
+      const { data: directors, error: dirError } = await supabase.from('Users').select('ID').ilike('Role', 'Director')
+      if (!dirError && directors?.length) {
+        await Promise.all(directors
+          .filter(d => String(d.ID) !== String(task.EmployeeID))
+          .map(d => createNotification(d.ID, messageText, 'chat', taskId))
+        )
+      }
+    } else {
+      const notifyId = task.EmployeeID
+      if (notifyId) {
+        await createNotification(notifyId, messageText, 'chat', taskId)
+      }
     }
   }
 }
@@ -198,15 +231,21 @@ export async function markNotificationsRead(userId) {
 
 // ── PRESENCE ───────────────────────────────────────────────
 
-export async function updateProfile(userId, { name, designation, email, unit }) {
-  const { error } = await supabase.from('Users').update({
+export async function updateProfile(userId, { name, designation, email, unit, password }) {
+  const updatePayload = {
     Name:        name,
     Designation: designation,
     Email:       email,
     Unit:        unit,
     Office:      unit,
     ProfilePic:  `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=155414&color=fff&size=80`,
-  }).eq('ID', userId)
+  }
+
+  if (password !== undefined && password !== null && password !== '') {
+    updatePayload.Password = password
+  }
+
+  const { error } = await supabase.from('Users').update(updatePayload).eq('ID', userId)
   if (error) throw error
 }
 

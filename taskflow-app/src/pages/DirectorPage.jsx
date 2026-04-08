@@ -6,6 +6,7 @@ import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentC
 import { normalizeStatus } from '../components/PresenceToggle'
 import NotificationBell from '../components/NotificationBell'
 import SettingsModal from '../components/SettingsModal'
+import DirectorProfileModal from '../components/DirectorProfileModal'
 import CreateTaskForm from '../components/CreateTaskForm'
 import EditTaskModal from '../components/EditTaskModal'
 import ChatModal from '../components/ChatModal'
@@ -36,6 +37,7 @@ export default function DirectorPage() {
   const [bulkLoading,   setBulkLoading]   = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [profileOpen,   setProfileOpen]   = useState(false)
+  const [profileEditOpen, setProfileEditOpen] = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
   const profileRef = useRef()
 
@@ -166,6 +168,12 @@ export default function DirectorPage() {
                 <p className="font-bold text-green-900 text-xs">{session?.Name}</p>
                 <p className="text-slate-400 text-[10px] mt-0.5">Director · PhilFIDA Central Office</p>
               </div>
+              <button
+                onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100"
+              >
+                <i className="bi bi-person-gear text-green-700 text-base" /> Edit Profile
+              </button>
               <button
                 onClick={() => { setProfileOpen(false); setSettingsOpen(true) }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100"
@@ -516,6 +524,7 @@ export default function DirectorPage() {
       {editTask    && <EditTaskModal  task={editTask}      onClose={() => setEditTask(null)} onSync={sync} />}
       {lightboxFile && <Lightbox      file={lightboxFile}  onClose={() => setLightboxFile(null)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} session={session} />}
+      {profileEditOpen && <DirectorProfileModal onClose={() => setProfileEditOpen(false)} />}
 
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

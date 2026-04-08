@@ -55,14 +55,14 @@ export default function SettingsModal({ onClose, session }) {
               </div>
             </div>
 
-            {/* Toggle pill */}
             <button
               onClick={() => toggleSound(!soundOn)}
-              className={`relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0 focus:outline-none ${soundOn ? 'bg-green-600' : 'bg-slate-300'}`}
+              className={`relative w-16 h-8 rounded-full transition-all duration-200 flex items-center px-1 ${soundOn ? 'bg-green-600' : 'bg-slate-300'}`}
               role="switch"
               aria-checked={soundOn}
             >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${soundOn ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              <span className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${soundOn ? 'translate-x-8' : 'translate-x-0'}`} />
+              <span className="absolute left-3 text-[10px] text-white font-semibold">{soundOn ? 'On' : 'Off'}</span>
             </button>
           </div>
 

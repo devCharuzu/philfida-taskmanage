@@ -45,7 +45,7 @@ export default function DashboardPage() {
 
   async function handleStatusUpdate(taskId, status) {
     setLoadingTask(taskId)
-    try { await setTaskStatus(taskId, status, session?.Name || ''); await sync() }
+    try { await setTaskStatus(taskId, status, session?.Name || '', session?.ID); await sync() }
     finally { setLoadingTask(null) }
   }
 
