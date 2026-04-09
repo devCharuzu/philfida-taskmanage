@@ -88,6 +88,49 @@ if (envErrors.length > 0) {
   // Create Supabase client
   supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, supabaseConfig)
 
+  // Test connection and handle legacy API key issues
+  const testConnection = async () => {
+    try {
+      const { error } = await supabaseClient.from('Users').select('count').limit(1)
+      if (error) {
+        if (error.message?.includes('Legacy API keys are disabled')) {
+          console.error(`
+CRITICAL: Supabase Legacy API Keys Disabled
+-------------------------------------------
+Your Supabase project has disabled legacy API keys. To fix this:
+
+OPTION 1: Re-enable Legacy Keys (Quick Fix)
+1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/ivhghqzdhvekbdnwezwj
+2. Navigate to Settings > API
+3. Scroll down to "Legacy API Keys" section
+4. Click "Re-enable legacy API keys"
+
+OPTION 2: Update to New Keys (Recommended)
+1. In Supabase Dashboard > Settings > API
+2. Find the "New API Keys" section
+3. Copy the new "Publishable" key
+4. Update your .env.local file:
+   VITE_SUPABASE_ANON_KEY=your_new_publishable_key
+
+The application will not function until this is resolved.
+          `)
+        }
+        throw error
+      }
+    } catch (error) {
+      debugLog('Connection test failed:', error)
+      throw error
+    }
+  }
+
+  // Run connection test in development
+  if (import.meta.env.DEV) {
+    testConnection().catch(() => {
+      // Don't throw in development, just log the error
+      console.warn('Supabase connection test failed - check the error message above for resolution steps')
+    })
+  }
+
   // Utility functions for common operations
   utils = {
     // Check if user is authenticated

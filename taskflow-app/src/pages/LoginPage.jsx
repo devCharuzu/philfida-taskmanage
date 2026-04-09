@@ -20,10 +20,51 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error,       setError]       = useState('')
   const [success,     setSuccess]     = useState('')
+  const [connectionError, setConnectionError] = useState('')
 
   const setSession    = useStore(s => s.setSession)
   const navigate   = useNavigate()
   const oauthHandledRef = useRef(false)
+
+  // Check Supabase connection on component mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        const { error } = await supabase.from('Users').select('count').limit(1)
+        if (error) {
+          if (error.message?.includes('Legacy API keys are disabled')) {
+            setConnectionError(`
+Supabase Connection Error: Legacy API Keys Disabled
+
+Your Supabase project has disabled legacy API keys. This prevents the app from connecting to the database.
+
+To fix this issue:
+
+OPTION 1: Re-enable Legacy Keys (Quick Fix)
+1. Go to your Supabase Dashboard
+2. Navigate to Settings > API  
+3. Scroll down to "Legacy API Keys" section
+4. Click "Re-enable legacy API keys"
+
+OPTION 2: Update to New Keys (Recommended)
+1. In Supabase Dashboard > Settings > API
+2. Find the "New API Keys" section  
+3. Copy the new "Publishable" key
+4. Update your .env.local file with the new key
+
+The application cannot function until this is resolved.
+            `)
+          } else {
+            setConnectionError(`Database connection error: ${error.message}`)
+          }
+        }
+      } catch (e) {
+        setConnectionError(`Failed to connect to database: ${e.message}`)
+      }
+    }
+    
+    checkConnection()
+  }, [])
 
   // ── Handle Google OAuth redirect callback ───────────────────
   useEffect(() => {
@@ -230,6 +271,16 @@ export default function LoginPage() {
             <div className="p-8 bg-white rounded-xl border border-slate-200 shadow-sm">
 
               {/* Alerts */}
+              {connectionError && (
+                <div className="bg-red-50 border-2 border-red-200 text-red-800 rounded-xl p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <i className="bi bi-exclamation-triangle-fill flex-shrink-0 mt-0.5 text-red-600" />
+                    <div className="text-sm">
+                      <pre className="whitespace-pre-wrap font-sans">{connectionError}</pre>
+                    </div>
+                  </div>
+                </div>
+              )}
               {error && (
                 <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-6">
                   <i className="bi bi-exclamation-triangle-fill flex-shrink-0 mt-0.5" />
