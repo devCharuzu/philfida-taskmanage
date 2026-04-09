@@ -2,6 +2,15 @@
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
+    screens: {
+      'xs': '475px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+      '3xl': '1920px',
+    },
     extend: {
       fontFamily: {
         sans: ['DM Sans', 'sans-serif'],
@@ -33,6 +42,22 @@ export default {
         'card': '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)',
         'card-hover': '0 4px 6px rgba(0,0,0,0.07), 0 10px 30px rgba(0,0,0,0.10)',
         'modal': '0 20px 60px rgba(0,0,0,0.18)',
+      },
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+        '128': '32rem',
+      },
+      maxWidth: {
+        '8xl': '88rem',
+        '9xl': '96rem',
+      },
+      zIndex: {
+        '60': '60',
+        '70': '70',
+        '80': '80',
+        '90': '90',
+        '100': '100',
       },
     },
   },

@@ -116,7 +116,7 @@ export default function UserManagement({ users, onSync }) {
       {/* User table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="gov-table">
+          <table className="gov-table table-responsive">
             <thead>
               <tr>
                 <th>Unit Personnel</th>
@@ -197,7 +197,7 @@ export default function UserManagement({ users, onSync }) {
       {editUser && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setEditUser(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+          <div className="bg-white rounded-xl shadow-2xl modal-responsive overflow-hidden">
             <div className="px-4 py-3 flex items-center justify-between"
               style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
               <p className="text-white font-bold text-sm">Edit User — {editUser.Name}</p>
@@ -231,7 +231,7 @@ export default function UserManagement({ users, onSync }) {
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl modal-responsive overflow-hidden">
 
             {/* Red header */}
             <div className="bg-red-600 px-5 py-4 flex items-center gap-3">

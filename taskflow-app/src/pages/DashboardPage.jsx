@@ -86,11 +86,9 @@ export default function DashboardPage() {
             className="w-full flex items-center gap-3 px-4 py-4 border-b border-slate-100 hover:bg-green-50 transition-colors group"
             style={{ background: profileOpen ? '#f0faf0' : undefined }}
           >
-            <img
-              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
-              className="w-10 h-10 rounded-xl flex-shrink-0 ring-2 ring-green-200 group-hover:ring-green-400 transition-all"
-              alt={session?.Name}
-            />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white bg-green-700 flex-shrink-0 ring-2 ring-green-200 group-hover:ring-green-400 transition-all">
+              {session?.Name?.charAt(0) || '?'}
+            </div>
             <div className="min-w-0 text-left flex-1">
               <p className="font-bold text-green-900 text-sm truncate leading-none">{session?.Name}</p>
               <p className="text-slate-400 text-[11px] mt-1">{session?.Designation || session?.Role}</p>
@@ -138,26 +136,28 @@ export default function DashboardPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile top bar */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
-          <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
-            <i className="bi bi-list text-2xl" />
+        <div className="mobile-only flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="btn-touch p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-2xl-responsive" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
-              <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
-            </div>
-            <span className="text-green-900 font-bold text-sm">TaskFlow</span>
+          <div className="flex items-center gap-responsive">
+            <NotificationBell />
+            <button
+              onClick={() => setProfileOpen(!profileOpen)}
+              className="btn-touch w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-700 hover:bg-green-200 transition-colors"
+            >
+              <i className="bi bi-person-fill text-sm-responsive" />
+            </button>
           </div>
-          <NotificationBell />
         </div>
 
         {/* Page top bar */}
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-responsive min-w-0">
           <div className="min-w-0">
-            <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">My Assignments</h2>
-            <p className="text-slate-400 text-xs mt-1 truncate">{session?.Office || session?.Unit}</p>
+            <h2 className="font-bold text-green-900 text-lg-responsive leading-none">My Assignments</h2>
+            <p className="text-slate-400 text-xs-responsive mt-1 truncate">{session?.Office || session?.Unit}</p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-responsive flex-shrink-0">
             <span className="text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-full whitespace-nowrap">
               {activeCount} Active
             </span>
@@ -170,9 +170,11 @@ export default function DashboardPage() {
           <div className="max-w-2xl mx-auto space-y-3">
             {myTasks.length === 0 ? (
               <div className="bg-white rounded-xl border border-slate-200 text-center py-20 shadow-sm">
-                <i className="bi bi-inbox text-5xl text-slate-200 block mb-3" />
-                <p className="text-slate-400 font-semibold text-sm">No active assignments.</p>
-                <p className="text-slate-300 text-xs mt-1">You will be notified when a task is assigned.</p>
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i className="bi bi-check-circle text-green-600 text-2xl-responsive" />
+                </div>
+                <h3 className="text-slate-800 font-bold text-lg-responsive mb-2">All Caught Up!</h3>
+                <p className="text-slate-500 text-sm-responsive">You have no active tasks assigned.</p>
               </div>
             ) : myTasks.map(t => (
               <TaskCard

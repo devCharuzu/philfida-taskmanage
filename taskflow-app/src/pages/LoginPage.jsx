@@ -171,10 +171,10 @@ export default function LoginPage() {
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="relative z-10 h-min-screen-responsive flex items-center justify-center p-4 sm:p-6 lg:p-8">
 
         {/* Login Card */}
-        <div className="w-full max-w-md lg:max-w-lg xl:max-w-xl">
+        <div className="w-full max-w-md lg:max-w-lg xl:max-w-xl container-ultrawide">
 
           {/* Header with logos */}
           <div className="text-center mb-8">
@@ -227,7 +227,7 @@ export default function LoginPage() {
             </div>
 
             {/* Form content */}
-            <div className="p-6 lg:p-8">
+            <div className="p-6 lg:p-8 card-responsive">
 
               {/* Alerts */}
               {error && (
@@ -284,11 +284,14 @@ export default function LoginPage() {
                           <i className="bi bi-person-fill text-sm" />
                         </div>
                         <input
-                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          type="text"
+                          className="w-full input-responsive bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent transition-all"
+                          style={{ paddingLeft: '2.5rem' }}
                           placeholder="Enter your Personnel ID"
                           value={loginId}
                           onChange={e => setLoginId(e.target.value)}
-                          required
+                          onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                          autoComplete="username"
                         />
                       </div>
                     </div>
@@ -300,7 +303,7 @@ export default function LoginPage() {
                           <i className="bi bi-lock-fill text-sm" />
                         </div>
                         <input
-                          className="w-full pl-10 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full pl-10 pr-12 input-responsive border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                           type={showPass ? 'text' : 'password'}
                           placeholder="Enter your password"
                           value={loginPass}
@@ -462,7 +465,7 @@ export default function LoginPage() {
           {/* Footer */}
           <div className="text-center mt-6">
             <p className="text-green-200 text-xs">
-              © {new Date().getFullYear()} Philippine Fiber Industry Development Authority
+              {new Date().getFullYear()} Philippine Fiber Industry Development Authority
             </p>
             <p className="text-green-300 text-xs mt-1">Secure Government Task Management System</p>
           </div>

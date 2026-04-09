@@ -116,13 +116,13 @@ export default function DirectorPage() {
   }
 
   return (
-    <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
+    <div className="h-screen-responsive flex overflow-hidden" style={{ background: '#f0f4f0' }}>
 
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 md:w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* ── Branding + Notification row ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
@@ -149,11 +149,9 @@ export default function DirectorPage() {
             className="w-full flex items-center gap-3 px-4 py-4 border-b border-slate-100 hover:bg-green-50 transition-colors group"
             style={{ background: profileOpen ? '#f0faf0' : undefined }}
           >
-            <img
-              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
-              className="w-10 h-10 rounded-xl flex-shrink-0 ring-2 ring-green-200 group-hover:ring-green-400 transition-all"
-              alt={session?.Name}
-            />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white bg-green-700 flex-shrink-0 ring-2 ring-green-200 group-hover:ring-green-400 transition-all">
+              {session?.Name?.charAt(0) || '?'}
+            </div>
             <div className="min-w-0 text-left flex-1">
               <p className="font-bold text-green-900 text-sm truncate leading-none">{session?.Name}</p>
               <p className="text-slate-400 text-[11px] mt-1">Director — PhilFIDA</p>
