@@ -12,6 +12,7 @@ import Lightbox from '../components/Lightbox'
 import PresenceToggle from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
 import PersonalCalendarSide from '../components/PersonalCalendarSide'
+import DeadlineProgress from '../components/DeadlineProgress'
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -104,7 +105,7 @@ export default function DashboardPage() {
                 <p className="text-slate-400 text-[10px] mt-0.5">{session?.Office || session?.Unit}</p>
               </div>
               <button onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100">
-                <i className="bi bi-person-gear text-green-700 text-base" /> Edit Profile
+                <i className="bi bi-gear-fill text-green-700 text-base" /> Edit Profile
               </button>
               <button onClick={() => { setProfileOpen(false); setSettingsOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100">
                 <i className="bi bi-gear-fill text-green-700 text-base" /> Settings
@@ -136,28 +137,28 @@ export default function DashboardPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile top bar */}
-        <div className="md:hidden flex items-center justify-between mobile-p bg-white border-b border-slate-200 flex-shrink-0">
-          <button onClick={() => setSidebarOpen(true)} className="btn-modern p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
-            <i className="bi bi-list text-lg" />
+        <div className="md:hidden flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-3 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-xl" />
           </button>
-          <div className="flex items-center mobile-gap">
+          <div className="flex items-center gap-3">
             <NotificationBell />
             <button
               onClick={() => setProfileOpen(!profileOpen)}
-              className="btn-modern w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-green-700 hover:bg-green-200 transition-colors"
+              className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center text-green-700 hover:bg-green-200 transition-colors"
             >
-              <i className="bi bi-person-fill text-base" />
+              <i className="bi bi-person-fill text-lg" />
             </button>
           </div>
         </div>
 
         {/* Page top bar */}
-        <div className="flex items-center justify-between mobile-p md:desktop-p py-3 border-b border-slate-200 bg-white flex-shrink-0 mobile-gap md:desktop-gap min-w-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-3 min-w-0">
           <div className="min-w-0">
-            <h2 className="font-bold text-green-900 text-base md:text-lg leading-none">My Assignments</h2>
-            <p className="text-slate-400 text-sm md:text-base mt-1 truncate">{session?.Office || session?.Unit}</p>
+            <h2 className="font-bold text-green-900 text-xl leading-none">My Assignments</h2>
+            <p className="text-slate-400 text-base mt-1 truncate">{session?.Office || session?.Unit}</p>
           </div>
-          <div className="flex items-center mobile-gap md:desktop-gap flex-shrink-0">
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
             <span className="text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-full whitespace-nowrap">
               {activeCount} Active
             </span>
@@ -166,8 +167,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Task feed */}
-        <main className="flex-1 overflow-y-auto mobile-p md:desktop-p py-4">
-          <div className="max-w-2xl mx-auto mobile-gap md:desktop-gap">
+        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
+          <div className="max-w-2xl mx-auto space-y-3">
             {myTasks.length === 0 ? (
               <div className="bg-white rounded-xl border border-slate-200 text-center py-20 shadow-sm card-modern">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -220,6 +221,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
       </div>
       <h3 className="font-bold text-green-900 text-base mb-1 leading-snug">{t.Title}</h3>
       <p className="text-sm text-slate-500 mb-2 leading-relaxed">{t.Instructions}</p>
+      <DeadlineProgress task={t} />
       {t.Deadline && (
         <div className="flex items-center gap-1.5 text-xs text-red-600 font-semibold mb-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
           <i className="bi bi-clock-fill" />Deadline: {new Date(t.Deadline).toLocaleString('en-US', { timeZone: 'Asia/Manila' })}

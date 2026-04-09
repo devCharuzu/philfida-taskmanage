@@ -171,10 +171,10 @@ export default function LoginPage() {
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center mobile-p md:tablet-p lg:large-p">
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
 
         {/* Login Card */}
-        <div className="w-full max-w-md md:max-w-lg lg:max-w-xl container-modern">
+        <div className="w-full max-w-sm sm:max-w-md">
 
           {/* Header with logos */}
           <div className="text-center mb-8">
@@ -227,7 +227,7 @@ export default function LoginPage() {
             </div>
 
             {/* Form content */}
-            <div className="mobile-p md:tablet-p lg:large-p card-modern">
+            <div className="p-8 bg-white rounded-xl border border-slate-200 shadow-sm">
 
               {/* Alerts */}
               {error && (
@@ -278,15 +278,15 @@ export default function LoginPage() {
                   {/* Manual login form */}
                   <form onSubmit={handleLogin} className="space-y-5">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Personnel ID</label>
+                      <label className="block text-base font-semibold text-slate-700 mb-3">Personnel ID</label>
                       <div className="relative">
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                           <i className="bi bi-person-fill text-sm" />
                         </div>
                         <input
                           type="text"
-                          className="w-full input-modern bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent transition-all"
-                          style={{ paddingLeft: '2.5rem' }}
+                          className="w-full px-4 py-5 bg-white border-2 border-slate-200 rounded-xl text-lg font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent transition-all"
+                          style={{ paddingLeft: '3rem' }}
                           placeholder="Enter your Personnel ID"
                           value={loginId}
                           onChange={e => setLoginId(e.target.value)}
@@ -297,13 +297,13 @@ export default function LoginPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+                      <label className="block text-base font-semibold text-slate-700 mb-3">Password</label>
                       <div className="relative">
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                           <i className="bi bi-lock-fill text-sm" />
                         </div>
                         <input
-                          className="w-full pl-10 pr-12 input-modern border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full pl-12 pr-12 px-4 py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-lg"
                           type={showPass ? 'text' : 'password'}
                           placeholder="Enter your password"
                           value={loginPass}
@@ -321,13 +321,13 @@ export default function LoginPage() {
                     </div>
 
                     <button
-                      className="w-full py-3 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full py-6 px-8 text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
                       disabled={loading}
                     >
                       {loading ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span className="flex items-center justify-center gap-3">
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           Signing in...
                         </span>
                       ) : (
@@ -422,7 +422,7 @@ export default function LoginPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+                      <label className="block text-base font-semibold text-slate-700 mb-3">Password</label>
                       <div className="relative">
                         <input
                           className="w-full px-4 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
@@ -443,17 +443,17 @@ export default function LoginPage() {
                     </div>
 
                     <button
-                      className="w-full btn-modern text-white font-bold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full py-6 px-8 text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
                       disabled={loading}
                     >
                       {loading ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span className="flex items-center justify-center gap-3">
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           Submitting...
                         </span>
                       ) : (
-                        <span className="flex items-center justify-center gap-2">
+                        <span className="flex items-center justify-center gap-3">
                           <i className="bi bi-person-plus-fill" />
                           Create Account
                         </span>

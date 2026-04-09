@@ -14,6 +14,7 @@ import Lightbox from '../components/Lightbox'
 import UserManagement from '../components/UserManagement'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
+import DeadlineProgress from '../components/DeadlineProgress'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -170,7 +171,7 @@ export default function DirectorPage() {
                 onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100"
               >
-                <i className="bi bi-person-gear text-green-700 text-base" /> Edit Profile
+                <i className="bi bi-gear-fill text-green-700 text-base" /> Edit Profile
               </button>
               <button
                 onClick={() => { setProfileOpen(false); setSettingsOpen(true) }}
@@ -305,11 +306,11 @@ export default function DirectorPage() {
 
               {/* ── FILTER BAR ── */}
               <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-white flex-shrink-0 flex items-center gap-2 flex-wrap">
-                <div className="relative flex-1 min-w-[120px] max-w-xs">
-                  <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                <div className="relative flex-1 min-w-[120px] max-w-xs search-container">
+                  <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs search-icon" />
                   <input
-                    className="input pl-8 py-1.5 text-xs"
-                    placeholder="Search..."
+                    className="input pl-10 pr-3 py-1.5 text-xs search-input"
+                    placeholder="Search tasks..."
                     value={filterSearch}
                     onChange={e => setFilterSearch(e.target.value)}
                   />
@@ -636,7 +637,8 @@ function TaskRow({ task: t, unit, idx, isArchived, comments, session, history = 
   const unreadChat = getUnreadCommentCount(comments || [], t.TaskID, session?.Name || '')
 
   return (
-    <tr className={`${selected ? 'bg-green-50' : ''} group`}>
+    <>
+      <tr className={`${selected ? 'bg-green-50' : ''} group`}>
       {/* Checkbox (archive only) or row number */}
       {onSelect !== undefined ? (
         <td className="px-4 py-3">
@@ -740,5 +742,14 @@ function TaskRow({ task: t, unit, idx, isArchived, comments, session, history = 
         </PortalDropdown>
       </td>
     </tr>
+      {/* Progress bar row */}
+      {!isArchived && t.Deadline && t.Status !== 'Completed' && (
+        <tr>
+          <td colSpan={unit !== undefined ? "6" : "5"} className="px-4 py-2">
+            <DeadlineProgress task={t} />
+          </td>
+        </tr>
+      )}
+    </>
   )
 }

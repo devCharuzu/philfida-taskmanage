@@ -3,13 +3,14 @@ export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     screens: {
-      'xs': '475px',
-      'sm': '640px',
-      'md': '768px',
-      'lg': '1024px',
-      'xl': '1280px',
-      '2xl': '1536px',
-      '3xl': '1920px',
+      'xs': '320px',
+      'sm': '475px',
+      'md': '640px',
+      'lg': '768px',
+      'xl': '1024px',
+      '2xl': '1280px',
+      '3xl': '1536px',
+      '4xl': '1920px',
     },
     extend: {
       fontFamily: {

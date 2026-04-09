@@ -24,6 +24,9 @@
     background-color: #f4f7f4;
     color: #1a1a1a;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    overflow-x: hidden;
   }
 
   h1,h2,h3,h4,h5,h6 {
@@ -256,7 +259,15 @@
 
 /* Input on mobile — prevent zoom on iOS (min 16px) */
 @media (max-width: 767px) {
-  .input { font-size: 16px; }
+  .input { 
+    font-size: 16px; 
+    padding: 12px 16px;
+    min-height: 44px;
+  }
+  
+  textarea.input {
+    min-height: 88px;
+  }
 }
 
 /* Responsive modal */
@@ -264,6 +275,39 @@
   .chat-modal-inner {
     height: 100dvh !important;
     border-radius: 0 !important;
+  }
+  
+  /* Settings modal mobile */
+  .settings-modal {
+    margin: 0.5rem;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+  }
+  
+  /* Search bar mobile improvements */
+  .search-input {
+    padding-left: 2.5rem !important;
+    padding-right: 0.75rem !important;
+    min-height: 44px;
+  }
+  
+  .search-icon {
+    left: 0.75rem !important;
+  }
+  
+  /* Dispatch form mobile improvements */
+  .dispatch-input {
+    padding-left: 2.5rem !important;
+    padding-right: 0.75rem !important;
+    min-height: 44px;
+  }
+  
+  .dispatch-input-icon {
+    left: 0.75rem !important;
+  }
+  
+  .dispatch-input-hash {
+    left: 0.75rem !important;
   }
 }
 
@@ -274,6 +318,34 @@
   .gov-table thead th { font-size: 0.6rem; padding: 8px 6px; }
   .gov-table tbody td { padding: 8px 6px; }
   .card { padding: 12px; }
+  
+  /* Extra small mobile search */
+  .search-container {
+    min-width: 150px;
+  }
+  
+  .search-input {
+    font-size: 0.75rem !important;
+    padding-left: 2.25rem !important;
+  }
+  
+  .search-icon {
+    font-size: 0.625rem !important;
+  }
+  
+  /* Extra small mobile dispatch form */
+  .dispatch-input {
+    font-size: 0.75rem !important;
+    padding-left: 2.25rem !important;
+  }
+  
+  .dispatch-input-icon {
+    font-size: 0.625rem !important;
+  }
+  
+  .dispatch-input-hash {
+    font-size: 0.625rem !important;
+  }
 }
 
 /* Chat bubbles: prevent long words overflowing */
@@ -302,13 +374,53 @@
 
 /* ===== MODERN RESPONSIVE DESIGN SYSTEM ===== */
 
-/* Base font sizes - fixed for consistency */
+/* Base font sizes - responsive scaling */
 html {
-  font-size: 16px; /* Fixed base size */
+  font-size: 16px; /* Base size */
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-/* Mobile-first responsive utilities */
-@media (max-width: 639px) {
+@media (max-width: 320px) {
+  html { font-size: 14px; }
+}
+
+@media (min-width: 321px) and (max-width: 474px) {
+  html { font-size: 15px; }
+}
+
+@media (min-width: 640px) {
+  html { font-size: 16px; }
+}
+
+@media (min-width: 1024px) {
+  html { font-size: 17px; }
+}
+
+/* Mobile-first responsive utilities - updated for better scaling */
+@media (max-width: 320px) {
+  .mobile-layout {
+    padding: 0.5rem;
+  }
+  .mobile-text-sm {
+    font-size: 0.75rem;
+  }
+  .mobile-text-base {
+    font-size: 0.875rem;
+  }
+  .mobile-text-lg {
+    font-size: 1rem;
+  }
+  .mobile-gap {
+    gap: 0.5rem;
+  }
+  .mobile-p {
+    padding: 0.5rem;
+  }
+}
+
+@media (min-width: 321px) and (max-width: 474px) {
   .mobile-layout {
     padding: 0.75rem;
   }
@@ -326,6 +438,27 @@ html {
   }
   .mobile-p {
     padding: 0.75rem;
+  }
+}
+
+@media (min-width: 475px) and (max-width: 639px) {
+  .mobile-layout {
+    padding: 1rem;
+  }
+  .mobile-text-sm {
+    font-size: 0.875rem;
+  }
+  .mobile-text-base {
+    font-size: 1rem;
+  }
+  .mobile-text-lg {
+    font-size: 1.125rem;
+  }
+  .mobile-gap {
+    gap: 1rem;
+  }
+  .mobile-p {
+    padding: 1rem;
   }
 }
 
@@ -430,13 +563,14 @@ html {
   }
 }
 
-/* Responsive sidebar with proper layout changes */
+/* Responsive sidebar with proper layout changes - updated for mobile */
 .sidebar-modern {
   position: fixed;
   top: 0;
   left: 0;
   height: 100vh;
-  width: 280px;
+  width: 85vw;
+  max-width: 280px;
   transform: translateX(-100%);
   transition: transform 0.3s ease;
   z-index: 50;
@@ -446,8 +580,23 @@ html {
   transform: translateX(0);
 }
 
+/* Small mobile */
+@media (min-width: 320px) and (max-width: 474px) {
+  .sidebar-modern {
+    width: 80vw;
+  }
+}
+
+/* Large mobile */
+@media (min-width: 475px) and (max-width: 639px) {
+  .sidebar-modern {
+    width: 75vw;
+    max-width: 320px;
+  }
+}
+
 /* Tablet sidebar */
-@media (min-width: 768px) {
+@media (min-width: 640px) {
   .sidebar-modern {
     position: relative;
     transform: translateX(0);
@@ -463,7 +612,7 @@ html {
   }
 }
 
-/* Responsive main content with proper reflow */
+/* Responsive main content with proper reflow - updated for mobile */
 .main-modern {
   width: 100%;
   margin-left: 0;
@@ -471,11 +620,25 @@ html {
 }
 
 .main-modern.sidebar-open {
-  margin-left: 280px;
+  margin-left: 0;
+}
+
+/* Small mobile sidebar open */
+@media (min-width: 320px) and (max-width: 474px) {
+  .main-modern.sidebar-open {
+    margin-left: 0;
+  }
+}
+
+/* Large mobile sidebar open */
+@media (min-width: 475px) and (max-width: 639px) {
+  .main-modern.sidebar-open {
+    margin-left: 0;
+  }
 }
 
 /* Tablet main content */
-@media (min-width: 768px) {
+@media (min-width: 640px) {
   .main-modern {
     margin-left: 256px;
   }
@@ -593,12 +756,27 @@ html {
   }
 }
 
-/* Modern responsive buttons */
+/* Modern responsive buttons - mobile optimized */
 .btn-modern {
-  padding: 0.75rem 1.25rem;
+  padding: 0.75rem 1rem;
   font-size: 0.875rem;
   min-height: 44px;
   border-radius: 0.5rem;
+  min-width: 44px;
+}
+
+@media (min-width: 320px) and (max-width: 474px) {
+  .btn-modern {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (min-width: 475px) and (max-width: 639px) {
+  .btn-modern {
+    padding: 0.75rem 1.125rem;
+    font-size: 0.875rem;
+  }
 }
 
 @media (min-width: 640px) {
@@ -639,9 +817,17 @@ html {
   }
 }
 
-/* Responsive navigation */
+/* Responsive navigation - mobile optimized */
 .nav-responsive {
-  gap: 0.5rem;
+  gap: 0.25rem;
+}
+
+@media (min-width: 320px) and (max-width: 474px) {
+  .nav-responsive { gap: 0.25rem; }
+}
+
+@media (min-width: 475px) and (max-width: 639px) {
+  .nav-responsive { gap: 0.5rem; }
 }
 
 @media (min-width: 640px) {
@@ -733,6 +919,55 @@ html {
   .btn-touch {
     min-height: 44px;
     min-width: 44px;
+  }
+  
+  /* Make all interactive elements touch-friendly */
+  button, .btn, .nav-item, input, textarea, select {
+    min-height: 44px;
+  }
+  
+  /* Better spacing for touch */
+  .card { margin-bottom: 1rem; }
+  
+  /* Larger tap targets for small elements */
+  .notification-bell, .settings-icon, .profile-avatar {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Mobile search improvements */
+  .search-container {
+    min-width: 200px;
+  }
+  
+  /* Mobile settings modal improvements */
+  .settings-modal {
+    margin: 1rem;
+    max-width: calc(100vw - 2rem);
+  }
+  
+  /* Mobile toggle improvements */
+  .toggle-switch {
+    min-width: 60px;
+    min-height: 32px;
+  }
+  
+  /* Mobile dispatch form improvements */
+  .dispatch-input {
+    padding-left: 2.5rem !important;
+    padding-right: 0.75rem !important;
+    min-height: 44px;
+  }
+  
+  .dispatch-input-icon {
+    left: 0.75rem !important;
+  }
+  
+  .dispatch-input-hash {
+    left: 0.75rem !important;
   }
 }
 

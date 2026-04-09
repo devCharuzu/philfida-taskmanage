@@ -14,6 +14,7 @@ import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
 import PersonalCalendarSide from '../components/PersonalCalendarSide'
+import DeadlineProgress from '../components/DeadlineProgress'
 
 const STATUS_CFG = {
   Available:         { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
@@ -144,7 +145,7 @@ export default function UnitHeadPage() {
                 <p className="text-slate-400 text-[10px] mt-0.5">{myUnit}</p>
               </div>
               <button onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100">
-                <i className="bi bi-person-gear text-green-700 text-base" /> Edit Profile
+                <i className="bi bi-gear-fill text-green-700 text-base" /> Edit Profile
               </button>
               <button onClick={() => { setProfileOpen(false); setSettingsOpen(true) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-b border-slate-100">
                 <i className="bi bi-gear-fill text-green-700 text-base" /> Settings
@@ -448,6 +449,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
       </div>
       <h3 className="font-bold text-green-900 text-base mb-1 leading-snug">{t.Title}</h3>
       <p className="text-sm text-slate-500 mb-2 leading-relaxed">{t.Instructions}</p>
+      <DeadlineProgress task={t} />
       {t.Deadline && (
         <div className="flex items-center gap-1.5 text-xs text-red-600 font-semibold mb-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
           <i className="bi bi-clock-fill" />Deadline: {new Date(t.Deadline).toLocaleString('en-US', { timeZone: 'Asia/Manila' })}

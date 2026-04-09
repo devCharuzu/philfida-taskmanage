@@ -13,7 +13,7 @@ export default function SettingsModal({ onClose, session }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden settings-modal">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
@@ -29,11 +29,18 @@ export default function SettingsModal({ onClose, session }) {
 
           {/* Account card */}
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-5">
-            <img
-              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
-              className="w-10 h-10 rounded-xl flex-shrink-0"
-              alt={session?.Name}
-            />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white bg-green-700 flex-shrink-0 overflow-hidden">
+              <img
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
+                className="w-full h-full object-cover"
+                alt={session?.Name}
+                onError={e => { 
+                  e.target.style.display='none'; 
+                  e.target.parentElement.innerHTML = `<span style="font-size:14px;font-weight:700;">${(session?.Name || 'U').charAt(0).toUpperCase()}</span>`; 
+                }}
+              />
+              {(session?.Name || 'U').charAt(0).toUpperCase()}
+            </div>
             <div className="min-w-0">
               <p className="font-bold text-green-900 text-sm truncate">{session?.Name}</p>
               <p className="text-slate-400 text-xs mt-0.5">{session?.Role} · {session?.Unit || session?.Office}</p>
@@ -57,12 +64,14 @@ export default function SettingsModal({ onClose, session }) {
 
             <button
               onClick={() => toggleSound(!soundOn)}
-              className={`relative w-16 h-8 rounded-full transition-all duration-200 flex items-center px-1 ${soundOn ? 'bg-green-600' : 'bg-slate-300'}`}
+              className={`relative w-14 h-7 rounded-full transition-all duration-200 flex items-center toggle-switch ${soundOn ? 'bg-green-600' : 'bg-slate-300'}`}
               role="switch"
               aria-checked={soundOn}
             >
-              <span className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${soundOn ? 'translate-x-8' : 'translate-x-0'}`} />
-              <span className="absolute left-3 text-[10px] text-white font-semibold">{soundOn ? 'On' : 'Off'}</span>
+              <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${soundOn ? 'translate-x-7' : 'translate-x-0.5'}`} />
+              <span className={`absolute text-[9px] font-semibold transition-opacity duration-200 ${soundOn ? 'left-2 text-white opacity-100' : 'right-2 text-slate-600 opacity-100'}`}>
+                {soundOn ? 'On' : 'Off'}
+              </span>
             </button>
           </div>
 

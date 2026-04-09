@@ -237,23 +237,22 @@ export default function CreateTaskForm({ users, onSync }) {
             <div>
               <label className="label">Task / Document No. <span className="text-slate-400 normal-case font-normal">(Optional)</span></label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">#</span>
-                <input className="input pl-7" placeholder="e.g. 001 or PHILFIDA-2025-001"
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold dispatch-input-hash">#</span>
+                <input className="input pl-8 pr-3 dispatch-input" placeholder="e.g. 001 or PHILFIDA-2025-001"
                   value={taskNo} onChange={e => setTaskNo(e.target.value)} />
               </div>
             </div>
             <div>
               <label className="label">Deadline / Date <span className="text-slate-400 normal-case font-normal">(Optional)</span></label>
-              {/* Modern date input — custom styled */}
+              {/* Modern date input -- using native browser picker */}
               <div className="relative">
                 <input
-                  className="input pr-10"
+                  className="input pl-3"
                   type="datetime-local"
                   value={deadline}
                   onChange={e => setDeadline(e.target.value)}
                   style={{ colorScheme: 'light' }}
                 />
-                <i className="bi bi-calendar3 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
               </div>
               {deadline && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-700 font-semibold">
@@ -317,7 +316,7 @@ export default function CreateTaskForm({ users, onSync }) {
                     </span>
                   </label>
                   {isForward && active && (
-                    <input className="input mt-1 ml-6 text-xs py-1.5" style={{ width: 'calc(100% - 24px)' }}
+                    <input className="input mt-1 ml-6 text-xs py-1.5 pl-3 pr-3 dispatch-input" style={{ width: 'calc(100% - 24px)' }}
                       placeholder="Specify recipient or office..."
                       value={forwardTo} onChange={e => setForwardTo(e.target.value)} />
                   )}
@@ -362,10 +361,10 @@ export default function CreateTaskForm({ users, onSync }) {
         <div>
           <SectionLabel num="8" title="Dispatched By" />
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dispatch-input-icon">
               <i className="bi bi-pen-fill text-xs" />
             </span>
-            <input className="input pl-8" placeholder="Your full name"
+            <input className="input pl-9 pr-3 dispatch-input" placeholder="Your full name"
               value={senderName} onChange={e => setSenderName(e.target.value)} />
           </div>
           <p className="text-[10px] text-slate-400 mt-1">Auto-filled from your account. Edit if needed.</p>
