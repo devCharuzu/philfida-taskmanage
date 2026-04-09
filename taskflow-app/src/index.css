@@ -19,6 +19,22 @@
 
   * { box-sizing: border-box; }
 
+  /* Mobile root fixes */
+  html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
   body {
     font-family: 'DM Sans', sans-serif;
     background-color: #f4f7f4;
@@ -27,6 +43,10 @@
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
     overflow-x: hidden;
+    /* Mobile-specific fixes */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   h1,h2,h3,h4,h5,h6 {

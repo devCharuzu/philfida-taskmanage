@@ -16,6 +16,18 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       sourcemap: false,
       chunkSizeWarningLimit: 1000,
+      // Mobile-specific optimizations
+      target: 'es2015',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+            router: ['react-router-dom'],
+            supabase: ['@supabase/supabase-js'],
+            zustand: ['zustand'],
+          },
+        },
+      },
     },
     server: {
       port: 3000,

@@ -10,9 +10,26 @@ import PersonalCalendarPage from './pages/PersonalCalendarPage'
 function useHydrated() {
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
-    const unsub = useStore.persist.onFinishHydration(() => setHydrated(true))
-    if (useStore.persist.hasHydrated()) setHydrated(true)
-    return unsub
+    // Add timeout to prevent infinite loading on mobile
+    const timeout = setTimeout(() => {
+      console.warn('Store hydration timeout - forcing render')
+      setHydrated(true)
+    }, 3000) // 3 second timeout for mobile
+
+    const unsub = useStore.persist.onFinishHydration(() => {
+      clearTimeout(timeout)
+      setHydrated(true)
+    })
+    
+    if (useStore.persist.hasHydrated()) {
+      clearTimeout(timeout)
+      setHydrated(true)
+    }
+    
+    return () => {
+      clearTimeout(timeout)
+      unsub?.()
+    }
   }, [])
   return hydrated
 }
@@ -22,8 +39,10 @@ function ProtectedRoute({ children, role }) {
   const session  = useStore(s => s.session)
 
   if (!hydrated) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f0f4f0' }}>
-      <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin" />
+    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
+      <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4" />
+      <p className="text-white text-sm font-medium">Loading TaskFlow...</p>
+      <p className="text-green-200 text-xs mt-2">Please wait</p>
     </div>
   )
 
@@ -46,8 +65,10 @@ function LoginRoute() {
   if (isOAuthCallback) return <LoginPage />
 
   if (!hydrated) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f0f4f0' }}>
-      <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin" />
+    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
+      <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4" />
+      <p className="text-white text-sm font-medium">Loading TaskFlow...</p>
+      <p className="text-green-200 text-xs mt-2">Please wait</p>
     </div>
   )
 
