@@ -91,6 +91,13 @@ if (envErrors.length > 0) {
   // Test connection and handle legacy API key issues
   const testConnection = async () => {
     try {
+      // Add mobile-specific connection test
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
+      
+      if (isMobile) {
+        console.log('Mobile device detected, testing Supabase connection...')
+      }
+      
       const { error } = await supabaseClient.from('Users').select('count').limit(1)
       if (error) {
         if (error.message?.includes('Legacy API keys are disabled')) {
@@ -119,6 +126,25 @@ The application will not function until this is resolved.
       }
     } catch (error) {
       debugLog('Connection test failed:', error)
+      
+      // Check if this is a mobile-specific error
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
+      
+      if (isMobile) {
+        console.error('Mobile connection error detected:', error)
+        
+        // Store error for mobile debugging
+        try {
+          sessionStorage.setItem('mobileConnectionError', JSON.stringify({
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent
+          }))
+        } catch (e) {
+          console.warn('Could not store mobile connection error:', e)
+        }
+      }
+      
       throw error
     }
   }
