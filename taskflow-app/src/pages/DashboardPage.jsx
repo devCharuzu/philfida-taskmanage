@@ -59,7 +59,7 @@ export default function DashboardPage() {
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* ── SIDEBAR ── */}
-      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 md:w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar-modern ${sidebarOpen ? 'open' : ''} md:relative bg-white border-r border-slate-200 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out`}>
 
         {/* Branding strip */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
@@ -136,28 +136,28 @@ export default function DashboardPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile top bar */}
-        <div className="mobile-only flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
-          <button onClick={() => setSidebarOpen(true)} className="btn-touch p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
-            <i className="bi bi-list text-2xl-responsive" />
+        <div className="md:hidden flex items-center justify-between mobile-p bg-white border-b border-slate-200 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="btn-modern p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
+            <i className="bi bi-list text-lg" />
           </button>
-          <div className="flex items-center gap-responsive">
+          <div className="flex items-center mobile-gap">
             <NotificationBell />
             <button
               onClick={() => setProfileOpen(!profileOpen)}
-              className="btn-touch w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-700 hover:bg-green-200 transition-colors"
+              className="btn-modern w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-green-700 hover:bg-green-200 transition-colors"
             >
-              <i className="bi bi-person-fill text-sm-responsive" />
+              <i className="bi bi-person-fill text-base" />
             </button>
           </div>
         </div>
 
         {/* Page top bar */}
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-responsive min-w-0">
+        <div className="flex items-center justify-between mobile-p md:desktop-p py-3 border-b border-slate-200 bg-white flex-shrink-0 mobile-gap md:desktop-gap min-w-0">
           <div className="min-w-0">
-            <h2 className="font-bold text-green-900 text-lg-responsive leading-none">My Assignments</h2>
-            <p className="text-slate-400 text-xs-responsive mt-1 truncate">{session?.Office || session?.Unit}</p>
+            <h2 className="font-bold text-green-900 text-base md:text-lg leading-none">My Assignments</h2>
+            <p className="text-slate-400 text-sm md:text-base mt-1 truncate">{session?.Office || session?.Unit}</p>
           </div>
-          <div className="flex items-center gap-responsive flex-shrink-0">
+          <div className="flex items-center mobile-gap md:desktop-gap flex-shrink-0">
             <span className="text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-full whitespace-nowrap">
               {activeCount} Active
             </span>
@@ -166,15 +166,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Task feed */}
-        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
-          <div className="max-w-2xl mx-auto space-y-3">
+        <main className="flex-1 overflow-y-auto mobile-p md:desktop-p py-4">
+          <div className="max-w-2xl mx-auto mobile-gap md:desktop-gap">
             {myTasks.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 text-center py-20 shadow-sm">
+              <div className="bg-white rounded-xl border border-slate-200 text-center py-20 shadow-sm card-modern">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <i className="bi bi-check-circle text-green-600 text-2xl-responsive" />
+                  <i className="bi bi-check-circle text-green-600 text-2xl" />
                 </div>
-                <h3 className="text-slate-800 font-bold text-lg-responsive mb-2">All Caught Up!</h3>
-                <p className="text-slate-500 text-sm-responsive">You have no active tasks assigned.</p>
+                <h3 className="text-slate-800 font-bold text-lg mb-2">All Caught Up!</h3>
+                <p className="text-slate-500 text-base">You have no active tasks assigned.</p>
               </div>
             ) : myTasks.map(t => (
               <TaskCard
