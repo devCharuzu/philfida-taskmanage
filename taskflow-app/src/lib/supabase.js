@@ -74,10 +74,6 @@ if (envErrors.length > 0) {
       params: {
         eventsPerSecond: 10,
       },
-      // Mobile WebSocket compatibility - handle insecure connections
-      transport: (typeof window !== 'undefined' && window.location.protocol === 'https:') ? 'websocket' : 'polling',
-      connectTimeout: 30000,
-      heartbeatIntervalMs: 30000,
     },
     global: {
       headers: {
@@ -92,29 +88,8 @@ if (envErrors.length > 0) {
   // Create Supabase client
   supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, supabaseConfig)
 
-  // Handle WebSocket errors specifically for mobile
-  supabaseClient.realtime.onConnect(() => {
-    debugLog('Realtime connected successfully')
-  })
-
-  supabaseClient.realtime.onDisconnect(() => {
-    debugLog('Realtime disconnected')
-  })
-
-  // Handle WebSocket errors
-  supabaseClient.realtime.onError((error) => {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
-    
-    if (error?.message?.includes('insecure') || error?.message?.includes('WebSocket')) {
-      console.warn('WebSocket connection failed, this is expected on mobile HTTP connections:', error)
-      
-      if (isMobile) {
-        console.log('Mobile device detected - WebSocket disabled, using polling fallback')
-      }
-    } else {
-      console.error('Realtime connection error:', error)
-    }
-  })
+  // Note: Supabase realtime event handlers are handled in useSync.js
+  // The onConnect, onDisconnect, onError methods don't exist in current Supabase API
 
   // Test connection and handle legacy API key issues
   const testConnection = async () => {
