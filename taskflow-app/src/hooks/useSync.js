@@ -25,30 +25,56 @@ export function useSync() {
     // Initial fetch
     sync()
 
-    // Subscribe to Supabase Realtime on all 4 tables
-    const tables = ['Tasks', 'Comments', 'Notifications', 'Users']
+    // Check if we should use realtime or fallback to polling only
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
+    const isSecureConnection = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    const useRealtime = isSecureConnection && !isMobile
 
-    tables.forEach(table => {
-      const channel = supabase
-        .channel(`realtime-${table}-${session.ID}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table },
-          () => {
-            // Any change to any of these tables triggers a full re-fetch
-            sync()
-          }
-        )
-        .subscribe()
+    if (useRealtime) {
+      console.log('Using realtime subscriptions')
+      // Subscribe to Supabase Realtime on all 4 tables
+      const tables = ['Tasks', 'Comments', 'Notifications', 'Users']
 
-      channelsRef.current.push(channel)
-    })
+      tables.forEach(table => {
+        try {
+          const channel = supabase
+            .channel(`realtime-${table}-${session.ID}`)
+            .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table },
+              () => {
+                // Any change to any of these tables triggers a full re-fetch
+                sync()
+              }
+            )
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                console.log(`Realtime subscription active for ${table}`)
+              } else if (status === 'CHANNEL_ERROR') {
+                console.warn(`Realtime subscription failed for ${table}, falling back to polling`)
+              }
+            })
 
-    // Fallback poll every 30s in case realtime misses anything
+          channelsRef.current.push(channel)
+        } catch (error) {
+          console.warn(`Failed to create realtime subscription for ${table}:`, error)
+        }
+      })
+    } else {
+      console.log('Using polling-only mode (mobile or insecure connection detected)')
+    }
+
+    // Fallback poll every 30s (primary for mobile, backup for desktop)
     const fallback = setInterval(sync, 30000)
 
     return () => {
-      channelsRef.current.forEach(ch => supabase.removeChannel(ch))
+      channelsRef.current.forEach(ch => {
+        try {
+          supabase.removeChannel(ch)
+        } catch (error) {
+          console.warn('Error removing channel:', error)
+        }
+      })
       channelsRef.current = []
       clearInterval(fallback)
     }
