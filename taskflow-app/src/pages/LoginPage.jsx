@@ -200,11 +200,11 @@ The application cannot function until this is resolved.
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden"
+    <div className="fixed inset-0 overflow-y-auto"
       style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
 
       {/* Animated background elements */}
-      <div className="absolute inset-0">
+      <div className="fixed inset-0 z-0">
         <div className="absolute top-20 left-20 w-72 h-72 bg-green-400/8 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-20 right-20 w-80 h-80 bg-yellow-400/8 rounded-full blur-3xl animate-pulse delay-1000" />
         <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-blue-400/8 rounded-full blur-3xl animate-pulse delay-500" />
@@ -212,23 +212,23 @@ The application cannot function until this is resolved.
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+      <div className="relative z-10 min-h-screen flex items-start justify-center p-4 py-8">
 
         {/* Login Card */}
-        <div className="w-full max-w-sm sm:max-w-md">
+        <div className="w-full max-w-[320px] sm:max-w-[360px] md:max-w-[400px] lg:max-w-[440px] xl:max-w-[480px]">
 
           {/* Header with logos */}
           <div className="text-center mb-8">
             <div className="flex justify-center items-center gap-4 mb-6">
               {/* DA Logo */}
-              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center overflow-hidden shadow-lg">
+              <div className="w-10 h-10 lg:w-12 lg:h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center overflow-hidden shadow-lg">
                 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Bagong_Pilipinas_logo_%28DA%29.svg/200px-Bagong_Pilipinas_logo_%28DA%29.svg.png"
-                  alt="Department of Agriculture" className="w-8 h-8 lg:w-10 lg:h-10 object-contain"
+                  alt="Department of Agriculture" className="w-6 h-6 lg:w-8 lg:h-10 object-contain"
                   onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<div class="w-6 h-6 lg:w-8 lg:h-8 bg-yellow-400 rounded-full flex items-center justify-center"><span class="text-xs font-bold text-green-800">DA</span></div>' }} />
               </div>
 
               {/* PhilFIDA Logo */}
-              <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl bg-white shadow-xl flex items-center justify-center overflow-hidden p-2">
+              <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-2xl bg-white shadow-xl flex items-center justify-center overflow-hidden p-2">
                 <img src="/philfida-logo.png" alt="PhilFIDA" className="w-full h-full object-contain"
                   onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<div class="text-center"><span class="text-lg lg:text-xl font-bold text-green-800">PhilFIDA</span></div>' }} />
               </div>
@@ -236,11 +236,11 @@ The application cannot function until this is resolved.
 
             <div className="space-y-2">
               <p className="text-green-200 text-xs font-semibold uppercase tracking-widest">Republic of the Philippines</p>
-              <h1 className="text-white font-bold text-xl lg:text-2xl xl:text-3xl leading-tight">
+              <h1 className="text-white font-bold text-lg lg:text-xl xl:text-2xl leading-tight">
                 Philippine Fiber Industry<br />
                 <span className="text-yellow-300">Development Authority</span>
               </h1>
-              <p className="text-green-200 text-sm lg:text-base font-medium mt-2">TaskFlow Management System</p>
+              <p className="text-green-200 text-xs lg:text-sm font-medium mt-2">TaskFlow Management System</p>
             </div>
           </div>
 
@@ -250,7 +250,7 @@ The application cannot function until this is resolved.
             {/* Tab switcher */}
             <div className="flex bg-slate-50/80 border-b border-slate-200/50">
               <button onClick={() => switchTab('login')}
-                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 py-3 px-4 text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   tab === 'login'
                     ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
                     : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
@@ -258,7 +258,7 @@ The application cannot function until this is resolved.
                 Sign In
               </button>
               <button onClick={() => switchTab('register')}
-                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 py-3 px-4 text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   tab === 'register'
                     ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
                     : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
@@ -268,7 +268,7 @@ The application cannot function until this is resolved.
             </div>
 
             {/* Form content */}
-            <div className="p-8 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="p-4 sm:p-6 lg:p-8 bg-white rounded-xl border border-slate-200 shadow-sm">
 
               {/* Alerts */}
               {connectionError && (
@@ -298,8 +298,8 @@ The application cannot function until this is resolved.
               {tab === 'login' && (
                 <div className="space-y-6">
                   <div className="text-center">
-                    <h2 className="text-xl lg:text-2xl font-bold text-slate-800 mb-2">Welcome Back</h2>
-                    <p className="text-slate-600 text-sm">Sign in to access your dashboard</p>
+                    <h2 className="text-lg lg:text-xl font-bold text-slate-800 mb-2">Welcome Back</h2>
+                    <p className="text-slate-600 text-xs lg:text-sm">Sign in to access your dashboard</p>
                   </div>
 
                   {/* Google Sign In */}
@@ -329,14 +329,14 @@ The application cannot function until this is resolved.
                   {/* Manual login form */}
                   <form onSubmit={handleLogin} className="space-y-5">
                     <div>
-                      <label className="block text-base font-semibold text-slate-700 mb-3">Personnel ID</label>
+                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Personnel ID</label>
                       <div className="relative">
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                           <i className="bi bi-person-fill text-sm" />
                         </div>
                         <input
                           type="text"
-                          className="w-full px-4 py-5 bg-white border-2 border-slate-200 rounded-xl text-lg font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent transition-all"
+                          className="w-full px-4 py-3 lg:py-5 bg-white border-2 border-slate-200 rounded-xl text-sm lg:text-lg font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent transition-all"
                           style={{ paddingLeft: '3rem' }}
                           placeholder="Enter your Personnel ID"
                           value={loginId}
@@ -348,13 +348,13 @@ The application cannot function until this is resolved.
                     </div>
 
                     <div>
-                      <label className="block text-base font-semibold text-slate-700 mb-3">Password</label>
+                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Password</label>
                       <div className="relative">
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                           <i className="bi bi-lock-fill text-sm" />
                         </div>
                         <input
-                          className="w-full pl-12 pr-12 px-4 py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-lg"
+                          className="w-full pl-12 pr-12 py-3 lg:py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm lg:text-lg"
                           type={showPass ? 'text' : 'password'}
                           placeholder="Enter your password"
                           value={loginPass}
@@ -372,7 +372,7 @@ The application cannot function until this is resolved.
                     </div>
 
                     <button
-                      className="w-full py-6 px-8 text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full py-4 lg:py-6 px-6 lg:px-8 text-white font-bold text-sm lg:text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
                       disabled={loading}
                     >
@@ -393,8 +393,8 @@ The application cannot function until this is resolved.
               {tab === 'register' && (
                 <div className="space-y-6">
                   <div className="text-center">
-                    <h2 className="text-xl lg:text-2xl font-bold text-slate-800 mb-2">Create Account</h2>
-                    <p className="text-slate-600 text-sm">Submit your registration for approval</p>
+                    <h2 className="text-lg lg:text-xl font-bold text-slate-800 mb-2">Create Account</h2>
+                    <p className="text-slate-600 text-xs lg:text-sm">Submit your registration for approval</p>
                   </div>
 
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -412,7 +412,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
                         <input
-                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                           placeholder="Juan dela Cruz"
                           value={regName}
                           onChange={e => setRegName(e.target.value)}
@@ -423,7 +423,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Personnel ID</label>
                         <input
-                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                           placeholder="e.g. 001"
                           value={regId}
                           onChange={e => setRegId(e.target.value)}
@@ -435,7 +435,7 @@ The application cannot function until this is resolved.
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address <span className="text-slate-400 font-normal">(Optional)</span></label>
                       <input
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                         type="email"
                         placeholder="juan@philfida.gov.ph"
                         value={regEmail}
@@ -447,7 +447,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">{regRole === 'Director' ? 'Office' : 'Unit'}</label>
                         <select
-                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                           value={regUnit}
                           onChange={e => setRegUnit(e.target.value)}
                           required
@@ -460,7 +460,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Role</label>
                         <select
-                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                           value={regRole}
                           onChange={e => { setRegRole(e.target.value); setRegUnit('') }}
                           required
@@ -476,7 +476,7 @@ The application cannot function until this is resolved.
                       <label className="block text-base font-semibold text-slate-700 mb-3">Password</label>
                       <div className="relative">
                         <input
-                          className="w-full px-4 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
+                          className="w-full px-3 pr-12 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                           type={showRegPass ? 'text' : 'password'}
                           placeholder="Create a secure password"
                           value={regPass}
@@ -494,7 +494,7 @@ The application cannot function until this is resolved.
                     </div>
 
                     <button
-                      className="w-full py-6 px-8 text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full py-4 lg:py-6 px-6 lg:px-8 text-white font-bold text-sm lg:text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
                       disabled={loading}
                     >
