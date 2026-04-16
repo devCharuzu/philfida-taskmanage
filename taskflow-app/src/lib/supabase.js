@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 // Environment variables with validation
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 // Enhanced environment validation
 const validateEnvironment = () => {
