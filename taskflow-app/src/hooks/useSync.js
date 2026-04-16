@@ -3,6 +3,63 @@ import { useStore } from '../store/useStore'
 import { getData } from '../lib/api'
 import { supabase } from '../lib/supabase'
 
+// Helper function to sync only notifications
+async function syncNotificationsOnly(session, setGlobalData) {
+  if (!session) return
+  try {
+    const { data: notifications } = await supabase
+      .from('Notifications')
+      .select('*')
+      .eq('UserID', session.ID)
+      .order('ID', { ascending: false })
+      .limit(20)
+    
+    if (notifications) {
+      setGlobalData(prev => ({
+        ...prev,
+        notifications: notifications
+      }))
+    }
+  } catch (e) {
+    console.error('Notification sync failed', e)
+  }
+}
+
+// Helper function to check if comment change affects current user
+async function checkCommentNotification(payload, userId, sync) {
+  try {
+    const commentData = payload.new || payload.record
+    if (!commentData) return
+    
+    // Get task details to check if user is involved
+    const { data: task } = await supabase
+      .from('Tasks')
+      .select('*')
+      .eq('TaskID', commentData.TaskID)
+      .single()
+    
+    if (!task) return
+    
+    // If user is the employee or a director, sync
+    if (task.EmployeeID === userId) {
+      sync()
+    } else {
+      // Check if user is a director
+      const { data: user } = await supabase
+        .from('Users')
+        .select('Role')
+        .eq('ID', userId)
+        .single()
+      
+      if (user?.Role === 'Director') {
+        sync()
+      }
+    }
+  } catch (e) {
+    console.error('Comment notification check failed', e)
+  }
+}
+
 export function useSync() {
   const session = useStore(s => s.session)
   const setGlobalData = useStore(s => s.setGlobalData)
@@ -32,32 +89,70 @@ export function useSync() {
 
     if (useRealtime) {
       console.log('Using realtime subscriptions')
-      // Subscribe to Supabase Realtime on all 4 tables
-      const tables = ['Tasks', 'Comments', 'Notifications', 'Users']
+      
+      // Targeted notification subscription - only for user-specific notifications
+      try {
+        const notificationChannel = supabase
+          .channel(`notifications-${session.ID}`)
+          .on(
+            'postgres_changes',
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'Notifications',
+              filter: `UserID=eq.${session.ID}`
+            },
+            (payload) => {
+              console.log('New notification received:', payload)
+              // Only sync notifications, not entire data
+              syncNotificationsOnly(session, setGlobalData)
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('Realtime notification subscription active')
+            } else if (status === 'CHANNEL_ERROR') {
+              console.warn('Realtime notification subscription failed, falling back to polling')
+            }
+          })
 
-      tables.forEach(table => {
+        channelsRef.current.push(notificationChannel)
+      } catch (error) {
+        console.warn('Failed to create notification subscription:', error)
+      }
+
+      // Subscribe to task and comment changes that might affect notifications
+      const criticalTables = ['Tasks', 'Comments']
+      criticalTables.forEach(table => {
         try {
           const channel = supabase
-            .channel(`realtime-${table}-${session.ID}`)
+            .channel(`${table}-changes-${session.ID}`)
             .on(
               'postgres_changes',
               { event: '*', schema: 'public', table },
-              () => {
-                // Any change to any of these tables triggers a full re-fetch
-                sync()
+              (payload) => {
+                // Check if this change affects the current user
+                if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                  const newData = payload.new || payload.record
+                  if (table === 'Tasks' && newData.EmployeeID === session.ID) {
+                    // Task assigned to this user changed
+                    sync()
+                  } else if (table === 'Comments') {
+                    // Comment change - check if user is involved
+                    checkCommentNotification(payload, session.ID, sync)
+                  }
+                }
               }
             )
             .subscribe((status) => {
               if (status === 'SUBSCRIBED') {
-                console.log(`Realtime subscription active for ${table}`)
-              } else if (status === 'CHANNEL_ERROR') {
-                console.warn(`Realtime subscription failed for ${table}, falling back to polling`)
+                console.log(`Realtime ${table} subscription active`)
               }
             })
 
           channelsRef.current.push(channel)
         } catch (error) {
-          console.warn(`Failed to create realtime subscription for ${table}:`, error)
+          console.warn(`Failed to create ${table} subscription:`, error)
         }
       })
     } else {

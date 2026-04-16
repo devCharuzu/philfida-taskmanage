@@ -16,8 +16,10 @@ const validateEnvironment = () => {
   
   if (!SUPABASE_ANON_KEY) {
     errors.push('VITE_SUPABASE_ANON_KEY is missing')
-  } else if (SUPABASE_ANON_KEY.length < 20) {
-    errors.push('VITE_SUPABASE_ANON_KEY appears to be invalid (too short)')
+  } else if (!SUPABASE_ANON_KEY.startsWith('sb_')) {
+    errors.push('VITE_SUPABASE_ANON_KEY appears to be invalid (should start with sb_)')
+  } else if (SUPABASE_ANON_KEY.length < 30) {
+    errors.push('VITE_SUPABASE_ANON_KEY appears to be incomplete (too short)')
   }
   
   return errors

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import { createTask } from '../lib/api'
 
@@ -71,7 +71,7 @@ function SectionLabel({ num, title }) {
   )
 }
 
-export default function CreateTaskForm({ users, onSync }) {
+export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDispatchConfirm, pendingDispatch, setPendingDispatch, setPersonnelModalOpen, setSelectedPersonnel, onCloseDrawer }) {
   const session = useStore(s => s.session)
 
   // ── State ────────────────────────────────────────────────────
@@ -89,9 +89,25 @@ export default function CreateTaskForm({ users, onSync }) {
   const [loading,      setLoading]      = useState(false)
   const [success,      setSuccess]      = useState('')
   const [error,        setError]        = useState('')
-  const [showConfirm,  setShowConfirm]  = useState(false)
 
-  const employees    = users.filter(u => u.Role !== 'Director')
+  // Reset form when drawer closes (dispatchConfirm becomes null after confirmation)
+  useEffect(() => {
+    if (dispatchConfirm === null && pendingDispatch === null) {
+      setEmpId('')
+      setTaskNo('')
+      setDeadline('')
+      setPriorities([])
+      setPurposes([])
+      setForwardTo('')
+      setAction('')
+      setRemarks('')
+      setFiles([])
+      setError('')
+      setSuccess('')
+    }
+  }, [dispatchConfirm, pendingDispatch])
+
+  const employees    = users.filter(u => u.Role !== 'Director' && u.AccountStatus === 'Active')
   const selectedEmp  = employees.find(u => String(u.ID) === String(empId))
   const empStatus    = selectedEmp?.Status || 'Available'
   const empStatusKey = getStatusKey(empStatus)
@@ -150,14 +166,19 @@ export default function CreateTaskForm({ users, onSync }) {
         actorName:    session?.Name || 'Director',
       })
       await onSync()
-      // Reset
+      // Reset form
       setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
       setPriorities([]); setPurposes([]); setForwardTo('')
       setAction(''); setRemarks(''); setEmpId('')
       setSenderName(session?.Name || '')
       setSuccess(`Task dispatched to ${selectedEmp.Name}.`)
       setTimeout(() => setSuccess(''), 4000)
-    } catch {
+      // Close drawer after showing success message
+      setTimeout(() => {
+        onCloseDrawer?.()
+      }, 2000)
+    } catch (error) {
+      console.error('Task creation failed:', error)
       setError('Failed to create task. Please try again.')
     } finally { setLoading(false) }
   }
@@ -166,7 +187,26 @@ export default function CreateTaskForm({ users, onSync }) {
     e.preventDefault()
     if (!empId)   { setError('Please select a unit personnel.'); return }
     if (!title)   { setError('Please enter a task title.'); return }
-    if (needsConfirm) { setShowConfirm(true); return }
+    if (needsConfirm) {
+      const priorityVal = priorities.includes('Urgent') ? 'Urgent'
+        : priorities.includes('Priority') ? 'High'
+        : 'Normal'
+      setPendingDispatch({
+        empId,
+        empName: selectedEmp.Name,
+        title: buildTitle(),
+        instructions: buildInstructions(),
+        priority: priorityVal,
+        category: priorities.includes('Confidential') ? 'Confidential' : 'General',
+        deadline,
+        files,
+        actorName: session?.Name || 'Director',
+      })
+      setDispatchConfirm(selectedEmp)
+      setPersonnelModalOpen?.(false)
+      setSelectedPersonnel?.(null)
+      return
+    }
     await doDispatch()
   }
 
@@ -176,7 +216,7 @@ export default function CreateTaskForm({ users, onSync }) {
       {/* ── 1. AVAILABILITY PREVIEW + ASSIGN ── */}
       <div>
         <SectionLabel num="1" title="Assign To" />
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5 mb-2">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5 mb-2 card-enhanced">
           {employees.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-2">No personnel found.</p>
           ) : Object.entries(grouped).map(([status, group]) => {
@@ -219,7 +259,7 @@ export default function CreateTaskForm({ users, onSync }) {
           </div>
         )}
         {/* Fallback dropdown */}
-        <select className="input mt-2 text-xs" value={empId} onChange={e => setEmpId(e.target.value)} required>
+        <select className="input mt-2 text-xs input-enhanced focus-ring" value={empId} onChange={e => setEmpId(e.target.value)} required>
           <option value="">-- Select Unit Personnel --</option>
           {employees.map(u => {
             const s = getStatusLabel(u.Status)
@@ -238,7 +278,7 @@ export default function CreateTaskForm({ users, onSync }) {
               <label className="label">Task / Document No. <span className="text-slate-400 normal-case font-normal">(Optional)</span></label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold dispatch-input-hash">#</span>
-                <input className="input pl-8 pr-3 dispatch-input" placeholder="e.g. 001 or PHILFIDA-2025-001"
+                <input className="input pl-8 pr-3 dispatch-input input-enhanced focus-ring" placeholder="e.g. 001 or PHILFIDA-2025-001"
                   value={taskNo} onChange={e => setTaskNo(e.target.value)} />
               </div>
             </div>
@@ -247,7 +287,7 @@ export default function CreateTaskForm({ users, onSync }) {
               {/* Modern date input -- using native browser picker */}
               <div className="relative">
                 <input
-                  className="input pl-3"
+                  className="input pl-3 input-enhanced focus-ring"
                   type="datetime-local"
                   value={deadline}
                   onChange={e => setDeadline(e.target.value)}
@@ -270,7 +310,7 @@ export default function CreateTaskForm({ users, onSync }) {
         {/* ── 3. TASK TITLE ── */}
         <div>
           <SectionLabel num="3" title="Subject / Title" />
-          <input className="input" placeholder="Enter task subject or title" value={title}
+          <input className="input input-enhanced focus-ring" placeholder="Enter task subject or title" value={title}
             onChange={e => setTitle(e.target.value)} required />
         </div>
 
@@ -299,7 +339,7 @@ export default function CreateTaskForm({ users, onSync }) {
         {/* ── 5. PURPOSE CHECKBOXES ── */}
         <div>
           <SectionLabel num="5" title="Purpose / Action Required" />
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5 card-enhanced">
             {PURPOSES.map(p => {
               const isForward = p === 'Please return/forward to:'
               const active = purposes.includes(p)
@@ -316,7 +356,7 @@ export default function CreateTaskForm({ users, onSync }) {
                     </span>
                   </label>
                   {isForward && active && (
-                    <input className="input mt-1 ml-6 text-xs py-1.5 pl-3 pr-3 dispatch-input" style={{ width: 'calc(100% - 24px)' }}
+                    <input className="input mt-1 ml-6 text-xs py-1.5 pl-3 pr-3 dispatch-input input-enhanced focus-ring" style={{ width: 'calc(100% - 24px)' }}
                       placeholder="Specify recipient or office..."
                       value={forwardTo} onChange={e => setForwardTo(e.target.value)} />
                   )}
@@ -352,7 +392,7 @@ export default function CreateTaskForm({ users, onSync }) {
         {/* ── 7. REMARKS ── */}
         <div>
           <SectionLabel num="7" title="Remarks / Comments (Optional)" />
-          <textarea className="input resize-none" rows={3}
+          <textarea className="input resize-none input-enhanced focus-ring" rows={3}
             placeholder="Additional remarks or comments..."
             value={remarks} onChange={e => setRemarks(e.target.value)} />
         </div>
@@ -364,7 +404,7 @@ export default function CreateTaskForm({ users, onSync }) {
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dispatch-input-icon">
               <i className="bi bi-pen-fill text-xs" />
             </span>
-            <input className="input pl-9 pr-3 dispatch-input" placeholder="Your full name"
+            <input className="input pl-9 pr-3 dispatch-input input-enhanced focus-ring" placeholder="Your full name"
               value={senderName} onChange={e => setSenderName(e.target.value)} />
           </div>
           <p className="text-[10px] text-slate-400 mt-1">Auto-filled from your account. Edit if needed.</p>
@@ -373,7 +413,7 @@ export default function CreateTaskForm({ users, onSync }) {
         {/* ── 9. ATTACHMENTS ── */}
         <div>
           <SectionLabel num="9" title="Attachments (Optional)" />
-          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-5 cursor-pointer hover:border-green-400 hover:bg-green-50 transition-all group">
+          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-5 cursor-pointer hover:border-green-400 hover:bg-green-50 transition-all group card-enhanced hover-lift">
             <i className="bi bi-cloud-upload text-2xl text-slate-300 group-hover:text-green-500 transition-colors" />
             <span className="text-xs font-semibold text-slate-400 group-hover:text-green-600">Click to attach files</span>
             <span className="text-[10px] text-slate-300">PDF, Word, Excel, images, and more</span>
@@ -401,47 +441,12 @@ export default function CreateTaskForm({ users, onSync }) {
         {success && <div className="bg-green-50 border border-green-200 text-green-700 text-xs rounded-lg px-3 py-2 flex items-center gap-2"><i className="bi bi-check-circle-fill" />{success}</div>}
 
         {/* Submit */}
-        <button className="btn-primary w-full py-3" disabled={loading}>
+        <button className="btn-primary w-full py-3 btn-enhanced focus-ring" disabled={loading}>
           {loading
             ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Dispatching...</>
             : <><i className="bi bi-send-fill" /> Dispatch Task</>}
         </button>
       </form>
-
-      {/* ── CONFIRM MODAL ── */}
-      {showConfirm && selectedEmp && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <i className="bi bi-exclamation-triangle-fill text-white text-lg" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-sm leading-none">Availability Notice</p>
-                <p className="text-amber-100 text-xs mt-0.5">Please confirm before dispatching</p>
-              </div>
-            </div>
-            <div className="p-5">
-              <div className={`flex items-center gap-3 p-3 rounded-xl border mb-4 ${STATUS_CONFIG[getStatusKey(empStatus)]?.pill}`}>
-                <StatusDot status={empStatus} />
-                <div>
-                  <p className="font-bold text-sm">{selectedEmp.Name}</p>
-                  <p className="text-xs mt-0.5">Currently: <span className="font-semibold">{empStatusKey}</span></p>
-                </div>
-              </div>
-              <p className="text-slate-600 text-sm mb-5 leading-relaxed">
-                This personnel is currently <strong>{empStatusKey}</strong> and may not be able to act immediately. Dispatch anyway?
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => setShowConfirm(false)} className="btn-secondary flex-1 py-2.5">Cancel</button>
-                <button onClick={async () => { setShowConfirm(false); await doDispatch() }} disabled={loading} className="btn-primary flex-1 py-2.5">
-                  {loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> : 'Dispatch Anyway'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -52,27 +52,33 @@ export const useStore = create(
       setGlobalData: (data)    => set({ globalData: data }),
     }),
     {
-      name:       'philfida_session',
+      name: 'philfida_session',
       partialize: (state) => ({ session: state.session }),
-      storage: mobileSafeStorage,
+      storage: {
+        getItem: mobileSafeStorage.getItem,
+        setItem: (name, value) => {
+          try {
+            const serialized = JSON.stringify(value)
+            // Check if serialized data is too large for mobile storage
+            if (serialized.length > 5 * 1024 * 1024) { // 5MB limit
+              console.warn('Store data too large, clearing globalData to save space')
+              const compacted = { 
+                session: value.session, 
+                globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } 
+              }
+              mobileSafeStorage.setItem(name, JSON.stringify(compacted))
+            } else {
+              mobileSafeStorage.setItem(name, serialized)
+            }
+          } catch (error) {
+            console.error('Store serialization failed:', error)
+            mobileSafeStorage.setItem(name, JSON.stringify({ session: null, globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } }))
+          }
+        },
+        removeItem: mobileSafeStorage.removeItem
+      },
       onRehydrateStorage: () => (state) => {
         console.log('Store rehydrated on mobile:', state)
-      },
-      serialize: (state) => {
-        try {
-          return JSON.stringify(state)
-        } catch (error) {
-          console.error('Store serialization failed:', error)
-          return JSON.stringify({ session: null, globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } })
-        }
-      },
-      deserialize: (str) => {
-        try {
-          return JSON.parse(str)
-        } catch (error) {
-          console.error('Store deserialization failed:', error)
-          return { session: null, globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } }
-        }
       }
     }
   )

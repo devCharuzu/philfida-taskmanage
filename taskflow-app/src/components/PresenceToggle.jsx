@@ -18,25 +18,22 @@ const OPTIONS = [
   {
     value:    'Available',
     label:    'Available',
-    short:    'Avail',
-    active:   'bg-emerald-600 text-white border-emerald-700',
-    inactive: 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50',
+    active:   'bg-emerald-600 text-white border-emerald-700 shadow-sm',
+    inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300',
     dot:      'bg-emerald-400',
   },
   {
     value:    'Official Travel',
-    label:    'On Travel',
-    short:    'Travel',
-    active:   'bg-blue-600 text-white border-blue-700',
-    inactive: 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50',
+    label:    'Travel',
+    active:   'bg-blue-600 text-white border-blue-700 shadow-sm',
+    inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:border-blue-300',
     dot:      'bg-blue-400',
   },
   {
     value:    'On Leave',
-    label:    'On Leave',
-    short:    'Leave',
-    active:   'bg-red-500 text-white border-red-600',
-    inactive: 'bg-white text-red-500 border-red-200 hover:bg-red-50',
+    label:    'Leave',
+    active:   'bg-red-500 text-white border-red-600 shadow-sm',
+    inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-red-50 hover:border-red-300',
     dot:      'bg-red-400',
   },
 ]
@@ -320,7 +317,7 @@ export default function PresenceToggle({ value, userId, onChange }) {
 
   return (
     <>
-      <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 flex-shrink-0">
+      <div className="flex items-center gap-1.5 bg-white rounded-xl p-1 border border-slate-200 shadow-sm flex-shrink-0">
         {OPTIONS.map(opt => {
           const isActive = displayValue === opt.value
           return (
@@ -328,14 +325,14 @@ export default function PresenceToggle({ value, userId, onChange }) {
               onClick={() => handleClick(opt.value)}
               title={isActive ? `Currently: ${value}` : `Switch to ${opt.value}`}
               disabled={isActive}
-              className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-semibold border transition-all duration-200
                 ${isActive
-                  ? `${opt.active} cursor-default opacity-100`
-                  : `${opt.inactive} cursor-pointer`}`}>
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-white/80' : opt.dot}`} />
-              <span className="hidden sm:inline">{opt.label}</span>
-              <span className="sm:hidden">{opt.short}</span>
-              {isActive && <i className="bi bi-check text-[10px] hidden sm:inline" />}
+                  ? `${opt.active} cursor-default scale-[1.02]`
+                  : `${opt.inactive} cursor-pointer hover:scale-[1.02]`
+                }`}>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-white/90' : opt.dot}`} />
+              <span>{opt.label}</span>
+              {isActive && <i className="bi bi-check2 text-[10px] ml-0.5" />}
             </button>
           )
         })}

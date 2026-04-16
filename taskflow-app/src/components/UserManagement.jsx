@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { updateUserAccountStatus, updateUserRole, deleteUser, getAllUsers, UNITS, OFFICES } from '../lib/api'
 
@@ -96,15 +97,193 @@ export default function UserManagement({ users, onSync }) {
 
   const Spinner = () => <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
 
-  return (
-    <div className="space-y-4">
+  // ── UserCard ────────────────────────────────────────────────────────
+  function UserCard({ user: u, loading, onApprove, onDeactivate, onReactivate, onEdit, onDelete }) {
+    const [menuOpen, setMenuOpen] = useState(false)
+    const btnRef = useRef()
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-2 flex-wrap">
+    // Blue/purple variation style for User Management (different from task cards)
+    const getStatusStyle = (status) => {
+      switch (status) {
+        case 'Active': return 'bg-emerald-50 border-emerald-100 text-emerald-800'
+        case 'Pending': return 'bg-amber-50 border-amber-100 text-amber-800'
+        case 'Deactivated': return 'bg-rose-50 border-rose-100 text-rose-800'
+        default: return 'bg-slate-50 border-slate-100 text-slate-700'
+      }
+    }
+
+    const getRoleIcon = (role) => {
+      switch (role) {
+        case 'Director': return 'bi-briefcase-fill'
+        case 'Unit Head': return 'bi-person-badge-fill'
+        default: return 'bi-person-fill'
+      }
+    }
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow">
+        {/* ── SECTION 1: User Header with Badge Style (Blue variation) ── */}
+        <div className="bg-gradient-to-r from-slate-50 to-blue-50/30 px-3 sm:px-4 py-3.5 border-b border-slate-100">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              {/* Name Badge - Blue variation style */}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="inline-flex items-center gap-1.5 bg-white border border-blue-100 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-sm min-w-0 max-w-full">
+                  <i className={`bi ${getRoleIcon(u.Role)} text-blue-600 text-sm flex-shrink-0`} />
+                  <span className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate">{u.Name}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-2 ml-0.5 min-w-0">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 bg-slate-100 px-1.5 sm:px-2 py-0.5 rounded flex-shrink-0">ID: {u.ID}</span>
+                <span className="text-[10px] sm:text-[11px] text-slate-400 truncate min-w-0">{u.Unit || u.Office}</span>
+              </div>
+            </div>
+            <button ref={btnRef} onClick={() => setMenuOpen(!menuOpen)}
+              className="btn-ghost p-1.5 text-slate-400 hover:text-slate-700 relative flex-shrink-0 -mr-1">
+              <i className="bi bi-three-dots-vertical text-lg" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── SECTION 2: Role & Status with Dividers ── */}
+        <div className="grid grid-cols-2 gap-0 divide-x divide-slate-100 min-w-0">
+          <div className="px-2 sm:px-4 py-3.5 text-center min-w-0">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Role</p>
+            <span className={`inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 rounded-full border truncate max-w-full ${ROLE_COLORS[u.Role] || 'bg-slate-100 text-slate-600'}`}>
+              <i className={`bi ${getRoleIcon(u.Role)} flex-shrink-0`} />
+              <span className="truncate">{u.Role}</span>
+            </span>
+          </div>
+          <div className="px-2 sm:px-4 py-3.5 text-center min-w-0">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Status</p>
+            <span className={`inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 rounded-full border truncate max-w-full ${getStatusStyle(u.AccountStatus)}`}>
+              <i className={`bi bi-circle-fill text-[6px] flex-shrink-0 ${u.AccountStatus === 'Active' ? 'text-emerald-500' : u.AccountStatus === 'Pending' ? 'text-amber-500' : 'text-rose-500'}`} />
+              <span className="truncate">{u.AccountStatus || 'Active'}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* ── SECTION 3: Footer Info ── */}
+        <div className="px-3 sm:px-4 py-2 bg-slate-50/50 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400 min-w-0">
+            <span className="flex items-center gap-1 min-w-0 truncate">
+              <i className="bi bi-envelope text-slate-300 flex-shrink-0" />
+              <span className="truncate">{u.Email || 'No email'}</span>
+            </span>
+            <span className="flex items-center gap-1 flex-shrink-0">
+              <i className="bi bi-shield-check text-slate-300" />
+              <span className="hidden sm:inline">{u.Role}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Action Menu Dropdown */}
+        <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
+          {u.AccountStatus === 'Pending' && (
+            <button onClick={() => { onApprove(); setMenuOpen(false) }} disabled={loading === u.ID + '_approve'}
+              className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
+              <i className="bi bi-check-lg text-green-700" /> Approve Account
+            </button>
+          )}
+          {u.AccountStatus === 'Active' && (
+            <button onClick={() => { onDeactivate(); setMenuOpen(false) }} disabled={loading === u.ID + '_deactivate'}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left text-slate-700">
+              <i className="bi bi-person-x text-amber-600" /> Deactivate Account
+            </button>
+          )}
+          {u.AccountStatus === 'Deactivated' && (
+            <button onClick={() => { onReactivate(); setMenuOpen(false) }} disabled={loading === u.ID + '_reactivate'}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left text-slate-700">
+              <i className="bi bi-person-check text-emerald-600" /> Reactivate Account
+            </button>
+          )}
+          <div className="border-t border-slate-100" />
+          <button onClick={() => { onEdit(); setMenuOpen(false) }}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left text-slate-700">
+            <i className="bi bi-pencil text-green-700" /> Edit User
+          </button>
+          <div className="border-t border-slate-100" />
+          <button onClick={() => { onDelete(); setMenuOpen(false) }}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 text-left text-red-600">
+            <i className="bi bi-trash3 text-red-500" /> Delete Permanently
+          </button>
+        </PortalDropdown>
+      </div>
+    )
+  }
+
+  // ── Portal Dropdown ─────────────────────────────────
+  function PortalDropdown({ anchorRef, open, onClose, children }) {
+    const [pos, setPos] = useState({ top: 0, left: 0 })
+    const dropdownRef = useRef()
+
+    // Position dropdown
+    useEffect(() => {
+      if (open && anchorRef.current) {
+        const rect = anchorRef.current.getBoundingClientRect()
+        const viewportHeight = window.innerHeight
+        const viewportWidth = window.innerWidth
+        const dropdownHeight = 200
+        const dropdownWidth = 200
+
+        let left = rect.left + rect.width / 2 - dropdownWidth / 2
+        let top = rect.bottom + 4
+
+        if (left < 8) left = 8
+        if (left + dropdownWidth > viewportWidth - 8) left = viewportWidth - dropdownWidth - 8
+        if (top + dropdownHeight > viewportHeight - 8) top = rect.top - dropdownHeight - 4
+
+        setPos({ top, left })
+      }
+    }, [open, anchorRef])
+
+    // Click outside to close
+    useEffect(() => {
+      if (!open) return
+      function handleClick(e) {
+        if (dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+            anchorRef.current && !anchorRef.current.contains(e.target)) {
+          onClose()
+        }
+      }
+      document.addEventListener('mousedown', handleClick)
+      return () => document.removeEventListener('mousedown', handleClick)
+    }, [open, onClose, anchorRef])
+
+    // ESC key to close
+    useEffect(() => {
+      if (!open) return
+      function handleKey(e) {
+        if (e.key === 'Escape') onClose()
+      }
+      document.addEventListener('keydown', handleKey)
+      return () => document.removeEventListener('keydown', handleKey)
+    }, [open, onClose])
+
+    if (!open) return null
+
+    return createPortal(
+      <div
+        ref={dropdownRef}
+        className="fixed bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 min-w-[180px] max-w-[220px]"
+        style={{ top: `${pos.top}px`, left: `${pos.left}px` }}
+        onClick={e => e.stopPropagation()}
+      >
+        {children}
+      </div>,
+      document.body
+    )
+  }
+
+  return (
+    <div className="space-y-6 w-full">
+
+      {/* Filter tabs - responsive grid: 2x2 below 800px, 4 columns above */}
+      <div className="grid grid-cols-2 min-[800px]:grid-cols-4 gap-3 max-w-2xl">
         {['Pending', 'Active', 'Deactivated', 'All'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors
-              ${filter === f ? 'bg-green-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+            className={`px-2 py-2.5 rounded-lg text-xs min-[800px]:text-sm font-bold transition-colors text-center whitespace-nowrap
+              ${filter === f ? 'bg-green-800 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}>
             {f}
             {f === 'Pending' && pendingCount > 0 && (
               <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pendingCount}</span>
@@ -113,83 +292,27 @@ export default function UserManagement({ users, onSync }) {
         ))}
       </div>
 
-      {/* User table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="gov-table table-responsive">
-            <thead>
-              <tr>
-                <th>Unit Personnel</th>
-                <th className="hidden sm:table-cell">Unit</th>
-                <th className="hidden md:table-cell">Role</th>
-                <th>Status</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.length === 0 ? (
-                <tr><td colSpan="5" className="text-center py-10 text-slate-400">No users in this category.</td></tr>
-              ) : filteredUsers.map(u => (
-                <tr key={u.ID} className="group">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white bg-green-700">
-                        {u.Name?.charAt(0) || '?'}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-800 text-sm leading-none">{u.Name}</p>
-                        <p className="text-slate-400 text-xs mt-0.5">ID: {u.ID}</p>
-                        <p className="text-slate-400 text-xs sm:hidden truncate max-w-[140px]">{u.Unit || u.Office}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 hidden sm:table-cell">
-                    <p className="text-xs text-slate-600 max-w-[160px] leading-snug">{u.Unit || u.Office || '—'}</p>
-                  </td>
-                  <td className="px-4 hidden md:table-cell">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${ROLE_COLORS[u.Role] || 'bg-slate-100 text-slate-600'}`}>{u.Role}</span>
-                  </td>
-                  <td className="px-4">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[u.AccountStatus] || 'bg-slate-100 text-slate-500'}`}>
-                      {u.AccountStatus || 'Active'}
-                    </span>
-                  </td>
-                  <td className="px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                      {u.AccountStatus === 'Pending' && (
-                        <button onClick={() => handleApprove(u.ID)} disabled={loading === u.ID + '_approve'}
-                          className="btn-success text-xs px-3 py-1.5">
-                          {loading === u.ID + '_approve' ? <Spinner /> : <><i className="bi bi-check-lg" /> Approve</>}
-                        </button>
-                      )}
-                      {u.AccountStatus === 'Active' && (
-                        <button onClick={() => handleDeactivate(u.ID)} disabled={loading === u.ID + '_deactivate'}
-                          className="btn-secondary text-xs px-3 py-1.5">
-                          {loading === u.ID + '_deactivate' ? <Spinner /> : 'Deactivate'}
-                        </button>
-                      )}
-                      {u.AccountStatus === 'Deactivated' && (
-                        <button onClick={() => handleReactivate(u.ID)} disabled={loading === u.ID + '_reactivate'}
-                          className="btn-secondary text-xs px-3 py-1.5">
-                          {loading === u.ID + '_reactivate' ? <Spinner /> : 'Reactivate'}
-                        </button>
-                      )}
-                      {/* Edit */}
-                      <button onClick={() => { setEditUser(u); setEditRole(u.Role); setEditUnit(u.Unit || u.Office || '') }}
-                        className="btn-ghost text-xs px-2 py-1.5 text-slate-400 hover:text-slate-700" title="Edit">
-                        <i className="bi bi-pencil" />
-                      </button>
-                      {/* Delete */}
-                      <button onClick={() => openDeleteConfirm(u)}
-                        className="btn-ghost text-xs px-2 py-1.5 text-red-400 hover:text-red-600 hover:bg-red-50" title="Delete permanently">
-                        <i className="bi bi-trash3" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* User Cards - All Screen Sizes */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm w-full">
+        {/* Cards Grid View - Responsive for desktop (900px breakpoint) */}
+        <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
+          {filteredUsers.length === 0 ? (
+            <div className="col-span-full text-center py-16 text-slate-400">
+              <i className="bi bi-people text-3xl block mb-2 opacity-30" />
+              No users in this category.
+            </div>
+          ) : filteredUsers.map(u => (
+            <UserCard
+              key={u.ID}
+              user={u}
+              loading={loading}
+              onApprove={() => handleApprove(u.ID)}
+              onDeactivate={() => handleDeactivate(u.ID)}
+              onReactivate={() => handleReactivate(u.ID)}
+              onEdit={() => { setEditUser(u); setEditRole(u.Role); setEditUnit(u.Unit || u.Office || '') }}
+              onDelete={() => openDeleteConfirm(u)}
+            />
+          ))}
         </div>
       </div>
 
@@ -197,7 +320,7 @@ export default function UserManagement({ users, onSync }) {
       {editUser && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setEditUser(null)}>
-          <div className="bg-white rounded-xl shadow-2xl modal-responsive overflow-hidden">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="px-4 py-3 flex items-center justify-between"
               style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
               <p className="text-white font-bold text-sm">Edit User — {editUser.Name}</p>
@@ -231,7 +354,7 @@ export default function UserManagement({ users, onSync }) {
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl modal-responsive overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
 
             {/* Red header */}
             <div className="bg-red-600 px-5 py-4 flex items-center gap-3">

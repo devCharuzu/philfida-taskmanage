@@ -16,36 +16,19 @@ export default function SettingsModal({ onClose, session }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden settings-modal">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+        <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
-          <div className="flex items-center gap-2.5">
-            <i className="bi bi-gear-fill text-white text-sm" />
-            <p className="text-white font-bold text-sm">Settings</p>
+          <div className="flex items-start gap-4">
+            <i className="bi bi-gear-fill text-white text-base" />
+            <div>
+              <p className="text-white font-bold text-sm leading-none mb-0">Settings</p>
+              <p className="text-green-300 text-[10px] leading-none mt-0.5">Manage your app preferences.</p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-green-300 hover:text-white text-2xl leading-none w-7 h-7 flex items-center justify-center">&times;</button>
+          <button onClick={onClose} className="text-green-300 hover:text-white text-2xl leading-none">&times;</button>
         </div>
 
         <div className="p-5">
-
-          {/* Account card */}
-          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-5">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white bg-green-700 flex-shrink-0 overflow-hidden">
-              <img
-                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(session?.Name||'')}&background=155414&color=fff&size=80`}
-                className="w-full h-full object-cover"
-                alt={session?.Name}
-                onError={e => { 
-                  e.target.style.display='none'; 
-                  e.target.parentElement.innerHTML = `<span style="font-size:14px;font-weight:700;">${(session?.Name || 'U').charAt(0).toUpperCase()}</span>`; 
-                }}
-              />
-              {(session?.Name || 'U').charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="font-bold text-green-900 text-sm truncate">{session?.Name}</p>
-              <p className="text-slate-400 text-xs mt-0.5">{session?.Role} · {session?.Unit || session?.Office}</p>
-            </div>
-          </div>
 
           {/* Notifications section */}
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Notifications</p>
@@ -68,8 +51,8 @@ export default function SettingsModal({ onClose, session }) {
               role="switch"
               aria-checked={soundOn}
             >
-              <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${soundOn ? 'translate-x-7' : 'translate-x-0.5'}`} />
-              <span className={`absolute text-[9px] font-semibold transition-opacity duration-200 ${soundOn ? 'left-2 text-white opacity-100' : 'right-2 text-slate-600 opacity-100'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${soundOn ? 'translate-x-7' : 'translate-x-0'}`} />
+              <span className={`absolute text-[9px] font-semibold transition-opacity duration-200 ${soundOn ? 'left-2.5 text-white opacity-100' : 'right-2.5 text-slate-600 opacity-100'}`}>
                 {soundOn ? 'On' : 'Off'}
               </span>
             </button>
