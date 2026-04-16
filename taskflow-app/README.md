@@ -374,6 +374,11 @@ See [supabase-migration-v2.sql](./taskflow-app/supabase-migration-v2.sql) for co
 
 ## Recent Improvements (April 2026)
 
+### Bug Fixes (April 16, 2026)
+- **ProfilePic Consistency**: Removed external ui-avatars.com service dependency. All profile pictures now use initials-based avatars as documented, improving performance and privacy.
+- **Form Submission Fix**: Removed duplicate onKeyDown handler in LoginPage that could cause double form submission on Enter key press.
+- **Code Cleanup**: Standardized ProfilePic handling across registerUser, updateProfile, EditProfileModal, and DirectorProfileModal.
+
 ### Responsive System Overhaul
 - **Complete UI Responsiveness**: Fluid scaling from 320px to 1920px+
 - **Touch-Friendly Design**: 44px minimum touch targets for mobile
@@ -418,6 +423,8 @@ See [supabase-migration-v2.sql](./taskflow-app/supabase-migration-v2.sql) for co
 - [x] Tested all three user roles
 - [x] Notifications working
 - [x] File uploads functional
+- [x] ProfilePic external service dependency removed
+- [x] Duplicate form submission bug fixed
 
 ---
 
@@ -437,4 +444,4 @@ Internal PhilFIDA Project. All rights reserved.
 
 ---
 
-**Last Updated**: April 9, 2026 | **Version**: 1.1.0
+**Last Updated**: April 16, 2026 | **Version**: 1.1.1
