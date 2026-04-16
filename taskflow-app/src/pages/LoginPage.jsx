@@ -200,22 +200,23 @@ The application cannot function until this is resolved.
   }
 
   return (
-    <div className="fixed inset-0 overflow-y-auto"
+    <div className="fixed inset-0 w-full h-full"
       style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
 
-      {/* Animated background elements */}
-      <div className="fixed inset-0 z-0">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-green-400/8 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 right-20 w-80 h-80 bg-yellow-400/8 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-blue-400/8 rounded-full blur-3xl animate-pulse delay-500" />
-        <div className="absolute top-1/4 right-1/4 w-48 h-48 bg-emerald-400/6 rounded-full blur-2xl animate-pulse delay-700" />
+      {/* Animated background elements - fixed to viewport */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[10%] left-[10%] w-72 h-72 bg-green-400/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-[15%] right-[10%] w-80 h-80 bg-yellow-400/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl animate-pulse delay-500" />
+        <div className="absolute top-[20%] right-[20%] w-48 h-48 bg-emerald-400/8 rounded-full blur-2xl animate-pulse delay-700" />
       </div>
 
-      {/* Main content */}
-      <div className="relative z-10 min-h-screen flex items-start justify-center p-4 py-8">
+      {/* Main content - scrollable container */}
+      <div className="relative z-10 w-full h-full overflow-y-auto">
+        <div className="min-h-full flex items-center justify-center p-4 py-8">
 
         {/* Login Card */}
-        <div className="w-full max-w-[320px] sm:max-w-[360px] md:max-w-[400px] lg:max-w-[440px] xl:max-w-[480px]">
+        <div className="w-full max-w-[280px] sm:max-w-[320px] md:max-w-[360px] lg:max-w-[400px] xl:max-w-[440px]">
 
           {/* Header with logos */}
           <div className="text-center mb-8">
@@ -250,7 +251,7 @@ The application cannot function until this is resolved.
             {/* Tab switcher */}
             <div className="flex bg-slate-50/80 border-b border-slate-200/50">
               <button onClick={() => switchTab('login')}
-                className={`flex-1 py-3 px-4 text-xs sm:text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
                   tab === 'login'
                     ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
                     : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
@@ -258,7 +259,7 @@ The application cannot function until this is resolved.
                 Sign In
               </button>
               <button onClick={() => switchTab('register')}
-                className={`flex-1 py-3 px-4 text-xs sm:text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
                   tab === 'register'
                     ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
                     : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
@@ -268,7 +269,7 @@ The application cannot function until this is resolved.
             </div>
 
             {/* Form content */}
-            <div className="p-4 sm:p-6 lg:p-8 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="p-6 lg:p-8 bg-white rounded-xl border border-slate-200 shadow-sm">
 
               {/* Alerts */}
               {connectionError && (
@@ -341,7 +342,6 @@ The application cannot function until this is resolved.
                           placeholder="Enter your Personnel ID"
                           value={loginId}
                           onChange={e => setLoginId(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && handleLogin()}
                           autoComplete="username"
                         />
                       </div>
@@ -412,7 +412,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
                         <input
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                           placeholder="Juan dela Cruz"
                           value={regName}
                           onChange={e => setRegName(e.target.value)}
@@ -423,7 +423,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Personnel ID</label>
                         <input
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                           placeholder="e.g. 001"
                           value={regId}
                           onChange={e => setRegId(e.target.value)}
@@ -435,7 +435,7 @@ The application cannot function until this is resolved.
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address <span className="text-slate-400 font-normal">(Optional)</span></label>
                       <input
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                         type="email"
                         placeholder="juan@philfida.gov.ph"
                         value={regEmail}
@@ -447,7 +447,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">{regRole === 'Director' ? 'Office' : 'Unit'}</label>
                         <select
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                           value={regUnit}
                           onChange={e => setRegUnit(e.target.value)}
                           required
@@ -460,7 +460,7 @@ The application cannot function until this is resolved.
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Role</label>
                         <select
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                           value={regRole}
                           onChange={e => { setRegRole(e.target.value); setRegUnit('') }}
                           required
@@ -476,7 +476,7 @@ The application cannot function until this is resolved.
                       <label className="block text-base font-semibold text-slate-700 mb-3">Password</label>
                       <div className="relative">
                         <input
-                          className="w-full px-3 pr-12 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
+                          className="w-full px-4 pr-12 py-2 lg:py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm"
                           type={showRegPass ? 'text' : 'password'}
                           placeholder="Create a secure password"
                           value={regPass}
@@ -523,6 +523,7 @@ The application cannot function until this is resolved.
             </p>
             <p className="text-green-300 text-xs mt-1">Secure Government Task Management System</p>
           </div>
+        </div>
         </div>
       </div>
     </div>

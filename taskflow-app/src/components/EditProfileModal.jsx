@@ -36,7 +36,7 @@ export default function EditProfileModal({ onClose }) {
         Email:             email.trim(),
         Unit:              unit.trim(),
         Office:            unit.trim(),
-        ProfilePic:        `https://ui-avatars.com/api/?name=${encodeURIComponent(name.trim())}&background=155414&color=fff&size=80`,
+        ProfilePic:        '',
         _needsProfileSetup: false,
       })
       setSuccess(true)
@@ -67,11 +67,9 @@ export default function EditProfileModal({ onClose }) {
         {/* Avatar preview */}
         <div className="flex flex-col items-center pt-5 pb-2 px-5">
           <div className="relative">
-            <img
-              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(name || session?.Name || '')}&background=155414&color=fff&size=120`}
-              className="w-16 h-16 rounded-2xl ring-4 ring-green-100"
-              alt="Avatar preview"
-            />
+            <div className="w-16 h-16 rounded-2xl ring-4 ring-green-100 bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center text-white font-bold text-2xl">
+              {(name || session?.Name || '?').charAt(0).toUpperCase()}
+            </div>
             {isGoogleUser && (
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow">
                 <svg width="12" height="12" viewBox="0 0 48 48">

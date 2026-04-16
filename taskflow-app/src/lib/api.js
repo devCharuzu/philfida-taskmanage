@@ -54,7 +54,7 @@ export async function registerUser({ id, name, email = '', unit, role, pass }) {
     Unit: unit,
     Role: role,
     Password: pass,
-    ProfilePic: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
+    ProfilePic: '',
     Status: 'Available',
     AccountStatus: 'Pending',
   })
@@ -238,7 +238,7 @@ export async function updateProfile(userId, { name, designation, email, unit, pa
     Email:       email,
     Unit:        unit,
     Office:      unit,
-    ProfilePic:  `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=155414&color=fff&size=80`,
+    ProfilePic:  '',
   }
 
   if (password !== undefined && password !== null && password !== '') {

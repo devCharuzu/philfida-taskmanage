@@ -37,7 +37,7 @@ export default function DirectorProfileModal({ onClose }) {
       setSession({
         ...session,
         Name: name.trim(),
-        ProfilePic: `https://ui-avatars.com/api/?name=${encodeURIComponent(name.trim())}&background=155414&color=fff&size=80`,
+        ProfilePic: '',
       })
 
       setSuccess(true)
@@ -58,13 +58,13 @@ export default function DirectorProfileModal({ onClose }) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
 
-        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+        <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-start gap-4">
             <i className="bi bi-person-circle text-white text-base" />
             <div>
-              <p className="text-white font-bold text-sm leading-none">Edit Director Profile</p>
-              <p className="text-green-300 text-[10px] mt-0.5">Change your name or update your password.</p>
+              <p className="text-white font-bold text-sm leading-none mb-0">Edit Director Profile</p>
+              <p className="text-green-300 text-[10px] leading-none mt-0.5">Change your name or update your password.</p>
             </div>
           </div>
           <button onClick={onClose} className="text-green-300 hover:text-white text-2xl leading-none">&times;</button>
