@@ -20,11 +20,21 @@ export default defineConfig(({ mode }) => {
       target: 'es2015',
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-            router: ['react-router-dom'],
-            supabase: ['@supabase/supabase-js'],
-            zustand: ['zustand'],
+          manualChunks: (id) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'vendor';
+              }
+              if (id.includes('react-router')) {
+                return 'router';
+              }
+              if (id.includes('@supabase')) {
+                return 'supabase';
+              }
+              if (id.includes('zustand')) {
+                return 'zustand';
+              }
+            }
           },
         },
       },
