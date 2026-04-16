@@ -112,7 +112,7 @@ CRITICAL: Supabase Legacy API Keys Disabled
 Your Supabase project has disabled legacy API keys. To fix this:
 
 OPTION 1: Re-enable Legacy Keys (Quick Fix)
-1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/ivhghqzdhvekbdnwezwj
+1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/hqieealohhvzhjxhnjec
 2. Navigate to Settings > API
 3. Scroll down to "Legacy API Keys" section
 4. Click "Re-enable legacy API keys"
@@ -122,7 +122,7 @@ OPTION 2: Update to New Keys (Recommended)
 2. Find the "New API Keys" section
 3. Copy the new "Publishable" key
 4. Update your .env.local file:
-   VITE_SUPABASE_ANON_KEY=your_new_publishable_key
+   VITE_SUPABASE_PUBLISHABLE_KEY=your_new_publishable_key
 
 The application will not function until this is resolved.
           `)
