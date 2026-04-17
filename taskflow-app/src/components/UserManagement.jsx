@@ -23,7 +23,6 @@ export default function UserManagement({ users, onSync }) {
   const [editRole,     setEditRole]     = useState('')
   const [editUnit,     setEditUnit]     = useState('')
   const [loading,      setLoading]      = useState(null)
-  const [approvalError, setApprovalError] = useState('')
 
   // Delete flow
   const [deleteTarget, setDeleteTarget] = useState(null) // user to delete
@@ -37,44 +36,23 @@ export default function UserManagement({ users, onSync }) {
 
   async function handleApprove(userId) {
     setLoading(userId + '_approve')
-    setApprovalError('')
-    try {
-      await updateUserAccountStatus(userId, 'Active')
-      await onSync()
-    } catch (error) {
-      console.error('Failed to approve user:', error)
-      setApprovalError('Failed to approve user. Please try again.')
-    } finally {
-      setLoading(null)
-    }
+    await updateUserAccountStatus(userId, 'Active')
+    await onSync()
+    setLoading(null)
   }
 
   async function handleDeactivate(userId) {
     setLoading(userId + '_deactivate')
-    setApprovalError('')
-    try {
-      await updateUserAccountStatus(userId, 'Deactivated')
-      await onSync()
-    } catch (error) {
-      console.error('Failed to deactivate user:', error)
-      setApprovalError('Failed to deactivate user. Please try again.')
-    } finally {
-      setLoading(null)
-    }
+    await updateUserAccountStatus(userId, 'Deactivated')
+    await onSync()
+    setLoading(null)
   }
 
   async function handleReactivate(userId) {
     setLoading(userId + '_reactivate')
-    setApprovalError('')
-    try {
-      await updateUserAccountStatus(userId, 'Active')
-      await onSync()
-    } catch (error) {
-      console.error('Failed to reactivate user:', error)
-      setApprovalError('Failed to reactivate user. Please try again.')
-    } finally {
-      setLoading(null)
-    }
+    await updateUserAccountStatus(userId, 'Active')
+    await onSync()
+    setLoading(null)
   }
 
   async function handleSaveEdit() {
@@ -299,17 +277,6 @@ export default function UserManagement({ users, onSync }) {
 
   return (
     <div className="space-y-6 w-full">
-
-      {/* Approval Error Alert */}
-      {approvalError && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-          <i className="bi bi-exclamation-triangle-fill flex-shrink-0 mt-0.5" />
-          <span>{approvalError}</span>
-          <button onClick={() => setApprovalError('')} className="ml-auto text-red-400 hover:text-red-600">
-            <i className="bi bi-x-lg" />
-          </button>
-        </div>
-      )}
 
       {/* Filter tabs - responsive grid: 2x2 below 800px, 4 columns above */}
       <div className="grid grid-cols-2 min-[800px]:grid-cols-4 gap-3 max-w-2xl">
