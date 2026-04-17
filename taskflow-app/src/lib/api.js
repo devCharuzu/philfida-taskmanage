@@ -159,7 +159,7 @@ export async function setTaskStatus(taskId, status, actorName = '', actorId = nu
         ? `✅ ${task.EmployeeName} accepted "${task.Title}"`
         : `✅ ${task.EmployeeName} completed "${task.Title}"`
 
-      const { data: directors, error: dirError } = await supabase.from('Users').select('ID').ilike('Role', 'Director')
+      const { data: directors, error: dirError } = await supabase.from('Users').select('ID').eq('Role', 'Director')
       if (!dirError && directors?.length) {
         await Promise.all(directors
           .filter(d => String(d.ID) !== String(actorId || ''))
@@ -201,7 +201,7 @@ export async function addComment({ taskId, sender, message, files }) {
     const isEmployeeSender = senderNorm === employeeNameNorm
 
     if (isEmployeeSender) {
-      const { data: directors, error: dirError } = await supabase.from('Users').select('ID').ilike('Role', 'Director')
+      const { data: directors, error: dirError } = await supabase.from('Users').select('ID').eq('Role', 'Director')
       if (!dirError && directors?.length) {
         await Promise.all(directors
           .filter(d => String(d.ID) !== String(task.EmployeeID))
