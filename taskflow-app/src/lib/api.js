@@ -66,10 +66,19 @@ export async function registerUser({ id, name, email = '', unit, role, pass }) {
 }
 
 export async function updateUserAccountStatus(userId, status) {
-  const { error } = await supabase.from('Users')
+  console.log(`[API] Updating user ${userId} status to ${status}`)
+  const { data, error } = await supabase.from('Users')
     .update({ AccountStatus: status })
     .eq('ID', userId)
-  if (error) throw error
+    .select()
+  
+  if (error) {
+    console.error('[API] Failed to update user status:', error)
+    throw error
+  }
+  
+  console.log('[API] User status updated successfully:', data)
+  return data
 }
 
 export async function updateUserRole(userId, role, unit) {

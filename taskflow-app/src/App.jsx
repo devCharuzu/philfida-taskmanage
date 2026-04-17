@@ -29,12 +29,33 @@ async function initializeSession() {
       return
     }
     
-    // Get user details from database
-    const { data: users, error: userError } = await supabase
+    // Get user details from database - try both ID and email matching for Google OAuth
+    let users = null
+    let userError = null
+    
+    // First try by ID (for manual login users)
+    const { data: usersById, error: idError } = await supabase
       .from('Users')
       .select('*')
       .eq('ID', session.user.id)
       .single()
+    
+    if (!idError && usersById) {
+      users = usersById
+    } else {
+      // Try by email (for Google OAuth users)
+      const { data: usersByEmail, error: emailError } = await supabase
+        .from('Users')
+        .select('*')
+        .eq('Email', session.user.email)
+        .single()
+      
+      if (!emailError && usersByEmail) {
+        users = usersByEmail
+      } else {
+        userError = idError || emailError
+      }
+    }
     
     if (userError) {
       console.error('User data fetch error:', userError)
@@ -61,8 +82,19 @@ async function initializeSession() {
       Designation: users.Designation
     }
     
-    useStore.getState().setSession(userSession)
-    console.log('Session restored from Supabase:', userSession)
+    // Validate user session before setting
+    if (!userSession.AccountStatus || userSession.AccountStatus === 'Pending') {
+      console.warn('User account is pending or inactive, clearing session')
+      useStore.getState().clearSession()
+      await supabase.auth.signOut()
+    } else if (userSession.AccountStatus === 'Deactivated') {
+      console.warn('User account is deactivated, clearing session')
+      useStore.getState().clearSession()
+      await supabase.auth.signOut()
+    } else {
+      useStore.getState().setSession(userSession)
+      console.log('Session restored from Supabase:', userSession)
+    }
     sessionInitialized = true
   } catch (error) {
     console.error('Failed to initialize session:', error)
@@ -74,6 +106,25 @@ function useHydrated() {
   const [hydrated, setHydrated] = useState(false)
   const [error, setError] = useState(null)
   const setSession = useStore(s => s.setSession)
+  
+  useEffect(() => {
+    // Set up session refresh listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email)
+      
+      if (event === 'SIGNED_OUT') {
+        console.log('User signed out, clearing session')
+        useStore.getState().clearSession()
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log('Token refreshed, session is valid')
+      } else if (event === 'SIGNED_IN' && session) {
+        console.log('User signed in, initializing session')
+        await initializeSession()
+      }
+    })
+    
+    return () => subscription.unsubscribe()
+  }, [])
   
   useEffect(() => {
     // Check if already hydrated first
