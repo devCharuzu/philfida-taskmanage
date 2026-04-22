@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
+import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
 import { setTaskStatus, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, logHistory, createTask } from '../lib/api'
 import NotificationBell from '../components/NotificationBell'
@@ -123,7 +124,11 @@ export default function UnitHeadPage() {
   // Add unassigned tasks to unit head assigned tasks as fallback
   const finalUnitHeadAssignedTasks = [...unitHeadAssignedTasks, ...unassignedTasks]
 
-  function logout() { useStore.getState().clearSession(); window.location.href = '/' }
+  async function logout() {
+    await supabase.auth.signOut()
+    useStore.getState().clearSession()
+    window.location.href = '/'
+  }
 
   async function handleStatusUpdate(taskId, status) {
     setLoadingTask(taskId)

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
+import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
 import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTask } from '../lib/api'
 import { normalizeStatus } from '../components/PresenceToggle'
@@ -127,7 +129,11 @@ export default function DirectorPage() {
   // Add unassigned tasks to director dispatched tasks as fallback
   const finalDirectorDispatchedTasks = [...directorDispatchedTasks, ...unassignedTasks]
 
-  function logout() { useStore.getState().clearSession(); window.location.href = '/' }
+  async function logout() {
+    await supabase.auth.signOut()
+    useStore.getState().clearSession()
+    window.location.href = '/'
+  }
 
   async function handleArchive(taskId, archived) {
     await toggleArchive(taskId, archived)

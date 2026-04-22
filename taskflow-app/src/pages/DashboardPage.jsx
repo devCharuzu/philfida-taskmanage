@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { useSync } from '../hooks/useSync'
+import { supabase } from '../lib/supabase'
 import { setTaskStatus, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount } from '../lib/api'
 import NotificationBell from '../components/NotificationBell'
 import SettingsModal from '../components/SettingsModal'
@@ -41,7 +42,11 @@ export default function DashboardPage() {
     .filter(t => String(t.EmployeeID) === String(session?.ID) && String(t.Archived).toUpperCase() !== 'TRUE')
     .slice().reverse()
 
-  function logout() { useStore.getState().clearSession(); window.location.href = '/' }
+  async function logout() {
+    await supabase.auth.signOut()
+    useStore.getState().clearSession()
+    window.location.href = '/'
+  }
 
   async function handleStatusUpdate(taskId, status) {
     setLoadingTask(taskId)
