@@ -59,8 +59,8 @@ export const useStore = create(
         setItem: (name, value) => {
           try {
             const serialized = JSON.stringify(value)
-            // Check if serialized data is too large for mobile storage
-            if (serialized.length > 5 * 1024 * 1024) { // 5MB limit
+            // Check if serialized data is too large for mobile storage (reduced to 2MB for better mobile compatibility)
+            if (serialized.length > 2 * 1024 * 1024) {
               console.warn('Store data too large, clearing globalData to save space')
               const compacted = { 
                 session: value.session, 
@@ -72,7 +72,15 @@ export const useStore = create(
             }
           } catch (error) {
             console.error('Store serialization failed:', error)
-            mobileSafeStorage.setItem(name, JSON.stringify({ session: null, globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } }))
+            // Try to save only session data on error
+            try {
+              const sessionOnly = { session: value.session, globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } }
+              mobileSafeStorage.setItem(name, JSON.stringify(sessionOnly))
+            } catch (fallbackError) {
+              console.error('Even session-only storage failed:', fallbackError)
+              // Clear storage completely as last resort
+              mobileSafeStorage.removeItem(name)
+            }
           }
         },
         removeItem: mobileSafeStorage.removeItem

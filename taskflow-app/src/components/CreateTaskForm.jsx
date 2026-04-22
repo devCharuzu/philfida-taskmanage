@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import { createTask } from '../lib/api'
+import { withErrorHandling, validateForm, ERROR_MESSAGES } from '../lib/errorHandler'
 
 const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.mp4,.mp3,.mov,.avi,.csv'
 
@@ -149,22 +150,42 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
 
   async function doDispatch() {
     setLoading(true); setError(''); setSuccess('')
+    
+    // Validate form before submission
+    const validation = validateForm(
+      { empId, title, senderName },
+      {
+        empId: { required: true, label: 'Unit personnel' },
+        title: { required: true, label: 'Task title' },
+        senderName: { required: true, label: 'Sender name' }
+      }
+    )
+    
+    if (!validation.isValid) {
+      setError(Object.values(validation.errors)[0])
+      setLoading(false)
+      return
+    }
+
     try {
       const priorityVal = priorities.includes('Urgent') ? 'Urgent'
         : priorities.includes('Priority') ? 'High'
         : 'Normal'
 
-      await createTask({
-        empId,
-        empName:      selectedEmp.Name,
-        title:        buildTitle(),
-        instructions: buildInstructions(),
-        priority:     priorityVal,
-        category:     priorities.includes('Confidential') ? 'Confidential' : 'General',
-        deadline,
-        files,
-        actorName:    session?.Name || 'Director',
-      })
+      await withErrorHandling(async () => {
+        await createTask({
+          empId,
+          empName:      selectedEmp.Name,
+          title:        buildTitle(),
+          instructions: buildInstructions(),
+          priority:     priorityVal,
+          category:     priorities.includes('Confidential') ? 'Confidential' : 'General',
+          deadline,
+          files,
+          actorName:    session?.Name || 'Director',
+        })
+      }, ERROR_MESSAGES.DATABASE)
+
       await onSync()
       // Reset form
       setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
@@ -178,8 +199,7 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
         onCloseDrawer?.()
       }, 2000)
     } catch (error) {
-      console.error('Task creation failed:', error)
-      setError('Failed to create task. Please try again.')
+      setError(error.message)
     } finally { setLoading(false) }
   }
 

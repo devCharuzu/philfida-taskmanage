@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { getAllUsers, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
+import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 
 export default function LoginPage() {
   const [tab,         setTab]         = useState('login')
@@ -134,8 +135,24 @@ The application cannot function until this is resolved.
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true); setError('')
+    
+    // Validate form
+    const validation = validateForm(
+      { loginId, loginPass },
+      {
+        loginId: { required: true, label: 'Personnel ID' },
+        loginPass: { required: true, label: 'Password', minLength: 1 }
+      }
+    )
+    
+    if (!validation.isValid) {
+      setError(Object.values(validation.errors)[0])
+      setLoading(false)
+      return
+    }
+
     try {
-      const users = await getAllUsers()
+      const users = await withErrorHandling(getAllUsers, ERROR_MESSAGES.DATABASE)
       const user  = users.find(u => String(u.ID) === loginId.trim() && u.Password === loginPass)
       if (!user)                              { setError('Invalid Personnel ID or Password.'); return }
       if (user.AccountStatus === 'Pending')   { setError('Your account is pending approval by the Director.'); return }
@@ -144,8 +161,9 @@ The application cannot function until this is resolved.
       if (user.Role === 'Director')        navigate('/director')
       else if (user.Role === 'Unit Head')  navigate('/unithead')
       else                                 navigate('/dashboard')
-    } catch { setError('Connection error. Please try again.') }
-    finally  { setLoading(false) }
+    } catch (error) {
+      setError(error.message)
+    } finally  { setLoading(false) }
   }
 
   // ── Google sign in ──────────────────────────────────────────

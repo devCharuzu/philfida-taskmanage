@@ -82,10 +82,15 @@ export function useSync() {
     // Initial fetch
     sync()
 
-    // Check if we should use realtime or fallback to polling only
+    // Improved detection for realtime capability
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
     const isSecureConnection = typeof window !== 'undefined' && window.location.protocol === 'https:'
-    const useRealtime = isSecureConnection && !isMobile
+    const isTablet = /iPad|Android(?!.*Mobile)/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
+    const hasGoodConnection = typeof navigator !== 'undefined' && navigator.connection ? 
+      navigator.connection.effectiveType === '4g' || navigator.connection.effectiveType === 'wifi' : true
+    
+    // Use realtime for secure connections on desktop/tablets with good connection
+    const useRealtime = isSecureConnection && (!isMobile || isTablet) && hasGoodConnection
 
     if (useRealtime) {
       console.log('Using realtime subscriptions')
@@ -159,8 +164,9 @@ export function useSync() {
       console.log('Using polling-only mode (mobile or insecure connection detected)')
     }
 
-    // Fallback poll every 30s (primary for mobile, backup for desktop)
-    const fallback = setInterval(sync, 30000)
+    // Adaptive polling: 60s for mobile, 30s for desktop with realtime
+    const pollingInterval = useRealtime ? 30000 : 60000
+    const fallback = setInterval(sync, pollingInterval)
 
     return () => {
       channelsRef.current.forEach(ch => {
