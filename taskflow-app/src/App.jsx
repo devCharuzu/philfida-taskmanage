@@ -8,7 +8,17 @@ import DirectorPage  from './pages/DirectorPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
 
 // Initialize session from Supabase - moved outside useEffect for scope
+let isInitializing = false
+
 async function initializeSession() {
+  // Prevent concurrent initialization
+  if (isInitializing) {
+    console.log('[AUTH] Session initialization already in progress, skipping')
+    return
+  }
+  
+  isInitializing = true
+  
   try {
     console.log('[AUTH] Initializing session...')
     console.log('[AUTH] Current store state:', useStore.getState())
@@ -87,11 +97,17 @@ async function initializeSession() {
 
     if (userError) {
       console.error('[AUTH] User data fetch error:', userError)
+      // Sign out from Supabase to prevent loop
+      await supabase.auth.signOut()
+      isInitializing = false
       return
     }
 
     if (!users) {
       console.log('[AUTH] User not found in database with email:', email)
+      // Sign out from Supabase to prevent loop
+      await supabase.auth.signOut()
+      isInitializing = false
       return
     }
 
@@ -126,6 +142,8 @@ async function initializeSession() {
     console.log('[AUTH] Session restored from Supabase:', userSession)
   } catch (error) {
     console.error('[AUTH] Failed to initialize session:', error)
+  } finally {
+    isInitializing = false
   }
 }
 
@@ -194,8 +212,7 @@ function useHydrated() {
   return { hydrated, error }
 }
 
-function ProtectedRoute({ children, role }) {
-  const { hydrated, error } = useHydrated()
+function ProtectedRoute({ children, role, hydrated, error }) {
   const session  = useStore(s => s.session)
 
   console.log('[PROTECTED] ProtectedRoute render:', { hydrated, session, role })
@@ -227,10 +244,9 @@ function ProtectedRoute({ children, role }) {
 
 // The login route — also handles OAuth callbacks
 // If there's a ?code= in the URL it's always an OAuth callback regardless of session
-function LoginRoute() {
+function LoginRoute({ hydrated, error }) {
   const location = useLocation()
   const session  = useStore(s => s.session)
-  const { hydrated, error } = useHydrated()
 
   const isOAuthCallback = location.search.includes('code=') ||
                           location.hash.includes('access_token')
@@ -263,12 +279,14 @@ function LoginRoute() {
 
 
 export default function App() {
+  const { hydrated, error } = useHydrated()
+
   return (
     <Routes>
-      <Route path="/"          element={<LoginRoute />} />
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/unithead"  element={<ProtectedRoute role="Unit Head"><UnitHeadPage /></ProtectedRoute>} />
-      <Route path="/director"  element={<ProtectedRoute role="Director"><DirectorPage /></ProtectedRoute>} />
+      <Route path="/"          element={<LoginRoute hydrated={hydrated} error={error} />} />
+      <Route path="/dashboard" element={<ProtectedRoute hydrated={hydrated} error={error}><DashboardPage /></ProtectedRoute>} />
+      <Route path="/unithead"  element={<ProtectedRoute role="Unit Head" hydrated={hydrated} error={error}><UnitHeadPage /></ProtectedRoute>} />
+      <Route path="/director"  element={<ProtectedRoute role="Director" hydrated={hydrated} error={error}><DirectorPage /></ProtectedRoute>} />
       <Route path="*"          element={<Navigate to="/" replace />} />
     </Routes>
   )
