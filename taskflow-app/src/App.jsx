@@ -17,9 +17,20 @@ async function initializeSession() {
   
   try {
     console.log('Initializing session...')
+    
+    // First, check if we already have a session in the store (from localStorage persistence)
+    const existingSession = useStore.getState().session
+    if (existingSession) {
+      console.log('Session already in store from localStorage:', existingSession)
+      sessionInitialized = true
+      return
+    }
+    
+    // If no session in store, try to get it from Supabase
     const { data: { session }, error } = await supabase.auth.getSession()
     if (error) {
       console.error('Session initialization error:', error)
+      sessionInitialized = true
       return
     }
     

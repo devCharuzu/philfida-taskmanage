@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { updateUserAccountStatus, updateUserRole, deleteUser, getAllUsers, UNITS, OFFICES } from '../lib/api'
+import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 
 const ROLE_COLORS = {
   Director:    'bg-purple-100 text-purple-700 border-purple-200',
@@ -36,32 +37,78 @@ export default function UserManagement({ users, onSync }) {
 
   async function handleApprove(userId) {
     setLoading(userId + '_approve')
-    await updateUserAccountStatus(userId, 'Active')
-    await onSync()
-    setLoading(null)
+    try {
+      await withErrorHandling(async () => {
+        await updateUserAccountStatus(userId, 'Active')
+      }, ERROR_MESSAGES.DATABASE)
+      await onSync()
+    } catch (error) {
+      console.error('Failed to approve user:', error)
+      alert(`Failed to approve user: ${error.message}`)
+    } finally {
+      setLoading(null)
+    }
   }
 
   async function handleDeactivate(userId) {
     setLoading(userId + '_deactivate')
-    await updateUserAccountStatus(userId, 'Deactivated')
-    await onSync()
-    setLoading(null)
+    try {
+      await withErrorHandling(async () => {
+        await updateUserAccountStatus(userId, 'Deactivated')
+      }, ERROR_MESSAGES.DATABASE)
+      await onSync()
+    } catch (error) {
+      console.error('Failed to deactivate user:', error)
+      alert(`Failed to deactivate user: ${error.message}`)
+    } finally {
+      setLoading(null)
+    }
   }
 
   async function handleReactivate(userId) {
     setLoading(userId + '_reactivate')
-    await updateUserAccountStatus(userId, 'Active')
-    await onSync()
-    setLoading(null)
+    try {
+      await withErrorHandling(async () => {
+        await updateUserAccountStatus(userId, 'Active')
+      }, ERROR_MESSAGES.DATABASE)
+      await onSync()
+    } catch (error) {
+      console.error('Failed to reactivate user:', error)
+      alert(`Failed to reactivate user: ${error.message}`)
+    } finally {
+      setLoading(null)
+    }
   }
 
   async function handleSaveEdit() {
     if (!editRole || !editUnit) return
+    
+    const validation = validateForm(
+      { editRole, editUnit },
+      {
+        editRole: { required: true, label: 'Role' },
+        editUnit: { required: true, label: editRole === 'Director' ? 'Office' : 'Unit' }
+      }
+    )
+    
+    if (!validation.isValid) {
+      alert(Object.values(validation.errors)[0])
+      return
+    }
+
     setLoading(editUser.ID + '_edit')
-    await updateUserRole(editUser.ID, editRole, editUnit)
-    await onSync()
-    setLoading(null)
-    setEditUser(null)
+    try {
+      await withErrorHandling(async () => {
+        await updateUserRole(editUser.ID, editRole, editUnit)
+      }, ERROR_MESSAGES.DATABASE)
+      await onSync()
+      setEditUser(null)
+    } catch (error) {
+      console.error('Failed to update user role:', error)
+      alert(`Failed to update user: ${error.message}`)
+    } finally {
+      setLoading(null)
+    }
   }
 
   function openDeleteConfirm(user) {
@@ -73,23 +120,45 @@ export default function UserManagement({ users, onSync }) {
 
   async function handleConfirmDelete() {
     if (!dirPassword.trim()) { setDeleteError('Please enter your password.'); return }
+    
+    const validation = validateForm(
+      { dirPassword },
+      { dirPassword: { required: true, label: 'Director password', minLength: 1 } }
+    )
+    
+    if (!validation.isValid) {
+      setDeleteError(Object.values(validation.errors)[0])
+      return
+    }
+
     setDeleteLoading(true)
     setDeleteError('')
     try {
       // Verify director password against DB
-      const allUsers = await getAllUsers()
+      const allUsers = await withErrorHandling(getAllUsers, ERROR_MESSAGES.DATABASE)
       const director = allUsers.find(u => String(u.ID) === String(session.ID))
+      
+      console.log('Director verification:', {
+        sessionID: session.ID,
+        foundDirector: !!director,
+        passwordMatch: director?.Password === dirPassword
+      })
+      
       if (!director || director.Password !== dirPassword) {
         setDeleteError('Incorrect password. Please try again.')
-        setDeleteLoading(false)
         return
       }
-      await deleteUser(deleteTarget.ID)
+      
+      await withErrorHandling(async () => {
+        await deleteUser(deleteTarget.ID)
+      }, ERROR_MESSAGES.DATABASE)
+      
       await onSync()
       setDeleteTarget(null)
       setDirPassword('')
-    } catch (e) {
-      setDeleteError('Failed to delete user. Please try again.')
+    } catch (error) {
+      console.error('Failed to delete user:', error)
+      setDeleteError(`Failed to delete user: ${error.message}`)
     } finally {
       setDeleteLoading(false)
     }
