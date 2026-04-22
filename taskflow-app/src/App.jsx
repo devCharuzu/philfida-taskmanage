@@ -70,23 +70,43 @@ async function initializeSession() {
     }
     
     console.log('[AUTH] Supabase session found, fetching user data...')
-    // Get user details from database
+    // Get user details from database using email (not UUID, since Users table uses custom TEXT IDs)
+    const email = session.user.email?.toLowerCase().trim()
+    if (!email) {
+      console.error('[AUTH] No email in Supabase session')
+      return
+    }
+
     const { data: users, error: userError } = await supabase
       .from('Users')
       .select('*')
-      .eq('ID', session.user.id)
+      .eq('Email', email)
       .single()
-    
+
     console.log('[AUTH] User data fetch result:', { users, userError })
-    
+
     if (userError) {
       console.error('[AUTH] User data fetch error:', userError)
       return
     }
-    
+
     if (!users) {
-      console.error('[AUTH] User not found in database')
+      console.log('[AUTH] User not found in database with email:', email)
       return
+    }
+
+    // Clear any fake localStorage data if it exists
+    try {
+      const localStorageContent = localStorage.getItem('philfida_session')
+      if (localStorageContent) {
+        const parsed = JSON.parse(localStorageContent)
+        if (parsed?.state?.session?.ID === '001') {
+          console.warn('[AUTH] Clearing fake test data from localStorage')
+          localStorage.removeItem('philfida_session')
+        }
+      }
+    } catch (e) {
+      // Ignore localStorage errors
     }
     
     const userSession = {
