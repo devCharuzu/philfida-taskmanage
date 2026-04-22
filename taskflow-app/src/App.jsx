@@ -8,38 +8,36 @@ import DirectorPage  from './pages/DirectorPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
 
 // Initialize session from Supabase - moved outside useEffect for scope
-let sessionInitialized = false
 async function initializeSession() {
-  if (sessionInitialized) {
-    console.log('Session already initialized, skipping...')
-    return
-  }
-  
   try {
-    console.log('Initializing session...')
+    console.log('[AUTH] Initializing session...')
+    console.log('[AUTH] Current store state:', useStore.getState())
     
     // First, check if we already have a session in the store (from localStorage persistence)
     const existingSession = useStore.getState().session
+    console.log('[AUTH] Existing session in store:', existingSession)
+    
     if (existingSession) {
-      console.log('Session already in store from localStorage:', existingSession)
-      sessionInitialized = true
+      console.log('[AUTH] Session already in store from localStorage, using it:', existingSession)
       return
     }
     
+    console.log('[AUTH] No session in store, checking Supabase auth...')
     // If no session in store, try to get it from Supabase
     const { data: { session }, error } = await supabase.auth.getSession()
+    console.log('[AUTH] Supabase session result:', { session, error })
+    
     if (error) {
-      console.error('Session initialization error:', error)
-      sessionInitialized = true
+      console.error('[AUTH] Session initialization error:', error)
       return
     }
     
     if (!session) {
-      console.log('No session found in Supabase')
-      sessionInitialized = true
+      console.log('[AUTH] No session found in Supabase')
       return
     }
     
+    console.log('[AUTH] Supabase session found, fetching user data...')
     // Get user details from database
     const { data: users, error: userError } = await supabase
       .from('Users')
@@ -47,15 +45,15 @@ async function initializeSession() {
       .eq('ID', session.user.id)
       .single()
     
+    console.log('[AUTH] User data fetch result:', { users, userError })
+    
     if (userError) {
-      console.error('User data fetch error:', userError)
-      sessionInitialized = true
+      console.error('[AUTH] User data fetch error:', userError)
       return
     }
     
     if (!users) {
-      console.error('User not found in database')
-      sessionInitialized = true
+      console.error('[AUTH] User not found in database')
       return
     }
     
@@ -73,11 +71,9 @@ async function initializeSession() {
     }
     
     useStore.getState().setSession(userSession)
-    console.log('Session restored from Supabase:', userSession)
-    sessionInitialized = true
+    console.log('[AUTH] Session restored from Supabase:', userSession)
   } catch (error) {
-    console.error('Failed to initialize session:', error)
-    sessionInitialized = true
+    console.error('[AUTH] Failed to initialize session:', error)
   }
 }
 
@@ -87,10 +83,25 @@ function useHydrated() {
   const setSession = useStore(s => s.setSession)
   
   useEffect(() => {
+    console.log('[HYDRATE] useHydrated effect running')
+    
+    // Check localStorage directly
+    try {
+      const localStorageContent = localStorage.getItem('philfida_session')
+      console.log('[HYDRATE] localStorage content:', localStorageContent)
+      if (localStorageContent) {
+        const parsed = JSON.parse(localStorageContent)
+        console.log('[HYDRATE] Parsed localStorage session:', parsed)
+      }
+    } catch (e) {
+      console.error('[HYDRATE] Failed to read localStorage:', e)
+    }
+    
     // Check if already hydrated first
     let isAlreadyHydrated = false
     try {
       isAlreadyHydrated = useStore.persist.hasHydrated()
+      console.log('[HYDRATE] isAlreadyHydrated:', isAlreadyHydrated)
     } catch (e) {
       console.error('Store hydration check failed:', e)
       setError('Store hydration failed')
@@ -100,13 +111,15 @@ function useHydrated() {
     
     if (isAlreadyHydrated) {
       setHydrated(true)
-      console.log('Store already hydrated')
+      console.log('[HYDRATE] Store already hydrated, initializing session...')
+      // Initialize session even if store was already hydrated
+      initializeSession()
       return
     }
     
     // Add timeout to prevent infinite loading on mobile
     const timeout = setTimeout(() => {
-      console.warn('Store hydration timeout - forcing render')
+      console.warn('[HYDRATE] Store hydration timeout - forcing render')
       setError('Hydration timeout - some features may not work correctly')
       setHydrated(true)
     }, 5000)
@@ -115,7 +128,7 @@ function useHydrated() {
       clearTimeout(timeout)
       setError(null)
       setHydrated(true)
-      console.log('Store hydrated, initializing session...')
+      console.log('[HYDRATE] Store hydrated, initializing session...')
       // Initialize session after store is hydrated
       initializeSession()
     })
@@ -133,6 +146,8 @@ function ProtectedRoute({ children, role }) {
   const { hydrated, error } = useHydrated()
   const session  = useStore(s => s.session)
 
+  console.log('[PROTECTED] ProtectedRoute render:', { hydrated, session, role })
+
   if (!hydrated) return (
     <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
       <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4" />
@@ -146,8 +161,15 @@ function ProtectedRoute({ children, role }) {
     </div>
   )
 
-  if (!session)                      return <Navigate to="/" replace />
-  if (role && session.Role !== role) return <Navigate to="/" replace />
+  if (!session) {
+    console.log('[PROTECTED] No session, redirecting to login')
+    return <Navigate to="/" replace />
+  }
+  if (role && session.Role !== role) {
+    console.log('[PROTECTED] Role mismatch, redirecting to login')
+    return <Navigate to="/" replace />
+  }
+  console.log('[PROTECTED] Access granted')
   return children
 }
 
