@@ -19,7 +19,39 @@ async function initializeSession() {
     
     if (existingSession) {
       console.log('[AUTH] Session already in store from localStorage, using it:', existingSession)
-      return
+      // Validate the session is still active by checking AccountStatus
+      try {
+        const { data: user, error: userError } = await supabase
+          .from('Users')
+          .select('AccountStatus')
+          .eq('ID', existingSession.ID)
+          .single()
+        
+        if (userError || !user) {
+          console.warn('[AUTH] Failed to validate session, clearing it:', userError)
+          useStore.getState().clearSession()
+          return
+        }
+        
+        if (user.AccountStatus === 'Deactivated') {
+          console.warn('[AUTH] Account is deactivated, clearing session')
+          useStore.getState().clearSession()
+          return
+        }
+        
+        if (user.AccountStatus === 'Pending') {
+          console.warn('[AUTH] Account is pending approval, clearing session')
+          useStore.getState().clearSession()
+          return
+        }
+        
+        console.log('[AUTH] Session validated, keeping it')
+        return
+      } catch (validationError) {
+        console.error('[AUTH] Session validation failed:', validationError)
+        // Keep the session anyway if validation fails (network issues, etc.)
+        return
+      }
     }
     
     console.log('[AUTH] No session in store, checking Supabase auth...')
@@ -33,7 +65,7 @@ async function initializeSession() {
     }
     
     if (!session) {
-      console.log('[AUTH] No session found in Supabase')
+      console.log('[AUTH] No session found in Supabase or localStorage')
       return
     }
     
