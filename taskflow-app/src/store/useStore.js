@@ -53,6 +53,7 @@ export const useStore = create(
     }),
     {
       name: 'philfida_session',
+      version: 1,
       partialize: (state) => ({ session: state.session }),
       storage: {
         getItem: mobileSafeStorage.getItem,
@@ -87,6 +88,7 @@ export const useStore = create(
       },
       onRehydrateStorage: () => (state) => {
         console.log('Store rehydrated on mobile:', state)
+        console.log('Store session after rehydration:', state?.session)
       }
     }
   )

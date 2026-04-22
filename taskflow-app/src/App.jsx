@@ -111,6 +111,21 @@ async function initializeSession() {
       return
     }
 
+    // Check account status
+    if (users.AccountStatus === 'Deactivated') {
+      console.warn('[AUTH] Account is deactivated, signing out')
+      await supabase.auth.signOut()
+      isInitializing = false
+      return
+    }
+
+    if (users.AccountStatus === 'Pending') {
+      console.warn('[AUTH] Account is pending approval, signing out')
+      await supabase.auth.signOut()
+      isInitializing = false
+      return
+    }
+
     // Clear any fake localStorage data if it exists
     try {
       const localStorageContent = localStorage.getItem('philfida_session')
@@ -124,7 +139,7 @@ async function initializeSession() {
     } catch (e) {
       // Ignore localStorage errors
     }
-    
+
     const userSession = {
       ID: users.ID,
       Name: users.Name,
