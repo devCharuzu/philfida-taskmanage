@@ -39,8 +39,11 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
   const [lightboxFile, setLightbox] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
   const scrollRef = useRef(null)
-  const fileRef = useRef(null)
-  const inputRef = useRef(null)
+  const fileRef   = useRef(null)
+  const inputRef  = useRef(null)
+  // L5 FIX: use a ref on the container so drag-and-drop doesn't rely on
+  // document.querySelector('.chat-wrap') which found nothing.
+  const wrapRef   = useRef(null)
 
   // Mark messages as read on open
   useEffect(() => {
@@ -64,33 +67,17 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
     inputRef.current?.focus()
   }, [])
 
-  // Handle drag and drop
+  // L5 FIX: attach drag handlers to the wrapRef element directly
   useEffect(() => {
-    const handleDrag = (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-    }
-    const handleDragOver = (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDragging(true)
-    }
-    const handleDragLeave = (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDragging(false)
-    }
+    const handleDrag = (e) => { e.preventDefault(); e.stopPropagation() }
+    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }
+    const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false) }
     const handleDrop = (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDragging(false)
+      e.preventDefault(); e.stopPropagation(); setIsDragging(false)
       const droppedFiles = Array.from(e.dataTransfer.files)
-      if (droppedFiles.length > 0) {
-        setFiles(prev => [...prev, ...droppedFiles])
-      }
+      if (droppedFiles.length > 0) setFiles(prev => [...prev, ...droppedFiles])
     }
-
-    const wrap = document.querySelector('.chat-wrap')
+    const wrap = wrapRef.current
     if (wrap) {
       wrap.addEventListener('dragenter', handleDrag)
       wrap.addEventListener('dragleave', handleDragLeave)
@@ -242,7 +229,7 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
       `}</style>
 
       <div className="chat-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-        <div className="chat-container relative">
+        <div className="chat-container relative" ref={wrapRef}>
           {/* Drag Overlay */}
           {isDragging && (
             <div className="drag-overlay">
@@ -311,14 +298,16 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
                     </div>
                   </div>
 
-                  {msgs.map((c, i) => {
+                  {msgs.map((c) => {
+                    // H4 FIX: use c.ID as key, not array index — prevents stale renders
+                    // when messages are inserted or the list is reordered.
                     const isOwn = c.SenderName === session.Name
                     const parsed = parseMsg(c.Message)
                     const urls = parsed.files ? parsed.files.split('|').filter(Boolean) : []
 
                     return (
                       <div
-                        key={i}
+                        key={c.ID ?? c.TimeStamp}
                         className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} ${c.isGrouped ? 'mt-0.5' : 'mt-3'}`}
                       >
                         {/* Sender Name */}

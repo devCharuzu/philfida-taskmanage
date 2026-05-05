@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
@@ -7,204 +7,98 @@ import DashboardPage from './pages/DashboardPage'
 import DirectorPage  from './pages/DirectorPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
 
-// Initialize session from Supabase - moved outside useEffect for scope
-let isInitializing = false
+/**
+ * Restores Google session from Supabase Auth, or revalidates persisted Personnel-ID session.
+ * Does not clear persisted session on transient DB/network errors (avoids prod refresh → login).
+ */
+async function runSessionBootstrap() {
+  const existingSession = useStore.getState().session
 
-async function initializeSession() {
-  // Prevent concurrent initialization
-  if (isInitializing) {
-    console.log('[AUTH] Session initialization already in progress, skipping')
-    return
-  }
-  
-  isInitializing = true
-  
-  try {
-    console.log('[AUTH] Initializing session...')
-    console.log('[AUTH] Current store state:', useStore.getState())
-    
-    // First, check if we already have a session in the store (from localStorage persistence)
-    const existingSession = useStore.getState().session
-    console.log('[AUTH] Existing session in store:', existingSession)
-    
-    if (existingSession) {
-      console.log('[AUTH] Session already in store from localStorage, using it:', existingSession)
-      // Validate the session is still active by checking AccountStatus
-      try {
-        const { data: user, error: userError } = await supabase
-          .from('Users')
-          .select('AccountStatus')
-          .eq('ID', existingSession.ID)
-          .single()
-        
-        if (userError || !user) {
-          console.warn('[AUTH] Failed to validate session, clearing it:', userError)
-          useStore.getState().clearSession()
-          return
-        }
-        
-        if (user.AccountStatus === 'Deactivated') {
-          console.warn('[AUTH] Account is deactivated, clearing session')
-          useStore.getState().clearSession()
-          return
-        }
-        
-        if (user.AccountStatus === 'Pending') {
-          console.warn('[AUTH] Account is pending approval, clearing session')
-          useStore.getState().clearSession()
-          return
-        }
-        
-        console.log('[AUTH] Session validated, keeping it')
-        return
-      } catch (validationError) {
-        console.error('[AUTH] Session validation failed:', validationError)
-        // Keep the session anyway if validation fails (network issues, etc.)
+  if (existingSession?.ID) {
+    try {
+      const { data: user, error: userError } = await supabase
+        .from('Users')
+        .select('ID, Name, Email, Role, Unit, Office, ProfilePic, Status, AccountStatus, Designation')
+        .eq('ID', existingSession.ID)
+        .maybeSingle()
+
+      if (userError) {
+        console.warn('[AUTH] Session revalidate skipped (keeping local session):', userError.message)
         return
       }
-    }
-    
-    console.log('[AUTH] No session in store, checking Supabase auth...')
-    // If no session in store, try to get it from Supabase
-    const { data: { session }, error } = await supabase.auth.getSession()
-    console.log('[AUTH] Supabase session result:', { session, error })
-    
-    if (error) {
-      console.error('[AUTH] Session initialization error:', error)
-      return
-    }
-    
-    if (!session) {
-      console.log('[AUTH] No session found in Supabase or localStorage')
-      return
-    }
-    
-    console.log('[AUTH] Supabase session found, fetching user data...')
-    // Get user details from database using email (not UUID, since Users table uses custom TEXT IDs)
-    const email = session.user.email?.toLowerCase().trim()
-    if (!email) {
-      console.error('[AUTH] No email in Supabase session')
-      return
-    }
-
-    const { data: users, error: userError } = await supabase
-      .from('Users')
-      .select('*')
-      .eq('Email', email)
-      .single()
-
-    console.log('[AUTH] User data fetch result:', { users, userError })
-
-    if (userError) {
-      console.error('[AUTH] User data fetch error:', userError)
-      // Sign out from Supabase to prevent loop
-      await supabase.auth.signOut()
-      isInitializing = false
-      return
-    }
-
-    if (!users) {
-      console.log('[AUTH] User not found in database with email:', email)
-      // Sign out from Supabase to prevent loop
-      await supabase.auth.signOut()
-      isInitializing = false
-      return
-    }
-
-    // Check account status
-    if (users.AccountStatus === 'Deactivated') {
-      console.warn('[AUTH] Account is deactivated, signing out')
-      await supabase.auth.signOut()
-      isInitializing = false
-      return
-    }
-
-    if (users.AccountStatus === 'Pending') {
-      console.warn('[AUTH] Account is pending approval, signing out')
-      await supabase.auth.signOut()
-      isInitializing = false
-      return
-    }
-
-    // Clear any fake localStorage data if it exists
-    try {
-      const localStorageContent = localStorage.getItem('philfida_session')
-      if (localStorageContent) {
-        const parsed = JSON.parse(localStorageContent)
-        if (parsed?.state?.session?.ID === '001') {
-          console.warn('[AUTH] Clearing fake test data from localStorage')
-          localStorage.removeItem('philfida_session')
-        }
+      if (!user) {
+        useStore.getState().clearSession()
+        return
+      }
+      if (user.AccountStatus === 'Deactivated' || user.AccountStatus === 'Pending') {
+        useStore.getState().clearSession()
+        return
+      }
+      if (user.Name !== existingSession.Name ||
+          user.Role !== existingSession.Role ||
+          user.Email !== existingSession.Email) {
+        useStore.getState().setSession({ ...existingSession, ...user })
       }
     } catch (e) {
-      // Ignore localStorage errors
+      console.warn('[AUTH] Session revalidate error (keeping local session):', e)
     }
-
-    const userSession = {
-      ID: users.ID,
-      Name: users.Name,
-      Email: users.Email,
-      Role: users.Role,
-      Unit: users.Unit,
-      Office: users.Office,
-      ProfilePic: users.ProfilePic,
-      Status: users.Status,
-      AccountStatus: users.AccountStatus,
-      Designation: users.Designation
-    }
-    
-    useStore.getState().setSession(userSession)
-    console.log('[AUTH] Session restored from Supabase:', userSession)
-  } catch (error) {
-    console.error('[AUTH] Failed to initialize session:', error)
-  } finally {
-    isInitializing = false
+    return
   }
+
+  const { data: { session }, error } = await supabase.auth.getSession()
+  if (error || !session) return
+
+  const email = session.user.email?.toLowerCase().trim()
+  if (!email) return
+
+  const { data: users, error: userError } = await supabase
+    .from('Users')
+    .select('ID, Name, Email, Role, Unit, Office, ProfilePic, Status, AccountStatus, Designation')
+    .eq('Email', email)
+    .maybeSingle()
+
+  if (userError || !users) {
+    await supabase.auth.signOut()
+    return
+  }
+
+  useStore.getState().setSession({
+    ID: users.ID, Name: users.Name, Email: users.Email, Role: users.Role,
+    Unit: users.Unit, Office: users.Office, ProfilePic: users.ProfilePic,
+    Status: users.Status, AccountStatus: users.AccountStatus, Designation: users.Designation
+  })
 }
 
 function useHydrated() {
   const [hydrated, setHydrated] = useState(false)
-  const [error, setError] = useState(null)
-  const setSession = useStore(s => s.setSession)
-  
+  const [error, setError]       = useState(null)
+  const bootstrapLockRef = useRef(null)
+
   useEffect(() => {
-    console.log('[HYDRATE] useHydrated effect running')
-    
-    // Check localStorage directly
-    try {
-      const localStorageContent = localStorage.getItem('philfida_session')
-      console.log('[HYDRATE] localStorage content:', localStorageContent)
-      if (localStorageContent) {
-        const parsed = JSON.parse(localStorageContent)
-        console.log('[HYDRATE] Parsed localStorage session:', parsed)
-      }
-    } catch (e) {
-      console.error('[HYDRATE] Failed to read localStorage:', e)
+    const startBootstrap = () => {
+      if (bootstrapLockRef.current) return bootstrapLockRef.current
+      bootstrapLockRef.current = runSessionBootstrap()
+        .catch((e) => console.error('[AUTH] Bootstrap failed:', e))
+        .finally(() => { bootstrapLockRef.current = null })
+      return bootstrapLockRef.current
     }
-    
-    // Check if already hydrated first
+
     let isAlreadyHydrated = false
     try {
       isAlreadyHydrated = useStore.persist.hasHydrated()
-      console.log('[HYDRATE] isAlreadyHydrated:', isAlreadyHydrated)
-    } catch (e) {
-      console.error('Store hydration check failed:', e)
+    } catch {
       setError('Store hydration failed')
       setHydrated(true)
       return
     }
-    
+
     if (isAlreadyHydrated) {
       setHydrated(true)
-      console.log('[HYDRATE] Store already hydrated, initializing session...')
-      // Initialize session even if store was already hydrated
-      initializeSession()
+      void startBootstrap()
       return
     }
-    
-    // Add timeout to prevent infinite loading on mobile
+
     const timeout = setTimeout(() => {
-      console.warn('[HYDRATE] Store hydration timeout - forcing render')
       setError('Hydration timeout - some features may not work correctly')
       setHydrated(true)
     }, 5000)
@@ -213,17 +107,12 @@ function useHydrated() {
       clearTimeout(timeout)
       setError(null)
       setHydrated(true)
-      console.log('[HYDRATE] Store hydrated, initializing session...')
-      // Initialize session after store is hydrated
-      initializeSession()
+      void startBootstrap()
     })
-    
-    return () => {
-      clearTimeout(timeout)
-      unsub?.()
-    }
-  }, []) // Empty dependency array to prevent re-renders
-  
+
+    return () => { clearTimeout(timeout); unsub?.() }
+  }, [])
+
   return { hydrated, error }
 }
 

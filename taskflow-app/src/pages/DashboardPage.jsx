@@ -45,6 +45,7 @@ export default function DashboardPage() {
   async function logout() {
     await supabase.auth.signOut()
     useStore.getState().clearSession()
+    localStorage.removeItem('philfida_session') // ensure cleared before redirect
     window.location.href = '/'
   }
 
@@ -234,7 +235,7 @@ export default function DashboardPage() {
         {/* FOOTER */}
         <footer className="bg-white border-t border-slate-100/80 py-1.5 sm:py-2 px-3 sm:px-4 md:px-6 lg:px-8 flex-shrink-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] sm:text-[10px] text-slate-400 truncate">© 2025 PhilFIDA</p>
+            <p className="text-[9px] sm:text-[10px] text-slate-400 truncate">© {new Date().getFullYear()} PhilFIDA</p>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <span className="text-[9px] sm:text-[10px] text-slate-400 hidden sm:inline">User Dashboard</span>
               <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gradient-to-r from-[#016837] to-[#027a42]"></span>
@@ -323,11 +324,16 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
 
       {/* ── SECTION 3: File & Meta ── */}
       {t.FileLink && (
-        <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-50/30 border-b border-slate-100">
-          <button onClick={() => { const url = t.FileLink.split('|')[0]; const name = decodeURIComponent(url.split('?')[0].split('/').pop()); onOpenFile(url, name) }}
-            className="text-[10px] sm:text-[11px] font-medium text-green-700 hover:text-green-800 flex items-center gap-1 sm:gap-1.5 py-1">
-            <i className="bi bi-paperclip" /> Attachment
-          </button>
+        <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-50/30 border-b border-slate-100 flex flex-wrap gap-2">
+          {t.FileLink.split('|').filter(Boolean).map((url, idx) => {
+            const name = decodeURIComponent(url.split('?')[0].split('/').pop())
+            return (
+              <button key={idx} onClick={() => onOpenFile(url, name)}
+                className="text-[10px] sm:text-[11px] font-medium text-green-700 hover:text-green-800 flex items-center gap-1 sm:gap-1.5 py-1 bg-green-50 px-2 rounded border border-green-100 truncate max-w-[200px]">
+                <i className="bi bi-paperclip flex-shrink-0" /> <span className="truncate">{name}</span>
+              </button>
+            )
+          })}
         </div>
       )}
 

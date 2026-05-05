@@ -3,57 +3,51 @@ import { useStore } from '../store/useStore'
 import { getData } from '../lib/api'
 import { supabase } from '../lib/supabase'
 
-// Helper function to sync only notifications
-async function syncNotificationsOnly(session, setGlobalData) {
-  if (!session) return
+// H1/H2 FIX: Sync only notifications using getState() so we never rely on a
+// stale setGlobalData reference captured by a closure, and never use a
+// functional updater (which useStore's setGlobalData doesn't support).
+async function syncNotificationsOnly(sessionId) {
+  if (!sessionId) return
   try {
     const { data: notifications } = await supabase
       .from('Notifications')
       .select('*')
-      .eq('UserID', session.ID)
+      .eq('UserID', sessionId)
       .order('ID', { ascending: false })
       .limit(20)
-    
+
     if (notifications) {
-      setGlobalData(prev => ({
-        ...prev,
-        notifications: notifications
-      }))
+      const current = useStore.getState().globalData
+      useStore.getState().setGlobalData({ ...current, notifications })
     }
   } catch (e) {
     console.error('Notification sync failed', e)
   }
 }
 
-// Helper function to check if comment change affects current user
-async function checkCommentNotification(payload, userId, sync) {
+// Check if a comment change affects the current user and trigger a full sync if so
+async function checkCommentNotification(payload, userId, syncFn) {
   try {
     const commentData = payload.new || payload.record
     if (!commentData) return
-    
-    // Get task details to check if user is involved
+
     const { data: task } = await supabase
       .from('Tasks')
-      .select('*')
+      .select('EmployeeID')
       .eq('TaskID', commentData.TaskID)
       .single()
-    
+
     if (!task) return
-    
-    // If user is the employee or a director, sync
-    if (task.EmployeeID === userId) {
-      sync()
+
+    if (String(task.EmployeeID) === String(userId)) {
+      syncFn()
     } else {
-      // Check if user is a director
       const { data: user } = await supabase
         .from('Users')
         .select('Role')
         .eq('ID', userId)
         .single()
-      
-      if (user?.Role === 'Director') {
-        sync()
-      }
+      if (user?.Role === 'Director' || user?.Role === 'Unit Head') syncFn()
     }
   } catch (e) {
     console.error('Comment notification check failed', e)
@@ -61,125 +55,99 @@ async function checkCommentNotification(payload, userId, sync) {
 }
 
 export function useSync() {
-  const session = useStore(s => s.session)
-  const setGlobalData = useStore(s => s.setGlobalData)
+  // H5 FIX: depend only on the ID primitive — not the whole session object —
+  // so presence-status changes don't trigger a full re-sync.
+  const sessionId = useStore(s => s.session?.ID)
   const channelsRef = useRef([])
 
+  // H1 FIX: Read store values inside the async body via getState() rather than
+  // capturing them in the useCallback closure — eliminates the unstable
+  // setGlobalData reference that was causing re-render loops.
   const sync = useCallback(async () => {
+    const session = useStore.getState().session
     if (!session) return
     try {
       const data = await getData(session.ID)
-      setGlobalData(data)
+      if (data) useStore.getState().setGlobalData(data)
       return data
     } catch (e) {
       console.error('Sync failed', e)
     }
-  }, [session, setGlobalData])
+  }, []) // intentionally no deps — always reads fresh from store
 
   useEffect(() => {
-    if (!session) return
+    if (!sessionId) return
 
     // Initial fetch
     sync()
 
-    // Improved detection for realtime capability
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
-    const isSecureConnection = typeof window !== 'undefined' && window.location.protocol === 'https:'
-    const isTablet = /iPad|Android(?!.*Mobile)/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '')
-    const hasGoodConnection = typeof navigator !== 'undefined' && navigator.connection ? 
-      navigator.connection.effectiveType === '4g' || navigator.connection.effectiveType === 'wifi' : true
-    
-    // Use realtime for secure connections on desktop/tablets with good connection
-    const useRealtime = isSecureConnection && (!isMobile || isTablet) && hasGoodConnection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    )
+    const isSecureConnection =
+      typeof window !== 'undefined' && window.location.protocol === 'https:'
+    const isTablet = /iPad|Android(?!.*Mobile)/i.test(
+      typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    )
+
+    const useRealtime = isSecureConnection && (!isMobile || isTablet)
 
     if (useRealtime) {
-      console.log('Using realtime subscriptions')
-      
-      // Targeted notification subscription - only for user-specific notifications
+      // Notification channel — user-scoped filter
       try {
-        const notificationChannel = supabase
-          .channel(`notifications-${session.ID}`)
+        const notifCh = supabase
+          .channel(`notifications-${sessionId}`)
           .on(
             'postgres_changes',
-            { 
-              event: '*', 
-              schema: 'public', 
-              table: 'Notifications',
-              filter: `UserID=eq.${session.ID}`
-            },
-            (payload) => {
-              console.log('New notification received:', payload)
-              // Only sync notifications, not entire data
-              syncNotificationsOnly(session, setGlobalData)
-            }
+            { event: '*', schema: 'public', table: 'Notifications', filter: `UserID=eq.${sessionId}` },
+            () => syncNotificationsOnly(sessionId)
           )
-          .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              console.log('Realtime notification subscription active')
-            } else if (status === 'CHANNEL_ERROR') {
-              console.warn('Realtime notification subscription failed, falling back to polling')
-            }
-          })
-
-        channelsRef.current.push(notificationChannel)
-      } catch (error) {
-        console.warn('Failed to create notification subscription:', error)
+          .subscribe()
+        channelsRef.current.push(notifCh)
+      } catch (err) {
+        console.warn('Failed to create notification subscription:', err)
       }
 
-      // Subscribe to task and comment changes that might affect notifications
-      const criticalTables = ['Tasks', 'Comments']
-      criticalTables.forEach(table => {
+      // Task + Comment change channels
+      ;['Tasks', 'Comments'].forEach(table => {
         try {
-          const channel = supabase
-            .channel(`${table}-changes-${session.ID}`)
+          const ch = supabase
+            .channel(`${table}-changes-${sessionId}`)
             .on(
               'postgres_changes',
               { event: '*', schema: 'public', table },
               (payload) => {
-                // Check if this change affects the current user
                 if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                   const newData = payload.new || payload.record
-                  if (table === 'Tasks' && newData.EmployeeID === session.ID) {
-                    // Task assigned to this user changed
+                  if (table === 'Tasks' && String(newData.EmployeeID) === String(sessionId)) {
                     sync()
                   } else if (table === 'Comments') {
-                    // Comment change - check if user is involved
-                    checkCommentNotification(payload, session.ID, sync)
+                    checkCommentNotification(payload, sessionId, sync)
                   }
                 }
               }
             )
-            .subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                console.log(`Realtime ${table} subscription active`)
-              }
-            })
-
-          channelsRef.current.push(channel)
-        } catch (error) {
-          console.warn(`Failed to create ${table} subscription:`, error)
+            .subscribe()
+          channelsRef.current.push(ch)
+        } catch (err) {
+          console.warn(`Failed to create ${table} subscription:`, err)
         }
       })
-    } else {
-      console.log('Using polling-only mode (mobile or insecure connection detected)')
     }
 
-    // Adaptive polling: 60s for mobile, 30s for desktop with realtime
-    const pollingInterval = useRealtime ? 30000 : 60000
+    // M6 FIX: When realtime is active, poll every 2 min as a heartbeat only.
+    // Without realtime (mobile/insecure), poll every 60 s.
+    const pollingInterval = useRealtime ? 120000 : 60000
     const fallback = setInterval(sync, pollingInterval)
 
     return () => {
       channelsRef.current.forEach(ch => {
-        try {
-          supabase.removeChannel(ch)
-        } catch (error) {
-          console.warn('Error removing channel:', error)
-        }
+        try { supabase.removeChannel(ch) } catch {}
       })
       channelsRef.current = []
       clearInterval(fallback)
     }
-  }, [session, sync])
+  }, [sessionId, sync])
 
   return { sync }
 }

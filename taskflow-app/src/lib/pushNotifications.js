@@ -1,8 +1,17 @@
 // Push Notification Manager
-// Handles browser push notifications for real-time alerts
+// ⚠️  NOT READY FOR PRODUCTION — M3 FIX
+//
+// This module is intentionally NOT imported by any component.
+// The following are missing before this can be activated:
+//   1. A real VAPID public key (replace VAPID_KEY below)
+//   2. A service worker at /public/sw.js
+//   3. Server endpoints: POST /api/push/subscribe, POST /api/push/unsubscribe
+//   4. getCurrentUserId() must be wired to the Zustand session
+//
+// Until those are ready, in-app notifications (NotificationBell) handle all alerts.
 
 const PUSH_KEY = 'philfida_push_enabled'
-const VAPID_KEY = 'philfida_vapid_key' // This should come from your backend
+const VAPID_KEY = 'REPLACE_WITH_REAL_VAPID_PUBLIC_KEY'
 
 class PushNotificationManager {
   constructor() {

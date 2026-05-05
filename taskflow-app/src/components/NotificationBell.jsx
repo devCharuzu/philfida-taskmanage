@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { markNotificationsRead, clearNotifications } from '../lib/api'
+import { markNotificationRead, clearNotifications } from '../lib/api'
 import { useStore } from '../store/useStore'
 import { playNotifSound, unlockAudio } from '../lib/notifSound'
 import { showNotification } from '../lib/pushNotifications'
@@ -73,7 +73,7 @@ export default function NotificationBell() {
   const handleNotificationClick = (notification) => {
     // Mark as read if unread
     if (notification.IsRead === 'FALSE') {
-      markNotificationsRead(session.ID).then(() => {
+      markNotificationRead(notification.ID).then(() => {
         setGlobalData({
           ...globalData,
           notifications: notifications.map(n => 
@@ -116,17 +116,9 @@ export default function NotificationBell() {
     seenIdsRef.current = currentIds
   }, [unread])
 
-  // ── Auto mark as read when opened ───────────────────────────
-  useEffect(() => {
-    if (!open || unread.length === 0) return
-    markNotificationsRead(session.ID).then(() => {
-      setGlobalData({
-        ...globalData,
-        notifications: notifications.map(n => ({ ...n, IsRead: 'TRUE' })),
-      })
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  // ── Auto mark as read REMOVED (H6 FIX) ────────────────────
+  // We no longer automatically mark all as read when opening the bell.
+  // Users must click individual notifications or "Clear all".
 
   // ── Close on outside click ───────────────────────────────────
   useEffect(() => {

@@ -21,28 +21,61 @@ const OFFICES = [
 export { UNITS, OFFICES }
 
 // ── FILE UPLOAD ────────────────────────────────────────────
+// H8 FIX: Bucket is private, so use createSignedUrl (1 hour expiry) instead of getPublicUrl
 export async function uploadFiles(fileList) {
   if (!fileList || fileList.length === 0) return ''
   const urls = await Promise.all(
     Array.from(fileList).map(async (file) => {
+      // Validate file size — reject files over 50 MB (L8 fix)
+      if (file.size > 50 * 1024 * 1024) throw new Error(`File "${file.name}" exceeds 50 MB limit.`)
       const ext = file.name.split('.').pop()
       const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
       const { error } = await supabase.storage
         .from('taskflow-files')
         .upload(path, file, { upsert: true })
       if (error) throw error
-      const { data } = supabase.storage.from('taskflow-files').getPublicUrl(path)
-      return data.publicUrl
+      // Store the path itself; generate signed URLs on read via getSignedUrl()
+      return path
     })
   )
   return urls.join('|')
 }
 
+// Generate a temporary signed URL from a stored path (valid 1 hour)
+export async function getSignedFileUrl(path) {
+  if (!path) return ''
+  // If it's already a full URL (legacy data), return as-is
+  if (path.startsWith('http')) return path
+  const { data, error } = await supabase.storage
+    .from('taskflow-files')
+    .createSignedUrl(path, 3600)
+  if (error) { console.warn('Failed to sign URL:', path, error); return '' }
+  return data.signedUrl
+}
+
 // ── AUTH ───────────────────────────────────────────────────
+// C3 FIX: getAllUsers still exists for director admin use (UserManagement),
+// but login now uses loginUser() which only returns a single user matched by ID.
 export async function getAllUsers() {
   const { data, error } = await supabase.from('Users').select('*')
   if (error) throw error
   return data
+}
+
+// C2/C3 FIX: Authenticate a single user by ID — never exposes other users' data.
+// Returns the matching user or null; password comparison happens here so the
+// full user list is never sent to the client during login.
+export async function loginUser(userId, password) {
+  const { data: user, error } = await supabase
+    .from('Users')
+    .select('*')
+    .eq('ID', userId.trim())
+    .single()
+  if (error || !user) return { error: 'invalid_credentials' }
+  if (user.Password !== password) return { error: 'invalid_credentials' }
+  if (user.AccountStatus === 'Pending') return { error: 'pending' }
+  if (user.AccountStatus === 'Deactivated') return { error: 'deactivated' }
+  return { user }
 }
 
 export async function registerUser({ id, name, email = '', unit, role, pass }) {
@@ -65,17 +98,30 @@ export async function registerUser({ id, name, email = '', unit, role, pass }) {
   return 'SUCCESS'
 }
 
-export async function updateUserAccountStatus(userId, status) {
-  const { error } = await supabase.from('Users')
-    .update({ AccountStatus: status })
-    .eq('ID', userId)
+/** True when Supabase Auth has a JWT (e.g. Google). Manual Personnel-ID login has no Auth session — director actions need RPC + password. */
+export async function hasSupabaseAuthSession() {
+  const { data: { session } } = await supabase.auth.getSession()
+  return !!(session?.user)
+}
+
+export async function updateUserAccountStatus(userId, status, actorDirectorId, directorPassword = '') {
+  const { error } = await supabase.rpc('director_set_account_status', {
+    p_director_id: actorDirectorId,
+    p_director_password: directorPassword || null,
+    p_target_user_id: userId,
+    p_account_status: status,
+  })
   if (error) throw error
 }
 
-export async function updateUserRole(userId, role, unit) {
-  const { error } = await supabase.from('Users')
-    .update({ Role: role, Unit: unit, Office: unit })
-    .eq('ID', userId)
+export async function updateUserRole(userId, role, unit, actorDirectorId, directorPassword = '') {
+  const { error } = await supabase.rpc('director_update_user_role', {
+    p_director_id: actorDirectorId,
+    p_director_password: directorPassword || null,
+    p_target_user_id: userId,
+    p_role: role,
+    p_unit: unit || '',
+  })
   if (error) throw error
 }
 
@@ -229,16 +275,30 @@ export async function markNotificationsRead(userId) {
   await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('UserID', userId)
 }
 
+export async function markNotificationRead(notifId) {
+  await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('ID', notifId)
+}
+
+export async function deleteNotification(notifId) {
+  await supabase.from('Notifications').delete().eq('ID', notifId)
+}
+
 // ── PRESENCE ───────────────────────────────────────────────
 
-export async function updateProfile(userId, { name, designation, email, unit, password }) {
+// H9 FIX: Do not overwrite ProfilePic — omit it from the update payload so
+// existing profile pictures are preserved when editing other profile fields.
+export async function updateProfile(userId, { name, designation, email, unit, password, profilePic }) {
   const updatePayload = {
     Name:        name,
     Designation: designation,
     Email:       email,
     Unit:        unit,
     Office:      unit,
-    ProfilePic:  '',
+  }
+
+  // Only update ProfilePic if explicitly provided
+  if (profilePic !== undefined && profilePic !== null) {
+    updatePayload.ProfilePic = profilePic
   }
 
   if (password !== undefined && password !== null && password !== '') {
@@ -292,17 +352,12 @@ export async function restoreTasks(taskIds) {
   await Promise.all(taskIds.map(id => toggleArchive(id, false)))
 }
 
-export async function deleteUser(userId) {
-  // Remove all tasks, comments, notifications tied to this user
-  const { data: tasks } = await supabase.from('Tasks').select('TaskID').eq('EmployeeID', userId)
-  if (tasks?.length) {
-    const ids = tasks.map(t => t.TaskID)
-    await supabase.from('Comments').delete().in('TaskID', ids)
-    await supabase.from('Notifications').delete().in('TaskID', ids)
-    await supabase.from('Tasks').delete().eq('EmployeeID', userId)
-  }
-  await supabase.from('Notifications').delete().eq('UserID', userId)
-  const { error } = await supabase.from('Users').delete().eq('ID', userId)
+export async function deleteUser(userId, actorDirectorId, directorPassword = '') {
+  const { error } = await supabase.rpc('director_delete_user', {
+    p_director_id: actorDirectorId,
+    p_director_password: directorPassword || null,
+    p_target_user_id: userId,
+  })
   if (error) throw error
 }
 
@@ -397,13 +452,14 @@ export async function handleGoogleCallback() {
 
   if (!email) { console.error('No email from Google'); return null }
 
-  // Find existing user — match by email (case-insensitive)
-  const { data: users, error: usersError } = await supabase.from('Users').select('*')
-  if (usersError) { console.error('Users fetch error:', usersError); return null }
+  // H7 FIX: Query directly by email instead of fetching all users
+  const { data: existing, error: findError } = await supabase
+    .from('Users')
+    .select('*')
+    .ilike('Email', email)
+    .maybeSingle()
 
-  const existing = users?.find(u =>
-    u.Email && u.Email.toLowerCase().trim() === email
-  )
+  if (findError) { console.error('User lookup error:', findError); return null }
 
   if (existing) {
     // Backfill email if it was missing

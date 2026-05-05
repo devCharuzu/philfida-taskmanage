@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { markNotificationsRead, clearNotifications } from '../lib/api'
+import { markNotificationsRead, markNotificationRead, clearNotifications, deleteNotification as apiDeleteNotification } from '../lib/api'
 import { useStore } from '../store/useStore'
 
 export default function NotificationCenter({ isOpen, onClose }) {
@@ -74,7 +74,7 @@ export default function NotificationCenter({ isOpen, onClose }) {
   // Mark notification as read
   const markAsRead = async (notificationId) => {
     try {
-      await markNotificationsRead(session.ID)
+      await markNotificationRead(notificationId)
       setGlobalData({
         ...globalData,
         notifications: notifications.map(n => 
@@ -120,8 +120,7 @@ export default function NotificationCenter({ isOpen, onClose }) {
   // Delete individual notification
   const deleteNotification = async (notificationId) => {
     try {
-      // This would need to be implemented in the API
-      // await deleteNotification(notificationId)
+      await apiDeleteNotification(notificationId)
       setGlobalData({
         ...globalData,
         notifications: notifications.filter(n => n.ID !== notificationId),

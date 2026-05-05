@@ -49,7 +49,10 @@ export const useStore = create(
       globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] },
       setSession:    (session) => set({ session }),
       clearSession:  ()        => set({ session: null }),
-      setGlobalData: (data)    => set({ globalData: data }),
+      // H2 FIX: support both plain object and functional updater (prev => newVal)
+      setGlobalData: (data) => set(state => ({
+        globalData: typeof data === 'function' ? data(state.globalData) : data
+      })),
     }),
     {
       name: 'philfida_session',

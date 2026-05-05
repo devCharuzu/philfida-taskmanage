@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { getAllUsers, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
+import { loginUser, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 
 export default function LoginPage() {
@@ -152,18 +152,41 @@ The application cannot function until this is resolved.
     }
 
     try {
-      const users = await withErrorHandling(getAllUsers, ERROR_MESSAGES.DATABASE)
-      const user  = users.find(u => String(u.ID) === loginId.trim() && u.Password === loginPass)
-      if (!user)                              { setError('Invalid Personnel ID or Password.'); return }
-      if (user.AccountStatus === 'Pending')   { setError('Your account is pending approval by the Director.'); return }
-      if (user.AccountStatus === 'Deactivated') { setError('Your account has been deactivated. Contact the Director.'); return }
+      // C2/C3 FIX: loginUser queries only the matching user by ID — never fetches all users
+      const result = await loginUser(loginId, loginPass)
+
+      if (result.error === 'invalid_credentials') {
+        setError('Invalid Personnel ID or Password.')
+        return
+      }
+      if (result.error === 'pending') {
+        setError('Your account is pending approval by the Director.')
+        return
+      }
+      if (result.error === 'deactivated') {
+        setError('Your account has been deactivated. Contact the Director.')
+        return
+      }
+      if (result.error) {
+        setError('Login failed. Please try again.')
+        return
+      }
+
+      const user = result.user
+      // Set session and navigate based on role
       setSession(user)
-      if (user.Role === 'Director')        navigate('/director')
-      else if (user.Role === 'Unit Head')  navigate('/unithead')
-      else                                 navigate('/dashboard')
+      if (user.Role === 'Director') {
+        navigate('/director')
+      } else if (user.Role === 'Unit Head') {
+        navigate('/unithead')
+      } else {
+        navigate('/dashboard')
+      }
     } catch (error) {
-      setError(error.message)
-    } finally  { setLoading(false) }
+      setError(error.message || 'Login failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   // ── Google sign in ──────────────────────────────────────────

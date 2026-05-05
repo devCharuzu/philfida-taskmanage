@@ -91,8 +91,7 @@ taskflow-app/
 ## 6. Supabase Integration
 ### Client configuration
 - `src/lib/supabase.js` creates a Supabase client with:
-  - hardcoded `SUPABASE_URL`
-  - hardcoded `SUPABASE_ANON_KEY`
+  - `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from env (see `taskflow-app/.env.local.example`)
   - auth PKCE settings
   - realtime event throttling
 
@@ -215,14 +214,17 @@ npm run build
 - The app is intended to be deployed from the `taskflow-app` folder.
 
 ## 13. Important Notes
-- Supabase keys are currently hardcoded in `src/lib/supabase.js`.
+- Configure Supabase via `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; Vercel must set these and trigger a redeploy after changes.
 - Google OAuth flow uses PKCE with manual callback handling.
 - `useSync` subscribes to Supabase realtime changes and also polls every 30 seconds.
 - `session` is persisted to browser storage, while `globalData` is fetched from Supabase after login.
 - Direct database operations are driven from frontend-only code; there is no server-side application code in this repository.
 
-## 14. Supabase Migration
-- `supabase-migration-v2.sql` adds `Unit` and `AccountStatus` columns to `Users` and backfills existing users to `Active`.
+## 14. Database setup (Supabase)
+- **`complete-database-schema-fixed.sql`** (repo root): run in the SQL Editor for a fresh project—creates tables, RLS policies (including **`anon`** policies on **`Users`** for Personnel ID login and pending self-registration), **director user-management RPCs** (`director_*`, SECURITY DEFINER), storage, and realtime publication.
+- **`supabase-director-rpcs.sql`**: standalone patch to add/update those RPCs on older databases.
+- **`taskflow-app/supabase-migration-v2.sql`**: incremental migration that adds `Unit` and `AccountStatus` on `Users` and backfills `AccountStatus` to `Active` for existing deployments.
+- **`DATABASE_RESTART_TUTORIAL.md`**: step-by-step teardown/repoint/recreate checklist for prod + local (new project, OAuth, env vars, RLS quirks for anon login/register).
 
 ## 15. Recommended Documentation Inclusion
 To make this documentation fully comprehensive, also include:

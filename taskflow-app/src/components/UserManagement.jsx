@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
-import { updateUserAccountStatus, updateUserRole, deleteUser, getAllUsers, UNITS, OFFICES } from '../lib/api'
+import {
+  updateUserAccountStatus,
+  updateUserRole,
+  deleteUser,
+  getAllUsers,
+  UNITS,
+  OFFICES,
+  hasSupabaseAuthSession,
+} from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 
 const ROLE_COLORS = {
@@ -31,15 +39,30 @@ export default function UserManagement({ users, onSync }) {
   const [showPass,     setShowPass]     = useState(false)
   const [deleteError,  setDeleteError]  = useState('')
   const [deleteLoading,setDeleteLoading]= useState(false)
+  const [oauthForDelete,setOauthForDelete]= useState(false) // Supabase Auth session → delete RPC uses JWT email
 
   const filteredUsers = filter === 'All' ? users : users.filter(u => u.AccountStatus === filter)
   const pendingCount   = users.filter(u => u.AccountStatus === 'Pending').length
 
+  /** OAuth directors rely on JWT email in RPC; manual directors must type their password once per action. */
+  async function directorRpcSecretOrAbort() {
+    if (await hasSupabaseAuthSession()) return { secret: '', ok: true }
+    const pw = window.prompt('Enter your director password to confirm:')
+    if (pw === null) return { ok: false }
+    if (!pw.trim()) {
+      alert('Password is required.')
+      return { ok: false }
+    }
+    return { secret: pw.trim(), ok: true }
+  }
+
   async function handleApprove(userId) {
     setLoading(userId + '_approve')
     try {
+      const auth = await directorRpcSecretOrAbort()
+      if (!auth.ok) return
       await withErrorHandling(async () => {
-        await updateUserAccountStatus(userId, 'Active')
+        await updateUserAccountStatus(userId, 'Active', session.ID, auth.secret)
       }, ERROR_MESSAGES.DATABASE)
       await onSync()
     } catch (error) {
@@ -53,8 +76,10 @@ export default function UserManagement({ users, onSync }) {
   async function handleDeactivate(userId) {
     setLoading(userId + '_deactivate')
     try {
+      const auth = await directorRpcSecretOrAbort()
+      if (!auth.ok) return
       await withErrorHandling(async () => {
-        await updateUserAccountStatus(userId, 'Deactivated')
+        await updateUserAccountStatus(userId, 'Deactivated', session.ID, auth.secret)
       }, ERROR_MESSAGES.DATABASE)
       await onSync()
     } catch (error) {
@@ -68,8 +93,10 @@ export default function UserManagement({ users, onSync }) {
   async function handleReactivate(userId) {
     setLoading(userId + '_reactivate')
     try {
+      const auth = await directorRpcSecretOrAbort()
+      if (!auth.ok) return
       await withErrorHandling(async () => {
-        await updateUserAccountStatus(userId, 'Active')
+        await updateUserAccountStatus(userId, 'Active', session.ID, auth.secret)
       }, ERROR_MESSAGES.DATABASE)
       await onSync()
     } catch (error) {
@@ -98,8 +125,10 @@ export default function UserManagement({ users, onSync }) {
 
     setLoading(editUser.ID + '_edit')
     try {
+      const auth = await directorRpcSecretOrAbort()
+      if (!auth.ok) return
       await withErrorHandling(async () => {
-        await updateUserRole(editUser.ID, editRole, editUnit)
+        await updateUserRole(editUser.ID, editRole, editUnit, session.ID, auth.secret)
       }, ERROR_MESSAGES.DATABASE)
       await onSync()
       setEditUser(null)
@@ -111,46 +140,31 @@ export default function UserManagement({ users, onSync }) {
     }
   }
 
-  function openDeleteConfirm(user) {
+  async function openDeleteConfirm(user) {
     setDeleteTarget(user)
     setDirPassword('')
     setDeleteError('')
     setShowPass(false)
+    setOauthForDelete(await hasSupabaseAuthSession())
   }
 
   async function handleConfirmDelete() {
     if (!dirPassword.trim()) { setDeleteError('Please enter your password.'); return }
-    
-    const validation = validateForm(
-      { dirPassword },
-      { dirPassword: { required: true, label: 'Director password', minLength: 1 } }
-    )
-    
-    if (!validation.isValid) {
-      setDeleteError(Object.values(validation.errors)[0])
-      return
-    }
 
     setDeleteLoading(true)
     setDeleteError('')
     try {
-      // Verify director password against DB
-      const allUsers = await withErrorHandling(getAllUsers, ERROR_MESSAGES.DATABASE)
-      const director = allUsers.find(u => String(u.ID) === String(session.ID))
-      
-      console.log('Director verification:', {
-        sessionID: session.ID,
-        foundDirector: !!director,
-        passwordMatch: director?.Password === dirPassword
-      })
-      
-      if (!director || director.Password !== dirPassword) {
-        setDeleteError('Incorrect password. Please try again.')
-        return
+      const oauth = await hasSupabaseAuthSession()
+      let secret = ''
+      if (!oauth) {
+        if (!dirPassword.trim()) {
+          setDeleteError('Please enter your password.')
+          return
+        }
+        secret = dirPassword.trim()
       }
-      
       await withErrorHandling(async () => {
-        await deleteUser(deleteTarget.ID)
+        await deleteUser(deleteTarget.ID, session.ID, secret)
       }, ERROR_MESSAGES.DATABASE)
       
       await onSync()
@@ -452,36 +466,41 @@ export default function UserManagement({ users, onSync }) {
                 Deleting this account will permanently remove the user, all their assigned tasks, and associated data.
               </p>
 
-              {/* Director password confirmation */}
-              <div>
-                <label className="label">Your Director Password</label>
-                <div className="relative">
-                  <input
-                    className="input pr-10"
-                    type={showPass ? 'text' : 'password'}
-                    placeholder="Enter your password to confirm"
-                    value={dirPassword}
-                    onChange={e => { setDirPassword(e.target.value); setDeleteError('') }}
-                    onKeyDown={e => e.key === 'Enter' && handleConfirmDelete()}
-                    autoFocus
-                  />
-                  <button type="button" onClick={() => setShowPass(!showPass)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'}`} />
-                  </button>
+              {/* Director password confirmation (manual login only; Google OAuth uses JWT inside RPC). */}
+              {oauthForDelete ? (
+                <p className="text-slate-600 text-sm">You are signed in with Google — no director password needed.</p>
+              ) : (
+                <div>
+                  <label className="label">Your Director Password</label>
+                  <div className="relative">
+                    <input
+                      className="input pr-10"
+                      type={showPass ? 'text' : 'password'}
+                      placeholder="Enter your password to confirm"
+                      value={dirPassword}
+                      onChange={e => { setDirPassword(e.target.value); setDeleteError('') }}
+                      onKeyDown={e => e.key === 'Enter' && handleConfirmDelete()}
+                      autoFocus
+                    />
+                    <button type="button" onClick={() => setShowPass(!showPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'}`} />
+                    </button>
+                  </div>
                 </div>
-                {deleteError && (
-                  <p className="text-red-600 text-xs mt-1.5 flex items-center gap-1">
-                    <i className="bi bi-exclamation-circle-fill" />{deleteError}
-                  </p>
-                )}
-              </div>
+              )}
+              {deleteError && (
+                <p className="text-red-600 text-xs flex items-center gap-1">
+                  <i className="bi bi-exclamation-circle-fill" />{deleteError}
+                </p>
+              )}
 
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setDeleteTarget(null)} className="btn-secondary flex-1 py-2.5">
                   Cancel
                 </button>
-                <button onClick={handleConfirmDelete} disabled={deleteLoading || !dirPassword.trim()}
+                <button onClick={handleConfirmDelete}
+                  disabled={deleteLoading || (!oauthForDelete && !dirPassword.trim())}
                   className="btn-danger flex-1 py-2.5 disabled:opacity-50">
                   {deleteLoading
                     ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
