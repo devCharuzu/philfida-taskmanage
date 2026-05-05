@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 // Mobile-safe storage check
 const mobileSafeStorage = {
@@ -42,56 +42,26 @@ const mobileSafeStorage = {
   }
 }
 
+const persistStorage = createJSONStorage(() => mobileSafeStorage)
+
 export const useStore = create(
   persist(
     (set) => ({
-      session:    null,
+      session: null,
       globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] },
-      setSession:    (session) => set({ session }),
-      clearSession:  ()        => set({ session: null }),
-      // H2 FIX: support both plain object and functional updater (prev => newVal)
-      setGlobalData: (data) => set(state => ({
+      setSession: (session) => set({ session }),
+      clearSession: () => set({ session: null }),
+      setGlobalData: (data) => set((state) => ({
         globalData: typeof data === 'function' ? data(state.globalData) : data
       })),
     }),
     {
       name: 'philfida_session',
-      version: 1,
+      version: 2,
       partialize: (state) => ({ session: state.session }),
-      storage: {
-        getItem: mobileSafeStorage.getItem,
-        setItem: (name, value) => {
-          try {
-            const serialized = JSON.stringify(value)
-            // Check if serialized data is too large for mobile storage (reduced to 2MB for better mobile compatibility)
-            if (serialized.length > 2 * 1024 * 1024) {
-              console.warn('Store data too large, clearing globalData to save space')
-              const compacted = { 
-                session: value.session, 
-                globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } 
-              }
-              mobileSafeStorage.setItem(name, JSON.stringify(compacted))
-            } else {
-              mobileSafeStorage.setItem(name, serialized)
-            }
-          } catch (error) {
-            console.error('Store serialization failed:', error)
-            // Try to save only session data on error
-            try {
-              const sessionOnly = { session: value.session, globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] } }
-              mobileSafeStorage.setItem(name, JSON.stringify(sessionOnly))
-            } catch (fallbackError) {
-              console.error('Even session-only storage failed:', fallbackError)
-              // Clear storage completely as last resort
-              mobileSafeStorage.removeItem(name)
-            }
-          }
-        },
-        removeItem: mobileSafeStorage.removeItem
-      },
+      storage: persistStorage,
       onRehydrateStorage: () => (state) => {
-        console.log('Store rehydrated on mobile:', state)
-        console.log('Store session after rehydration:', state?.session)
+        console.log('Store rehydrated:', state)
       }
     }
   )
