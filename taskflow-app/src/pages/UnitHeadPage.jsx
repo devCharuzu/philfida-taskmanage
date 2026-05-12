@@ -6,13 +6,12 @@ import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
 import { setTaskStatus, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, logHistory, createTask } from '../lib/api'
 import NotificationBell from '../components/NotificationBell'
-import SettingsModal from '../components/SettingsModal'
-import EditProfileModal from '../components/EditProfileModal'
+import UserProfileTab from '../components/UserProfileTab'
 import ChatModal from '../components/ChatModal'
 import FileThumb from '../components/FileThumb'
 import Lightbox from '../components/Lightbox'
 import CreateTaskForm from '../components/CreateTaskForm'
-import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
+import { normalizeStatus } from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
 import DeadlineProgress from '../components/DeadlineProgress'
@@ -38,26 +37,24 @@ export default function UnitHeadPage() {
 
   const [tab,          setTab]         = useState('my-tasks')
   const [monitorFilter, setMonitorFilter] = useState('director-assigned')
+  const [filterSearch, setFilterSearch]   = useState('')
+  const [filterStatus, setFilterStatus]   = useState('All')
   const [chat,         setChat]        = useState(null)
   const [lightboxFile, setLightboxFile]= useState(null)
   const [presence,     setPresence]    = useState(session?.Status || 'Available')
   const [loadingTask,  setLoadingTask] = useState(null)
-  const [profileOpen,      setProfileOpen]      = useState(false)
-  const [profileEditOpen,  setProfileEditOpen]  = useState(false)
-  const [settingsOpen,     setSettingsOpen]     = useState(false)
   const [drawerOpen,   setDrawerOpen]  = useState(false)
   const [sidebarOpen,  setSidebarOpen]  = useState(false)
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
-  const profileRef = useRef()
+  const [globalPrintPreview, setGlobalPrintPreview] = useState(null)
 
+
+
+  // Sync presence state with session status (H11 fix for refresh persistence)
   useEffect(() => {
-    function handler(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    if (session?.Status) setPresence(session.Status)
+  }, [session?.Status])
 
   const myUnit = session?.Unit || session?.Office || ''
 
@@ -80,8 +77,17 @@ export default function UnitHeadPage() {
     })
     .slice().reverse()
 
+  const filteredUnitTasks = unitTasks.filter(t => {
+    if (filterStatus !== 'All' && t.Status !== filterStatus) return false
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase()
+      if (!t.Title?.toLowerCase().includes(q) && !t.EmployeeName?.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+
   // Separate unit tasks by assignment source using history
-  const directorAssignedTasks = unitTasks.filter(t => {
+  const directorAssignedTasks = filteredUnitTasks.filter(t => {
     const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
     const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
     if (!dispatchedEntry) return false
@@ -97,7 +103,7 @@ export default function UnitHeadPage() {
     return actorIsDirector || actorHasDirectorRole
   })
 
-  const unitHeadAssignedTasks = unitTasks.filter(t => {
+  const unitHeadAssignedTasks = filteredUnitTasks.filter(t => {
     const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
     const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
     if (!dispatchedEntry) return false
@@ -115,7 +121,7 @@ export default function UnitHeadPage() {
   })
 
   // Fallback for tasks without Dispatched history - classify as unit head assigned by default
-  const unassignedTasks = unitTasks.filter(t => {
+  const unassignedTasks = filteredUnitTasks.filter(t => {
     const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
     const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
     return !dispatchedEntry
@@ -124,17 +130,276 @@ export default function UnitHeadPage() {
   // Add unassigned tasks to unit head assigned tasks as fallback
   const finalUnitHeadAssignedTasks = [...unitHeadAssignedTasks, ...unassignedTasks]
 
-  async function logout() {
-    await supabase.auth.signOut()
-    useStore.getState().clearSession()
-    localStorage.removeItem('philfida_session')
-    window.location.href = '/'
-  }
-
   async function handleStatusUpdate(taskId, status) {
     setLoadingTask(taskId)
     try { await setTaskStatus(taskId, status, session?.Name || '', session?.ID); await sync() }
     finally { setLoadingTask(null) }
+  }
+
+  function handleGlobalPrintPreview(task) {
+    setGlobalPrintPreview(task)
+  }
+
+  function handleConfirmGlobalPrint() {
+    if (!globalPrintPreview) return
+    
+    const { hasUrgent, hasPriority, hasConfidential, checkboxStates, approvalStates, allPurposes } = parseCheckboxesFromTask(globalPrintPreview)
+    
+    // Clean remarks - remove Purpose and Action lines as they're shown in checkboxes
+    const cleanRemarks = (text) => {
+      if (!text) return 'Please acknowledge the receipt of this document. Thanks.'
+      return text
+        .replace(/^Purpose:[\s\S]*?(?=Action:|Remarks:|$)/mi, '')
+        .replace(/^Action:.*$/gmi, '')
+        .replace(/^From:.*$/gmi, '')
+        .replace(/\n\n+/g, '\n')
+        .trim() || 'Please acknowledge the receipt of this document. Thanks.'
+    }
+    const remarksText = cleanRemarks(globalPrintPreview.Description || globalPrintPreview.Instructions)
+    
+    // All possible action checkboxes from CreateTaskForm
+    const allActionOptions = [
+      'For compliance',
+      'For appropriate action',
+      'For information',
+      'Please review/comment',
+      'Please draft reply',
+      'Please monitor/follow up',
+      'Please handle',
+      'Please attend',
+      'Please see me',
+      'Please disseminate/circulate',
+      'Please return/forward to:',
+      'Please schedule',
+      'Please file',
+    ]
+    
+    // Generate action checkboxes - show all options, check the selected ones
+    const actionCheckboxesHtml = allActionOptions.map(option => {
+      const isChecked = allPurposes.includes(option)
+      return `<div class="action-item"><div class="checkbox ${isChecked ? 'checked' : ''}"></div><span>${option}</span></div>`
+    }).join('')
+    
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Action/Routing Slip - ${globalPrintPreview.TaskID}</title>
+        <style>
+          body { font-family: Cambria, 'Times New Roman', serif; padding: 30px; line-height: 1.4; font-size: 12pt; background: #fff; }
+          .page-wrapper { width: 160mm; margin: 20mm auto; border: 1px solid #ccc; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); background: #fff; }
+          .container { max-width: 100%; border: 2px solid #000; padding: 25px; }
+          .header { display: flex; align-items: center; gap: 15px; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
+          .logo-placeholder { width: 80px; height: 80px; border: 1px dashed #999; display: flex; align-items: center; justify-content: center; flex-shrink-0; background: #f9f9f9; }
+          .logo-placeholder img { max-width: 100%; max-height: 100%; object-fit: contain; }
+          .logo-text { font-size: 8pt; color: #999; text-align: center; }
+          .header-content { flex: 1; text-align: center; }
+          .agency-name { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+          .title { font-size: 18pt; font-weight: bold; text-transform: uppercase; }
+          .field-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+          .field { display: flex; align-items: center; border-bottom: 1px solid #000; padding: 5px 0; }
+          .field-label { font-weight: bold; min-width: 100px; font-size: 10pt; }
+          .field-value { flex: 1; padding-left: 10px; }
+          .checkboxes { display: flex; gap: 40px; margin: 20px 0; padding: 10px 0; border-bottom: 1px solid #000; }
+          .checkbox-item { display: flex; align-items: center; gap: 8px; }
+          .checkbox { width: 18px; height: 18px; border: 2px solid #000; }
+          .checkbox.checked { background: #000; }
+          .checkbox.checked::after { content: '✓'; color: white; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+          .section { margin: 20px 0; padding: 15px; border: 1px solid #000; }
+          .section-title { font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 11pt; }
+          .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+          .action-item { display: flex; align-items: center; gap: 8px; }
+          .approval-section { display: flex; gap: 40px; margin-top: 15px; }
+          .approval-item { display: flex; align-items: center; gap: 8px; }
+          .remarks-box { min-height: 100px; padding: 10px; margin-top: 10px; border: 1px solid #000; white-space: pre-wrap; }
+          .signature-section { margin-top: 40px; text-align: center; }
+          .signature-line { border-bottom: 2px solid #000; width: 300px; margin: 40px auto 10px auto; }
+          .signature-label { font-size: 10pt; font-weight: bold; }
+          @media print { body { padding: 0; } .container { border: none; } }
+          @media screen and (max-width: 640px) {
+            .page-wrapper { width: 100%; margin: 0; padding: 8px; transform: scale(0.45); transform-origin: top center; }
+            .container { padding: 12px; }
+            .header { flex-direction: column; gap: 8px; }
+            .header-content { text-align: center; }
+            .checkboxes { flex-wrap: wrap; gap: 15px; }
+            .actions-grid { grid-template-columns: 1fr; }
+            .approval-section { flex-wrap: wrap; gap: 15px; }
+            .signature-line { width: 200px; }
+          }
+          @media screen and (min-width: 641px) and (max-width: 768px) {
+            .page-wrapper { width: 100%; margin: 0; transform: scale(0.65); transform-origin: top center; }
+          }
+          @media screen and (min-width: 769px) and (max-width: 1024px) {
+            .page-wrapper { width: 100%; margin: 0; transform: scale(0.85); transform-origin: top center; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page-wrapper">
+        <div class="container">
+          <div style="text-align: right; font-size:7pt; color: #666; margin-bottom: 5px; padding-right: 5px;">
+            REC-FORM 009/REV 00/17 AUG 2022
+          </div>
+          <div class="header">
+            <div class="logo-placeholder">
+              <img src="/philfida-logo.png" alt="Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'logo-text\\'>[LOGO]</span>';" />
+            </div>
+            <div class="header-content">
+              <div class="agency-name">Philippine Fiber Industry Development Authority<br/>Regional Office XIII</div>
+              <div class="title">ACTION/ROUTING SLIP</div>
+            </div>
+          </div>
+
+          <div style="text-align: right; font-size: 10pt; color: #333; margin-bottom: 10px;">
+            <strong>No: ${globalPrintPreview.DocumentNo || globalPrintPreview.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || globalPrintPreview.TaskID}</strong>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <span class="field-label">DATE:</span>
+              <span class="field-value">${new Date().toLocaleDateString()}</span>
+            </div>
+            <div class="field">
+              <span class="field-label">FOR/TO:</span>
+              <span class="field-value">${session?.Name || '—'}</span>
+            </div>
+          </div>
+
+          <div class="checkboxes">
+            <div class="checkbox-item">
+              <div class="checkbox ${hasUrgent ? 'checked' : ''}"></div>
+              <span>URGENT</span>
+            </div>
+            <div class="checkbox-item">
+              <div class="checkbox ${hasPriority ? 'checked' : ''}"></div>
+              <span>PRIORITY</span>
+            </div>
+            <div class="checkbox-item">
+              <div class="checkbox ${hasConfidential ? 'checked' : ''}"></div>
+              <span>CONFIDENTIAL</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">ACTION:</div>
+            <div class="actions-grid">
+              ${actionCheckboxesHtml}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">APPROVAL:</div>
+            <div class="approval-section">
+              <div class="approval-item"><div class="checkbox ${approvalStates.noted ? 'checked' : ''}"></div><span>NOTED</span></div>
+              <div class="approval-item"><div class="checkbox ${approvalStates.approved ? 'checked' : ''}"></div><span>APPROVED</span></div>
+              <div class="approval-item"><div class="checkbox ${approvalStates.disapproved ? 'checked' : ''}"></div><span>DISAPPROVED</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">REMARKS:</div>
+            <div class="remarks-box"><strong>Subject:</strong> ${globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}<br/><br/>${remarksText}</div>
+          </div>
+
+          <div class="signature-section">
+            <div class="signature-line"></div>
+            <div class="signature-label">SAMUEL M. NACINO JR.</div>
+            <div class="signature-label">OIC-Regional Director</div>
+          </div>
+
+        </div>
+        </div>
+      </body>
+      </html>
+    `
+    
+    const printWindow = window.open('', '_blank')
+    printWindow.document.write(printContent)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+    printWindow.close()
+    setGlobalPrintPreview(null)
+  }
+
+  function parseCheckboxesFromTask(task) {
+    // Parse checkbox states from database fields
+    // Handle both old format (plain strings) and new format (JSON arrays)
+    let priorityFlags = []
+    let purposeCheckboxes = []
+    
+    try {
+      if (task.PriorityFlags) {
+        // Try to parse as JSON array first
+        priorityFlags = JSON.parse(task.PriorityFlags)
+      }
+    } catch (e) {
+      // If parsing fails, treat as old format: single string or comma-separated
+      if (typeof task.PriorityFlags === 'string') {
+        priorityFlags = task.PriorityFlags.split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    try {
+      if (task.PurposeCheckboxes) {
+        // Try to parse as JSON array first
+        purposeCheckboxes = JSON.parse(task.PurposeCheckboxes)
+      }
+    } catch (e) {
+      // If parsing fails, treat as old format: single string or comma-separated
+      if (typeof task.PurposeCheckboxes === 'string') {
+        purposeCheckboxes = task.PurposeCheckboxes.split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    // Fallback: if no purpose checkboxes found, try to parse from instructions
+    if (purposeCheckboxes.length === 0) {
+      const instructions = task.Description || task.Instructions || ''
+      const purposeMatch = instructions.match(/Purpose:\s*(.*?)(?=\nAction:|\nRemarks:|\nFrom:|$)/i)
+      if (purposeMatch && purposeMatch[1]) {
+        // Parse comma-separated purposes from instructions
+        purposeCheckboxes = purposeMatch[1].split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    const approvalAction = task.ApprovalAction || ''
+
+    // Map priority flags
+    const hasUrgent = priorityFlags.includes('Urgent') || task.Priority === 'Urgent' || task.Priority === 'High'
+    const hasPriority = priorityFlags.includes('Priority') || task.Priority === 'Medium'
+    const hasConfidential = priorityFlags.includes('Confidential') || task.Category === 'Confidential'
+
+    // Map purpose checkboxes - check for all possible options
+    const checkboxStates = {
+      compliance: purposeCheckboxes.includes('For compliance'),
+      appropriateAction: purposeCheckboxes.includes('For appropriate action'),
+      info: purposeCheckboxes.includes('For information'),
+      review: purposeCheckboxes.includes('Please review/comment'),
+      draftReply: purposeCheckboxes.includes('Please draft reply'),
+      monitor: purposeCheckboxes.includes('Please monitor/follow up'),
+      handle: purposeCheckboxes.includes('Please handle'),
+      attend: purposeCheckboxes.includes('Please attend'),
+      seeMe: purposeCheckboxes.includes('Please see me'),
+      disseminate: purposeCheckboxes.includes('Please disseminate/circulate'),
+      returnForward: purposeCheckboxes.includes('Please return/forward to:'),
+      schedule: purposeCheckboxes.includes('Please schedule'),
+      file: purposeCheckboxes.includes('Please file'),
+    }
+
+    // Map approval action
+    const approvalStates = {
+      noted: approvalAction === 'Noted',
+      approved: approvalAction === 'Approved',
+      disapproved: approvalAction === 'Disapproved',
+    }
+
+    return {
+      hasUrgent,
+      hasPriority,
+      hasConfidential,
+      checkboxStates,
+      approvalStates,
+      allPurposes: purposeCheckboxes, // Return all purposes for dynamic rendering
+    }
   }
 
   const stats = {
@@ -143,29 +408,62 @@ export default function UnitHeadPage() {
     unitCompleted: unitTasks.filter(t => t.Status === 'Completed').length,
   }
 
-  const TABS = [
-    { key: 'my-tasks', label: 'My Assignments', icon: 'bi-person-check-fill' },
-    { key: 'monitor',  label: 'Unit Monitor',   icon: 'bi-speedometer2' },
-  ]
-
   return (
     <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
+
+      {/* Global Print Preview Modal - Above all divs */}
+      {globalPrintPreview && (
+        <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800">Print Preview - Action/Routing Slip</h3>
+              <button onClick={() => setGlobalPrintPreview(null)} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            <div className="overflow-auto p-6 bg-slate-100" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+              <div className="bg-white p-6 rounded-lg border border-slate-200">
+                <div className="mb-4">
+                  <h4 className="font-semibold text-slate-800 mb-2">{globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}</h4>
+                  {globalPrintPreview.DocumentNo && (
+                    <p className="text-sm text-slate-600 mb-2">Document No: {globalPrintPreview.DocumentNo}</p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setGlobalPrintPreview(null)} className="px-6 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50">
+                    Cancel
+                  </button>
+                  <button onClick={handleConfirmGlobalPrint} className="px-6 py-2 rounded-lg font-semibold text-white bg-green-700 hover:bg-green-800">
+                    <i className="bi bi-printer-fill mr-2" /> Print
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: '#016837' }}>
+      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: 'linear-gradient(180deg, #014d2a 0%, #016837 100%)' }}>
 
         {/* ── Branding + Notification row ── */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 shadow-inner">
               <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
-                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:9px;font-weight:900;color:#016837;">PF</span>' }} />
+                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:white;">PF</span>' }} />
             </div>
-            <span className="text-white font-bold text-xs truncate">PhilFIDA TaskFlow</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-white font-black text-[11px] tracking-wider uppercase leading-none">PhilFIDA</span>
+              <span className="text-green-300 font-bold text-[10px] mt-0.5 leading-none">TaskFlow</span>
+            </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            {session?.Region && (
+              <span className="region-badge px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter bg-white/10 text-white border border-white/20 mr-1">
+                {session.Region}
+              </span>
+            )}
             <NotificationBell />
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
               <i className="bi bi-x-lg text-base" />
@@ -178,6 +476,7 @@ export default function UnitHeadPage() {
           {[
             { key: 'my-tasks', icon: 'bi-person-check-fill', label: 'My Assignments', badge: stats.myActive },
             { key: 'monitor',  icon: 'bi-speedometer2',       label: 'Unit Monitor',   badge: stats.unitActive },
+            { key: 'profile',  icon: 'bi-person-circle',      label: 'My Profile' },
           ].map(item => (
             <button key={item.key} onClick={() => { setTab(item.key); if (item.key === 'monitor') setMonitorFilter('director-assigned'); setSidebarOpen(false) }}
               className={`nav-item w-full text-left ${tab === item.key ? 'active' : ''}`}>
@@ -215,61 +514,22 @@ export default function UnitHeadPage() {
             </div>
           )}
         </nav>
-
-        {/* ── Profile (clickable) ── */}
-        <div className="relative flex-shrink-0 border-t border-white/10" ref={profileRef}>
-          <button
-            onClick={() => setProfileOpen(o => !o)}
-            className="w-full flex items-center gap-1.5 rounded-lg px-2 sm:px-3 py-1.5 transition-all group"
-            style={{ background: profileOpen ? 'rgba(255,255,255,0.12)' : 'transparent' }}
-          >
-            <i className="bi bi-person-badge-fill text-sm flex-shrink-0" style={{ color: '#f9921f' }} />
-            <div className="flex flex-col min-w-0 flex-1 text-left justify-center">
-              <span className="font-semibold text-white text-sm sm:text-base leading-none truncate">{session?.Name}</span>
-              <span className="text-white/40 text-[9px] sm:text-[10px] leading-none">Unit Head — {myUnit.split(' ').slice(0,2).join(' ')}</span>
-            </div>
-            <i className={`bi bi-chevron-${profileOpen ? 'down' : 'up'} text-white/50 text-[9px] sm:text-[10px] flex-shrink-0 transition-transform`} />
-          </button>
-
-          {/* Profile dropdown (appears above) */}
-          {profileOpen && (
-            <div className="absolute left-0 right-0 bottom-full bg-white/95 backdrop-blur-sm border border-white/20 shadow-lg z-50 overflow-hidden mx-2 rounded-lg mb-2">
-              <button
-                onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100/50 transition-colors text-left"
-              >
-                <i className="bi bi-person-gear text-base text-slate-500" /> Edit Profile
-              </button>
-              <button
-                onClick={() => { setProfileOpen(false); setSettingsOpen(true) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100/50 transition-colors text-left"
-              >
-                <i className="bi bi-sliders text-base text-slate-500" /> Settings
-              </button>
-              <button
-                onClick={logout}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50/50 transition-colors text-left"
-              >
-                <i className="bi bi-box-arrow-right text-base text-red-500" /> Sign Out
-              </button>
-            </div>
-          )}
-        </div>
       </aside>
 
       {/* ── MAIN ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile top bar */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="md:hidden sticky top-0 z-40 glass-effect flex items-center justify-between px-4 py-3 bg-white/80 border-b border-slate-200 flex-shrink-0">
           <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
             <i className="bi bi-list text-2xl" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
+            <div className="w-7 h-7 bg-green-900 rounded-lg flex items-center justify-center overflow-hidden shadow-md">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
-            <span className="text-green-900 font-bold text-sm">TaskFlow</span>
+            <span className="text-green-900 font-black text-sm tracking-tight uppercase">TaskFlow</span>
+            <span className="text-[10px] font-bold text-green-600/70 border-l border-slate-300 pl-2">{session?.Region}</span>
           </div>
           <NotificationBell />
         </div>
@@ -280,13 +540,12 @@ export default function UnitHeadPage() {
           {tab === 'my-tasks' && (
             <div className="flex flex-col h-full">
               {/* ── TOP BAR: Page title + Assign button ── */}
-              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
+              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
-                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">My Assignments</h2>
-                  <p className="text-slate-400 text-xs mt-1">{myTasks.length} task{myTasks.length !== 1 ? 's' : ''}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <PresenceToggle value={presence} userId={session?.ID} onChange={setPresence} />
+                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
+                    My Assignments <span className="text-green-600 font-medium">— {session?.Region}</span>
+                  </h2>
+                  <p className="text-slate-400 text-[10px] sm:text-xs mt-1.5 font-medium">{myTasks.length} task{myTasks.length !== 1 ? 's' : ''} assigned to you</p>
                 </div>
               </div>
 
@@ -335,6 +594,7 @@ export default function UnitHeadPage() {
                         onStatusUpdate={handleStatusUpdate}
                         onOpenChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
                         onOpenFile={(url, name) => setLightboxFile({ url, name })}
+                        onPrintPreview={handleGlobalPrintPreview}
                       />
                     ))}
                   </div>
@@ -347,36 +607,54 @@ export default function UnitHeadPage() {
           {tab === 'monitor' && (
             <div className="flex flex-col h-full">
               {/* ── TOP BAR: Page title + Assign button ── */}
-              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
+              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
                   <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                    {monitorFilter === 'director-assigned' ? 'Director Assigned Tasks' : 'My Assigned Tasks'}
+                    {monitorFilter === 'director-assigned' ? 'Director Assigned Tasks' : 'My Assigned Tasks'} <span className="text-green-600 font-medium">— {session?.Region}</span>
                   </h2>
-                  <p className="text-slate-400 text-xs mt-1">
-                    {monitorFilter === 'director-assigned' ? directorAssignedTasks.length : finalUnitHeadAssignedTasks.length} task{
-                      (monitorFilter === 'director-assigned' ? directorAssignedTasks.length : finalUnitHeadAssignedTasks.length) !== 1 ? 's' : ''}
+                  <p className="text-slate-400 text-[10px] sm:text-xs mt-1.5 font-medium">
+                    {monitorFilter === 'director-assigned' ? directorAssignedTasks.length : finalUnitHeadAssignedTasks.length} total tasks in monitor
                   </p>
                 </div>
                 {monitorFilter === 'my-assigned' && (
                   <button
                     onClick={() => { setDrawerOpen(true) }}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm text-white shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
-                    style={{
-                      background: 'linear-gradient(135deg, #016837 0%, #027a42 50%, #016837 100%)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      boxShadow: '0 4px 12px rgba(16, 71, 17, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(135deg, #027a42 0%, #038c4d 50%, #027a42 100%)';
-                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 71, 17, 0.35), inset 0 1px 0 rgba(255,255,255,0.25)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(135deg, #016837 0%, #027a42 50%, #016837 100%)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 71, 17, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)';
-                    }}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg shadow-green-900/30 hover:shadow-green-900/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 whitespace-nowrap group"
+                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}
                   >
-                    <i className="bi bi-plus-lg text-base" />
+                    <i className="bi bi-plus-circle-fill text-base group-hover:rotate-90 transition-transform duration-300" />
                     <span>Assign Task</span>
+                  </button>
+                )}
+              </div>
+
+              {/* ── FILTER BAR ── */}
+              <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 flex items-center gap-2 flex-wrap">
+                <div className="relative flex-1 min-w-[140px] max-w-sm">
+                  <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                  <input
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none"
+                    placeholder="Search task title or personnel..."
+                    value={filterSearch}
+                    onChange={e => setFilterSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <select 
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-green-500/20"
+                    value={filterStatus} 
+                    onChange={e => setFilterStatus(e.target.value)}
+                  >
+                    <option value="All">All Status</option>
+                    <option value="Assigned">Assigned</option>
+                    <option value="Received">Received</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                {(filterStatus !== 'All' || filterSearch) && (
+                  <button onClick={() => { setFilterStatus('All'); setFilterSearch('') }}
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all flex items-center gap-1.5">
+                    <i className="bi bi-x-circle-fill" /> Reset
                   </button>
                 )}
               </div>
@@ -420,9 +698,11 @@ export default function UnitHeadPage() {
                       if (filteredTasks.length === 0) {
                         return (
                           <div className="col-span-full text-center py-16 text-slate-400">
-                            <i className="bi bi-clipboard-x text-3xl block mb-2 opacity-30" />
+                            <i className={`bi ${filterSearch || filterStatus !== 'All' ? 'bi-search' : 'bi-clipboard-x'} text-3xl block mb-2 opacity-30`} />
                             <p className="text-sm">
-                              {monitorFilter === 'director-assigned' ? 'No director-assigned tasks' : 'No tasks assigned by you yet'}
+                              {(filterSearch || filterStatus !== 'All') 
+                                ? 'No matching tasks found for your search/filters.' 
+                                : monitorFilter === 'director-assigned' ? 'No director-assigned tasks' : 'No tasks assigned by you yet'}
                             </p>
                           </div>
                         )
@@ -433,6 +713,7 @@ export default function UnitHeadPage() {
                         const unit = emp?.Unit || emp?.Office || '—'
                         const unreadChat = getUnreadCommentCount(globalData.comments || [], t.TaskID, session?.Name || '')
                         const isDirectorAssigned = directorAssignedTasks.includes(t)
+                        
                         return (
                           <UnitHeadMonitorCard
                             key={t.TaskID}
@@ -441,11 +722,12 @@ export default function UnitHeadPage() {
                             employee={emp}
                             comments={globalData.comments}
                             session={session}
-                            history={globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))}
+                            history={globalData.history}
                             unreadChat={unreadChat}
                             onChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
                             onOpenFile={(url, name) => setLightboxFile({ url, name })}
                             isDirectorAssigned={isDirectorAssigned}
+                            onPrintPreview={handleGlobalPrintPreview}
                           />
                         )
                       })
@@ -455,6 +737,12 @@ export default function UnitHeadPage() {
               </div>
             </div>
           )}
+
+          {/* ── PROFILE TAB ── */}
+          {tab === 'profile' && (
+            <UserProfileTab presence={presence} setPresence={setPresence} />
+          )}
+
         </main>
 
         {/* FOOTER */}
@@ -474,6 +762,7 @@ export default function UnitHeadPage() {
         {[
           { key: 'my-tasks', icon: 'bi-person-check-fill', label: 'My Tasks', badge: stats.myActive },
           { key: 'monitor', icon: 'bi-speedometer2',       label: 'Monitor', badge: stats.unitActive },
+          { key: 'profile', icon: 'bi-person-circle',      label: 'Profile' },
         ].map(item => (
           <button key={item.key} onClick={() => setTab(item.key)}
             className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold transition-colors relative ${tab === item.key ? 'text-green-800' : 'text-slate-400'}`}>
@@ -524,8 +813,6 @@ export default function UnitHeadPage() {
 
       {chat         && <ChatModal taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}
       {lightboxFile && <Lightbox file={lightboxFile} onClose={() => setLightboxFile(null)} />}
-      {settingsOpen     && <SettingsModal     onClose={() => setSettingsOpen(false)}     session={session} />}
-      {profileEditOpen && <EditProfileModal onClose={() => setProfileEditOpen(false)} />}
 
       {/* ── DISPATCH CONFIRM MODAL ── */}
       {dispatchConfirm && (
@@ -643,15 +930,99 @@ function StatusTimes({ task: t }) {
 }
 
 // ── UnitHeadTaskCard ────────────────────────────────────────────────────────────────
-function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate, onOpenChat, onOpenFile }) {
+function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate, onOpenChat, onOpenFile, onPrintPreview }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
   const unreadChat = getUnreadCommentCount(comments || [], t.TaskID, session?.Name || '')
 
+  function parseCheckboxesFromTask(task) {
+    // Parse checkbox states from database fields
+    // Handle both old format (plain strings) and new format (JSON arrays)
+    let priorityFlags = []
+    let purposeCheckboxes = []
+    
+    try {
+      if (task.PriorityFlags) {
+        // Try to parse as JSON array first
+        priorityFlags = JSON.parse(task.PriorityFlags)
+      }
+    } catch (e) {
+      // If parsing fails, treat as old format: single string or comma-separated
+      if (typeof task.PriorityFlags === 'string') {
+        priorityFlags = task.PriorityFlags.split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    try {
+      if (task.PurposeCheckboxes) {
+        // Try to parse as JSON array first
+        purposeCheckboxes = JSON.parse(task.PurposeCheckboxes)
+      }
+    } catch (e) {
+      // If parsing fails, treat as old format: single string or comma-separated
+      if (typeof task.PurposeCheckboxes === 'string') {
+        purposeCheckboxes = task.PurposeCheckboxes.split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    // Fallback: if no purpose checkboxes found, try to parse from instructions
+    if (purposeCheckboxes.length === 0) {
+      const instructions = task.Description || task.Instructions || ''
+      const purposeMatch = instructions.match(/Purpose:\s*(.*?)(?=\nAction:|\nRemarks:|\nFrom:|$)/i)
+      if (purposeMatch && purposeMatch[1]) {
+        // Parse comma-separated purposes from instructions
+        purposeCheckboxes = purposeMatch[1].split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    const approvalAction = task.ApprovalAction || ''
+
+    // Map priority flags
+    const hasUrgent = priorityFlags.includes('Urgent') || task.Priority === 'Urgent' || task.Priority === 'High'
+    const hasPriority = priorityFlags.includes('Priority') || task.Priority === 'Medium'
+    const hasConfidential = priorityFlags.includes('Confidential') || task.Category === 'Confidential'
+
+    // Map purpose checkboxes - check for all possible options
+    const checkboxStates = {
+      compliance: purposeCheckboxes.includes('For compliance'),
+      appropriateAction: purposeCheckboxes.includes('For appropriate action'),
+      info: purposeCheckboxes.includes('For information'),
+      review: purposeCheckboxes.includes('Please review/comment'),
+      draftReply: purposeCheckboxes.includes('Please draft reply'),
+      monitor: purposeCheckboxes.includes('Please monitor/follow up'),
+      handle: purposeCheckboxes.includes('Please handle'),
+      attend: purposeCheckboxes.includes('Please attend'),
+      seeMe: purposeCheckboxes.includes('Please see me'),
+      disseminate: purposeCheckboxes.includes('Please disseminate/circulate'),
+      returnForward: purposeCheckboxes.includes('Please return/forward to:'),
+      schedule: purposeCheckboxes.includes('Please schedule'),
+      file: purposeCheckboxes.includes('Please file'),
+    }
+
+    // Map approval action
+    const approvalStates = {
+      noted: approvalAction === 'Noted',
+      approved: approvalAction === 'Approved',
+      disapproved: approvalAction === 'Disapproved',
+    }
+
+    return {
+      hasUrgent,
+      hasPriority,
+      hasConfidential,
+      checkboxStates,
+      approvalStates,
+      allPurposes: purposeCheckboxes, // Return all purposes for dynamic rendering
+    }
+  }
+
+
+
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden">
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full overflow-hidden animate-in-up group">
+
       {/* ── SECTION 1: Header with Status & Actions ── */}
-      <div className="bg-green-50/70 px-3 sm:px-4 py-2 sm:py-3 border-b border-green-100">
+      <div className="bg-slate-50/50 px-3 sm:px-4 py-3 border-b border-slate-100 group-hover:bg-green-50/30 transition-colors">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={getStatusBadgeClass(t.Status)}>{t.Status}</span>
@@ -680,9 +1051,9 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
         {/* Document Number Badge */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
           <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-[#016837] to-[#027a42] text-white rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 shadow-sm">
-              <i className="bi bi-file-earmark-text text-white/90 text-[10px] sm:text-xs" />
-              <span className="text-[10px] sm:text-xs font-bold tracking-wide">
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
+              <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
               </span>
             </span>
@@ -774,6 +1145,10 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
 
       {/* Action Menu Dropdown */}
       <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <button onClick={() => { onPrintPreview && onPrintPreview(t); setMenuOpen(false) }}
+          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
+          <i className="bi bi-printer-fill text-slate-600" /> Print Task
+        </button>
         <button onClick={() => { onOpenChat(); setMenuOpen(false) }}
           className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
           <i className="bi bi-chat-dots text-green-700" /> Open Chat
@@ -789,7 +1164,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
 }
 
 // ── UnitHeadMonitorCard ────────────────────────────────────────────────────────────────
-function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, history, unreadChat, onChat, onOpenFile, isDirectorAssigned = false }) {
+function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, history, unreadChat, onChat, onOpenFile, isDirectorAssigned = false, onPrintPreview }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
 
@@ -799,24 +1174,25 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden">
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full overflow-hidden animate-in-up group">
       {/* ── SECTION 1: Personnel & Actions Header ── */}
-      <div className="bg-green-50/70 px-3 sm:px-4 py-2 sm:py-3 border-b border-green-100">
+      <div className="bg-slate-50/50 px-3 sm:px-4 py-2.5 border-b border-slate-100 group-hover:bg-green-50/30 transition-colors">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
           {/* Personnel Name */}
           <div className="min-w-0 flex-1 flex items-center gap-1.5 sm:gap-2">
             <div className="min-w-0 flex-1">
-              <span className="font-bold text-green-900 text-[13px] sm:text-[15px] leading-tight truncate block">{t.EmployeeName}</span>
+              <UserStatusPopover 
+                name={t.EmployeeName} 
+                status={employee?.Status} 
+                popoverMaxW={280}
+                chipClassName="font-bold text-green-900 text-[13px] sm:text-[15px] leading-tight truncate flex items-center gap-2 cursor-pointer hover:text-green-700 transition-colors"
+              />
               <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5">{unit}</p>
             </div>
             <div className="relative group flex-shrink-0">
               <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold text-white/80 ${statusConfig.dot}`}>
                 {statusInitial}
               </span>
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-slate-800 text-white text-[10px] font-medium rounded shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
-                {normalizedStatus}
-                <div className="absolute right-full top-1/2 -translate-y-1/2 -mr-0.5 border-4 border-transparent border-r-slate-800"></div>
-              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -831,13 +1207,13 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
       </div>
 
       {/* ── SECTION 2: Task Details ── */}
-      <div className="px-3 sm:px-4 py-3 sm:py-4 border-b border-slate-100 bg-white">
-        {/* Document Number Badge */}
+      <div className="px-3 sm:px-4 py-4 border-b border-slate-100 bg-white">
+        {/* Document Number Badge - Modern Stacked Layout */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
-          <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-[#016837] to-[#027a42] text-white rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 shadow-sm">
-              <i className="bi bi-file-earmark-text text-white/90 text-[10px] sm:text-xs" />
-              <span className="text-[10px] sm:text-xs font-bold tracking-wide">
+          <div className="mb-2">
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
+              <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
               </span>
             </span>
@@ -903,6 +1279,10 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
       {/* Action Menu Dropdown - Only for unit head assigned tasks */}
       {!isDirectorAssigned && (
         <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
+          <button onClick={() => { onPrintPreview && onPrintPreview(t); setMenuOpen(false) }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
+            <i className="bi bi-printer-fill text-slate-600" /> Print Task
+          </button>
           <button onClick={() => { onChat(); setMenuOpen(false) }}
             className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
             <i className="bi bi-chat-dots text-green-700" /> Open Chat

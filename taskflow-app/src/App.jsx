@@ -18,7 +18,7 @@ async function runSessionBootstrap() {
     try {
       const { data: user, error: userError } = await supabase
         .from('Users')
-        .select('ID, Name, Email, Role, Unit, Office, ProfilePic, Status, AccountStatus, Designation')
+        .select('ID, Name, Email, Role, Unit, Office, ProfilePic, Status, AccountStatus, Designation, Region')
         .eq('ID', existingSession.ID)
         .maybeSingle()
 
@@ -34,9 +34,16 @@ async function runSessionBootstrap() {
         useStore.getState().clearSession()
         return
       }
-      if (user.Name !== existingSession.Name ||
+      // H11 FIX: Deep check all fields to ensure persistence of status/region on refresh
+      const hasChanges = 
+          user.Name !== existingSession.Name ||
           user.Role !== existingSession.Role ||
-          user.Email !== existingSession.Email) {
+          user.Email !== existingSession.Email ||
+          user.Status !== existingSession.Status ||
+          user.Region !== existingSession.Region ||
+          user.Designation !== existingSession.Designation
+
+      if (hasChanges) {
         useStore.getState().setSession({ ...existingSession, ...user })
       }
     } catch (e) {
@@ -53,7 +60,7 @@ async function runSessionBootstrap() {
 
   const { data: users, error: userError } = await supabase
     .from('Users')
-    .select('ID, Name, Email, Role, Unit, Office, ProfilePic, Status, AccountStatus, Designation')
+    .select('ID, Name, Email, Role, Unit, Office, ProfilePic, Status, AccountStatus, Designation, Region')
     .eq('Email', email)
     .maybeSingle()
 
@@ -65,7 +72,8 @@ async function runSessionBootstrap() {
   useStore.getState().setSession({
     ID: users.ID, Name: users.Name, Email: users.Email, Role: users.Role,
     Unit: users.Unit, Office: users.Office, ProfilePic: users.ProfilePic,
-    Status: users.Status, AccountStatus: users.AccountStatus, Designation: users.Designation
+    Status: users.Status, AccountStatus: users.AccountStatus, Designation: users.Designation,
+    Region: users.Region
   })
 }
 

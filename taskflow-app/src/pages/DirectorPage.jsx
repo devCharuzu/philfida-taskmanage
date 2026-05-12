@@ -4,11 +4,10 @@ import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
-import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTask } from '../lib/api'
-import { normalizeStatus } from '../components/PresenceToggle'
+import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTask, getSignedFileUrl } from '../lib/api'
+import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
 import NotificationBell from '../components/NotificationBell'
-import SettingsModal from '../components/SettingsModal'
-import DirectorProfileModal from '../components/DirectorProfileModal'
+import UserProfileTab from '../components/UserProfileTab'
 import CreateTaskForm from '../components/CreateTaskForm'
 import EditTaskModal from '../components/EditTaskModal'
 import ChatModal from '../components/ChatModal'
@@ -39,31 +38,47 @@ export default function DirectorPage() {
   const [selected,      setSelected]      = useState([])
   const [bulkLoading,   setBulkLoading]   = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [profileOpen,   setProfileOpen]   = useState(false)
-  const [profileEditOpen, setProfileEditOpen] = useState(false)
-  const [settingsOpen,  setSettingsOpen]  = useState(false)
   const [personnelModalOpen, setPersonnelModalOpen] = useState(false)
   const [selectedPersonnel, setSelectedPersonnel] = useState(null)
+  const [travelOrderSignedUrl, setTravelOrderSignedUrl] = useState('')
+  const [travelOrderLoading, setTravelOrderLoading] = useState(false)
+  const [presence, setPresence] = useState(session?.Status || 'Available')
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
-  const profileRef = useRef()
 
-  // Close profile dropdown on outside click
+  // Sync presence state with session status (persists across refreshes)
   useEffect(() => {
-    function handler(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    if (session?.Status) setPresence(session.Status)
+  }, [session?.Status])
+
+  // Resolve travel order file path → signed URL when the personnel detail modal opens
+  useEffect(() => {
+    setTravelOrderSignedUrl('')
+    if (!selectedPersonnel?.Status?.startsWith('Official Travel')) return
+    const raw = selectedPersonnel.Status
+    const match = raw.match(/\[TO:(.*?)\]/)
+    const path = match ? match[1] : null
+    if (!path) return
+    setTravelOrderLoading(true)
+    getSignedFileUrl(path)
+      .then(url => setTravelOrderSignedUrl(url || ''))
+      .catch(() => setTravelOrderSignedUrl(''))
+      .finally(() => setTravelOrderLoading(false))
+  }, [selectedPersonnel])
 
   // Filters for task table
   const [filterUnit,   setFilterUnit]   = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
   const [filterSearch, setFilterSearch] = useState('')
+  const [archiveSearch, setArchiveSearch] = useState('')
 
   const activeTasks   = globalData.tasks.filter(t => String(t.Archived).toUpperCase() !== 'TRUE').slice().reverse()
-  const archivedTasks = globalData.tasks.filter(t => String(t.Archived).toUpperCase() === 'TRUE').slice().reverse()
+  const rawArchivedTasks = globalData.tasks.filter(t => String(t.Archived).toUpperCase() === 'TRUE').slice().reverse()
+  const archivedTasks = rawArchivedTasks.filter(t => {
+    if (!archiveSearch) return true
+    const q = archiveSearch.toLowerCase()
+    return t.Title?.toLowerCase().includes(q) || t.EmployeeName?.toLowerCase().includes(q)
+  })
   const pendingUsers  = globalData.users.filter(u => u.AccountStatus === 'Pending' && u.Role !== 'Director').length
   const nonDirectors  = globalData.users.filter(u => u.Role !== 'Director' && u.AccountStatus === 'Active')
   const units         = [...new Set(nonDirectors.map(u => u.Unit || u.Office).filter(Boolean))]
@@ -82,7 +97,7 @@ export default function DirectorPage() {
   })
 
   // Separate tasks by assignment source using history
-  const directorDispatchedTasks = activeTasks.filter(t => {
+  const directorDispatchedTasks = filteredTasks.filter(t => {
     const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
     const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
     if (!dispatchedEntry) return false
@@ -99,7 +114,7 @@ export default function DirectorPage() {
     return isCurrentDirector || actorHasDirectorRole
   })
 
-  const unitHeadDispatchedTasks = activeTasks.filter(t => {
+  const unitHeadDispatchedTasks = filteredTasks.filter(t => {
     const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
     const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
     if (!dispatchedEntry) return false
@@ -120,7 +135,7 @@ export default function DirectorPage() {
   })
 
   // Fallback for tasks without Dispatched history - classify as director dispatched by default
-  const unassignedTasks = activeTasks.filter(t => {
+  const unassignedTasks = filteredTasks.filter(t => {
     const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
     const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
     return !dispatchedEntry
@@ -128,13 +143,6 @@ export default function DirectorPage() {
 
   // Add unassigned tasks to director dispatched tasks as fallback
   const finalDirectorDispatchedTasks = [...directorDispatchedTasks, ...unassignedTasks]
-
-  async function logout() {
-    await supabase.auth.signOut()
-    useStore.getState().clearSession()
-    localStorage.removeItem('philfida_session')
-    window.location.href = '/'
-  }
 
   async function handleArchive(taskId, archived) {
     await toggleArchive(taskId, archived)
@@ -182,7 +190,7 @@ export default function DirectorPage() {
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: '#016837' }}>
+      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: 'linear-gradient(180deg, #014d2a 0%, #016837 100%)' }}>
 
         {/* ── Branding + Notification row ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
@@ -191,7 +199,10 @@ export default function DirectorPage() {
               <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:9px;font-weight:900;color:#016837;">PF</span>' }} />
             </div>
-            <span className="text-white font-bold text-xs truncate">PhilFIDA TaskFlow</span>
+            <div>
+              <span className="text-white font-bold text-xs block leading-none">PhilFIDA TaskFlow</span>
+              {session?.Region && <span className="region-badge mt-1 block w-fit">Region {session.Region.split(' ').pop()}</span>}
+            </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <NotificationBell />
@@ -207,6 +218,7 @@ export default function DirectorPage() {
             { key: 'monitor', icon: 'bi-speedometer2',  label: 'Task Monitor' },
             { key: 'archive', icon: 'bi-archive',        label: 'Archive' },
             { key: 'users',   icon: 'bi-people-fill',    label: 'User Management', badge: pendingUsers },
+            { key: 'profile', icon: 'bi-person-circle',  label: 'My Profile' },
           ].map(item => (
             <button key={item.key} onClick={() => { setTab(item.key); setSidebarOpen(false) }}
               className={`nav-item w-full text-left ${tab === item.key ? 'active' : ''}`}>
@@ -220,46 +232,6 @@ export default function DirectorPage() {
             </button>
           ))}
         </nav>
-
-        {/* ── Profile (clickable) ── */}
-        <div className="relative flex-shrink-0 border-t border-white/10" ref={profileRef}>
-          <button
-            onClick={() => setProfileOpen(o => !o)}
-            className="w-full flex items-center gap-1.5 rounded-lg px-2 sm:px-3 py-1.5 transition-all group"
-            style={{ background: profileOpen ? 'rgba(255,255,255,0.12)' : 'transparent' }}
-          >
-            <i className="bi bi-person-badge-fill text-sm flex-shrink-0" style={{ color: '#f9921f' }} />
-            <div className="flex flex-col min-w-0 flex-1 text-left justify-center">
-              <span className="font-semibold text-white text-sm sm:text-base leading-none truncate">{session?.Name}</span>
-              <span className="text-white/40 text-[9px] sm:text-[10px] leading-none">Director — PhilFIDA</span>
-            </div>
-            <i className={`bi bi-chevron-${profileOpen ? 'down' : 'up'} text-white/50 text-[9px] sm:text-[10px] flex-shrink-0 transition-transform`} />
-          </button>
-
-          {/* Profile dropdown (appears above) */}
-          {profileOpen && (
-            <div className="absolute left-0 right-0 bottom-full bg-white/95 backdrop-blur-sm border border-white/20 shadow-lg z-50 overflow-hidden mx-2 rounded-lg mb-2">
-              <button
-                onClick={() => { setProfileOpen(false); setProfileEditOpen(true) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100/50 transition-colors text-left"
-              >
-                <i className="bi bi-person-gear text-base text-slate-500" /> Edit Profile
-              </button>
-              <button
-                onClick={() => { setProfileOpen(false); setSettingsOpen(true) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100/50 transition-colors text-left"
-              >
-                <i className="bi bi-sliders text-base text-slate-500" /> Settings
-              </button>
-              <button
-                onClick={logout}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50/50 transition-colors text-left"
-              >
-                <i className="bi bi-box-arrow-right text-base text-red-500" /> Sign Out
-              </button>
-            </div>
-          )}
-        </div>
       </aside>
 
 
@@ -267,7 +239,7 @@ export default function DirectorPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Mobile top bar */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-200 flex-shrink-0 sticky top-0 z-40 glass-effect">
           <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
             <i className="bi bi-list text-2xl" />
           </button>
@@ -289,95 +261,83 @@ export default function DirectorPage() {
               {/* ── TOP BAR: Page title + Dispatch button ── */}
               <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
-                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">Task Monitor</h2>
+                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
+                    Task Monitor <span className="text-green-600 font-medium">— {session?.Region}</span>
+                  </h2>
                   <p className="text-slate-400 text-xs mt-1">{filteredTasks.length} of {activeTasks.length} tasks shown</p>
                 </div>
-                <button
-                  onClick={() => { setDrawerOpen(true); setPersonnelModalOpen(false); setSelectedPersonnel(null); }}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm text-white shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
-                  style={{
-                    background: 'linear-gradient(135deg, #016837 0%, #027a42 50%, #016837 100%)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    boxShadow: '0 4px 12px rgba(16, 71, 17, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #027a42 0%, #038c4d 50%, #027a42 100%)';
-                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 71, 17, 0.35), inset 0 1px 0 rgba(255,255,255,0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #016837 0%, #027a42 50%, #016837 100%)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 71, 17, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)';
-                  }}
-                >
-                  <i className="bi bi-plus-lg text-base" />
-                  <span>Dispatch Task</span>
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => { setDrawerOpen(true); setPersonnelModalOpen(false); setSelectedPersonnel(null); }}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg shadow-green-900/30 hover:shadow-green-900/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 whitespace-nowrap group"
+                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}
+                  >
+                    <i className="bi bi-plus-circle-fill text-base group-hover:rotate-90 transition-transform duration-300" />
+                    <span>Dispatch Task</span>
+                  </button>
+                </div>
               </div>
 
               {/* ── PERSONNEL STATUS BAR ── */}
-              <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-2 border-b border-slate-200 bg-white flex-shrink-0">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-                    {/* Minimal personnel counts - consistent across all sizes */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-1 rounded border border-emerald-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        {personnelGroups['Available'].length} Available
-                      </span>
-                      <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-1 rounded border border-blue-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        {personnelGroups['Official Travel'].length} Travel
-                      </span>
-                      <span className="flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 px-1.5 py-1 rounded border border-red-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                        {personnelGroups['On Leave'].length} Leave
-                      </span>
-                      {nonDirectors.length === 0 && (
-                        <span className="text-[10px] text-slate-400">No personnel</span>
-                      )}
-                    </div>
+              <div className="px-4 md:px-8 py-2.5 border-b border-slate-200 bg-white flex-shrink-0 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-0.5">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 shadow-sm whitespace-nowrap">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-[11px] font-bold uppercase tracking-tight">{personnelGroups['Available'].length} Available</span>
                   </div>
-                  {/* View All button - minimal */}
-                  {nonDirectors.length > 0 && (
-                    <button
-                      onClick={() => setPersonnelModalOpen(true)}
-                      className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors flex-shrink-0"
-                    >
-                      <i className="bi bi-people-fill text-green-700 text-xs" />
-                      View
-                      <span className="text-[10px] text-slate-400">({nonDirectors.length})</span>
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100 shadow-sm whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-200" />
+                    <span className="text-[11px] font-bold uppercase tracking-tight">{personnelGroups['Official Travel'].length} Travel</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 rounded-full border border-rose-100 shadow-sm whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-200" />
+                    <span className="text-[11px] font-bold uppercase tracking-tight">{personnelGroups['On Leave'].length} Leave</span>
+                  </div>
                 </div>
+                
+                {nonDirectors.length > 0 && (
+                  <button
+                    onClick={() => setPersonnelModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+                  >
+                    <i className="bi bi-people-fill text-green-700" />
+                    Personnel <span className="text-slate-400 font-medium">({nonDirectors.length})</span>
+                  </button>
+                )}
               </div>
 
               {/* ── FILTER BAR ── */}
-              <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-3 border-b border-slate-200 bg-white flex-shrink-0 flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <div className="relative flex-1 min-w-[100px] sm:min-w-[120px] max-w-xs search-container">
-                  <i className="bi bi-search absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] sm:text-xs search-icon" />
+              <div className="px-4 md:px-8 py-3 bg-slate-50/50 border-b border-slate-200 flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[200px] max-w-sm group">
+                  <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-600 transition-colors" />
                   <input
-                    className="input pl-8 sm:pl-10 pr-2.5 sm:pr-3 py-1 sm:py-1.5 text-[10px] sm:text-xs search-input"
-                    placeholder="Search..."
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
+                    placeholder="Search task or personnel..."
                     value={filterSearch}
                     onChange={e => setFilterSearch(e.target.value)}
                   />
                 </div>
-                <select className="input py-1 sm:py-1.5 text-[10px] sm:text-xs flex-1 min-w-[70px] sm:min-w-[90px] max-w-[110px] sm:max-w-[130px]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                  <option value="All">All</option>
-                  <option value="Assigned">Assigned</option>
-                  <option value="Received">Received</option>
-                  <option value="Completed">Completed</option>
-                </select>
-                <select className="input py-1 sm:py-1.5 text-[10px] sm:text-xs flex-1 min-w-[80px] sm:min-w-[90px] max-w-[120px] sm:max-w-[160px]" value={filterUnit} onChange={e => setFilterUnit(e.target.value)}>
-                  <option value="All">Units</option>
-                  {units.map(u => <option key={u}>{u}</option>)}
-                </select>
-                {(filterUnit !== 'All' || filterStatus !== 'All' || filterSearch) && (
-                  <button onClick={() => { setFilterUnit('All'); setFilterStatus('All'); setFilterSearch('') }}
-                    className="btn-ghost text-[10px] sm:text-xs px-1.5 sm:px-2 py-1 sm:py-1.5 text-slate-400 flex-shrink-0">
-                    <i className="bi bi-x-circle" /><span className="hidden sm:inline ms-1">Clear</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  <select className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm cursor-pointer" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                    <option value="All">All Status</option>
+                    <option value="Assigned">Assigned</option>
+                    <option value="Received">Received</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                  <select className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm cursor-pointer" value={filterUnit} onChange={e => setFilterUnit(e.target.value)}>
+                    <option value="All">All Units</option>
+                    {units.map(u => <option key={u}>{u}</option>)}
+                  </select>
+                  {(filterUnit !== 'All' || filterStatus !== 'All' || filterSearch) && (
+                    <button onClick={() => { setFilterUnit('All'); setFilterStatus('All'); setFilterSearch('') }}
+                      className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Clear Filters">
+                      <i className="bi bi-x-circle-fill text-lg" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* ── TASK TABLE ── */}
@@ -394,8 +354,8 @@ export default function DirectorPage() {
                   <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
                     {finalDirectorDispatchedTasks.length === 0 ? (
                       <div className="col-span-full text-center py-12 text-slate-400">
-                        <i className="bi bi-person-badge text-2xl block mb-2 opacity-30" />
-                        <p className="text-sm">No tasks dispatched by you yet</p>
+                        <i className={`bi ${filterSearch || filterStatus !== 'All' || filterUnit !== 'All' ? 'bi-search' : 'bi-person-badge'} text-2xl block mb-2 opacity-30`} />
+                        <p className="text-sm">{(filterSearch || filterStatus !== 'All' || filterUnit !== 'All') ? 'No search results found.' : 'No tasks dispatched by you yet'}</p>
                       </div>
                     ) : finalDirectorDispatchedTasks.map((t, idx) => {
                       const emp = globalData.users.find(u => String(u.ID) === String(t.EmployeeID))
@@ -433,8 +393,8 @@ export default function DirectorPage() {
                   <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
                     {unitHeadDispatchedTasks.length === 0 ? (
                       <div className="col-span-full text-center py-12 text-slate-400">
-                        <i className="bi bi-person-check text-2xl block mb-2 opacity-30" />
-                        <p className="text-sm">No tasks assigned by unit heads</p>
+                        <i className={`bi ${filterSearch || filterStatus !== 'All' || filterUnit !== 'All' ? 'bi-search' : 'bi-person-check'} text-2xl block mb-2 opacity-30`} />
+                        <p className="text-sm">{(filterSearch || filterStatus !== 'All' || filterUnit !== 'All') ? 'No search results found.' : 'No tasks assigned by unit heads'}</p>
                       </div>
                     ) : unitHeadDispatchedTasks.map((t, idx) => {
                       const emp = globalData.users.find(u => String(u.ID) === String(t.EmployeeID))
@@ -479,11 +439,38 @@ export default function DirectorPage() {
             <div className="flex flex-col h-full">
               {/* Header */}
               <div className="flex flex-col gap-3 px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 min-w-0">
-                <div className="min-w-0">
-                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">Archive Repository</h2>
-                  <p className="text-slate-400 text-xs mt-1">{archivedTasks.length} archived tasks</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
+                      Archive Repository <span className="text-green-600 font-medium">— {session?.Region}</span>
+                    </h2>
+                    <p className="text-slate-400 text-xs mt-1">
+                      {archiveSearch ? `${archivedTasks.length} matching tasks` : `${archivedTasks.length} archived tasks`}
+                    </p>
+                  </div>
+                  
+                  {/* Archive Search */}
+                  <div className="relative w-full sm:max-w-[240px] search-container">
+                    <i className="bi bi-search absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] sm:text-xs search-icon" />
+                    <input
+                      className="input pl-8 sm:pl-10 pr-2.5 sm:pr-3 py-1.5 sm:py-2 text-[10px] sm:text-xs search-input w-full"
+                      placeholder="Search archive..."
+                      value={archiveSearch}
+                      onChange={e => setArchiveSearch(e.target.value)}
+                    />
+                    {archiveSearch && (
+                      <button 
+                        onClick={() => setArchiveSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        <i className="bi bi-x-circle-fill text-[10px] sm:text-xs" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {selected.length > 0 && (
+              </div>
+              {selected.length > 0 && (
+                <div className="px-4 md:px-6 lg:px-8 py-2 border-b border-slate-200 bg-white flex-shrink-0">
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <button
@@ -522,8 +509,8 @@ export default function DirectorPage() {
                       {selected.length} task{selected.length > 1 ? 's' : ''} selected
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Task Cards */}
               <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-4 pb-0">
@@ -532,8 +519,8 @@ export default function DirectorPage() {
                   <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
                     {archivedTasks.length === 0 ? (
                       <div className="col-span-full text-center py-16 text-slate-400">
-                        <i className="bi bi-archive text-3xl block mb-2 opacity-30" />
-                        No archived tasks yet.
+                        <i className={`bi ${archiveSearch ? 'bi-search' : 'bi-archive'} text-3xl block mb-2 opacity-30`} />
+                        {archiveSearch ? 'No archived tasks match your search.' : 'No archived tasks yet.'}
                       </div>
                     ) : archivedTasks.map(t => {
                       const emp = globalData.users.find(u => String(u.ID) === String(t.EmployeeID))
@@ -582,6 +569,11 @@ export default function DirectorPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ── PROFILE TAB ── */}
+          {tab === 'profile' && (
+            <UserProfileTab presence={presence} setPresence={setPresence} />
           )}
 
         </main>
@@ -658,9 +650,6 @@ export default function DirectorPage() {
       {chat        && <ChatModal      taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}
       {editTask    && <EditTaskModal  task={editTask}      onClose={() => setEditTask(null)} onSync={sync} />}
       {lightboxFile && <Lightbox      file={lightboxFile}  onClose={() => setLightboxFile(null)} />}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} session={session} />}
-      {profileEditOpen && <DirectorProfileModal onClose={() => setProfileEditOpen(false)} />}
-
       {/* ── PERSONNEL MODAL ── */}
       {personnelModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -803,7 +792,7 @@ export default function DirectorPage() {
 
             {/* Content */}
             <div className="p-5 space-y-4">
-              {/* Status */}
+              {/* Status Badge */}
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current Status</p>
                 <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold ${
@@ -817,7 +806,108 @@ export default function DirectorPage() {
                   }`} />
                   {selectedPersonnel.Status?.split(' — ')?.[0] || selectedPersonnel.Status || 'Available'}
                 </div>
-                {(selectedPersonnel.Status?.includes(' — ')) && (
+
+                {/* ── Official Travel: parsed detail fields ── */}
+                {selectedPersonnel.Status?.startsWith('Official Travel') && (() => {
+                  const raw = selectedPersonnel.Status
+                  const travelOrderMatch = raw.match(/\[TO:(.*?)\]/)
+                  const travelOrderUrl = travelOrderMatch ? travelOrderMatch[1] : null
+                  const clean = raw.replace(/\[TO:.*?\]/, '').trim()
+                  const detail = clean.split(' — ')?.[1] || ''
+                  // Parse: "eventName at location (dateStart to dateEnd)"
+                  const parenMatch = detail.match(/^(.*?)\s+\(([^)]+)\)\s*$/)
+                  const beforeParen = parenMatch ? parenMatch[1] : detail
+                  const dateRange   = parenMatch ? parenMatch[2] : ''
+                  const atIdx       = beforeParen.lastIndexOf(' at ')
+                  const eventName   = atIdx > -1 ? beforeParen.slice(0, atIdx).trim() : beforeParen.trim()
+                  const location    = atIdx > -1 ? beforeParen.slice(atIdx + 4).trim() : ''
+                  return (
+                    <div className="mt-3 space-y-2.5">
+                      {eventName && (
+                        <div className="flex items-start gap-2.5">
+                          <i className="bi bi-calendar-event-fill text-blue-400 text-sm mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Travel Name</p>
+                            <p className="text-sm text-slate-700 font-medium leading-snug">{eventName}</p>
+                          </div>
+                        </div>
+                      )}
+                      {location && (
+                        <div className="flex items-start gap-2.5">
+                          <i className="bi bi-geo-alt-fill text-blue-400 text-sm mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Venue</p>
+                            <p className="text-sm text-slate-700 font-medium leading-snug">{location}</p>
+                          </div>
+                        </div>
+                      )}
+                      {dateRange && (
+                        <div className="flex items-start gap-2.5">
+                          <i className="bi bi-calendar-range-fill text-blue-400 text-sm mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Date</p>
+                            <p className="text-sm text-slate-700 font-medium leading-snug">{dateRange}</p>
+                          </div>
+                        </div>
+                      )}
+                      {travelOrderUrl ? (
+                        <div className="pt-2 border-t border-slate-100">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Travel Order File</p>
+                          {travelOrderLoading ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                              <span className="w-3.5 h-3.5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+                              Preparing file…
+                            </div>
+                          ) : travelOrderSignedUrl ? (
+                            <div className="flex gap-2">
+                              {/* VIEW — opens in new browser tab */}
+                              <button
+                                onClick={() => window.open(travelOrderSignedUrl, '_blank')}
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 active:bg-blue-200 transition-colors font-semibold text-xs"
+                              >
+                                <i className="bi bi-eye-fill text-sm" />
+                                View
+                              </button>
+                              {/* DOWNLOAD — fetch blob so browser saves to disk */}
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(travelOrderSignedUrl, { mode: 'cors' })
+                                    const blob = await res.blob()
+                                    const fname = decodeURIComponent(
+                                      travelOrderSignedUrl.split('?')[0].split('/').pop()
+                                    ) || 'travel-order'
+                                    const a = document.createElement('a')
+                                    a.href = URL.createObjectURL(blob)
+                                    a.download = fname
+                                    document.body.appendChild(a); a.click()
+                                    document.body.removeChild(a); URL.revokeObjectURL(a.href)
+                                  } catch {
+                                    window.open(travelOrderSignedUrl, '_blank')
+                                  }
+                                }}
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 active:bg-emerald-200 transition-colors font-semibold text-xs"
+                              >
+                                <i className="bi bi-download text-sm" />
+                                Download
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-red-400 italic">Could not load file. Try again.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="pt-2 border-t border-slate-100">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Travel Order File</p>
+                          <p className="text-xs text-slate-400 italic">No file attached</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* ── On Leave: simple detail ── */}
+                {selectedPersonnel.Status?.startsWith('On Leave') && selectedPersonnel.Status?.includes(' — ') && (
                   <p className="mt-2 text-sm text-slate-600 italic">
                     {selectedPersonnel.Status.split(' — ')[1]}
                   </p>
@@ -954,7 +1044,7 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover-lift animate-in-up">
       {/* ── SECTION 1: Personnel & Actions Header ── */}
       <div className="bg-green-50/70 px-3 sm:px-4 py-2 sm:py-3 border-b border-green-100">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
@@ -998,9 +1088,9 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
         {/* Document Number Badge - Modern Stacked Layout */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
           <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-[#016837] to-[#027a42] text-white rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 shadow-sm">
-              <i className="bi bi-file-earmark-text text-white/90 text-[10px] sm:text-xs" />
-              <span className="text-[10px] sm:text-xs font-bold tracking-wide">
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
+              <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
               </span>
             </span>
@@ -1098,7 +1188,7 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className={`bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden ${selected ? 'bg-red-50/60 border-red-200' : ''}`}>
+    <div className={`bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover-lift animate-in-up ${selected ? 'bg-red-50/60 border-red-200' : ''}`}>
       {/* ── SECTION 1: Checkbox, Personnel & Actions ── */}
       <div className={`px-3 sm:px-4 py-2 sm:py-3 border-b border-red-100 ${selected ? 'bg-red-50/50' : 'bg-red-50/70'}`}>
         <div className="flex items-center justify-between gap-2 sm:gap-3">

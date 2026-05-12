@@ -2,18 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { loginUser, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES } from '../lib/api'
+import { loginUser, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES, REGIONS } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 
 export default function LoginPage() {
   const [tab,         setTab]         = useState('login')
   const [loginId,     setLoginId]     = useState('')
   const [loginPass,   setLoginPass]   = useState('')
+  const [loginRegion, setLoginRegion] = useState('Region I')
   const [showPass,    setShowPass]    = useState(false)
   const [regId,       setRegId]       = useState('')
   const [regName,     setRegName]     = useState('')
   const [regEmail,    setRegEmail]    = useState('')
   const [regUnit,     setRegUnit]     = useState('')
+  const [regRegion,   setRegRegion]   = useState('Region I')
   const [regRole,     setRegRole]     = useState('Employee')
   const [regPass,     setRegPass]     = useState('')
   const [showRegPass, setShowRegPass] = useState(false)
@@ -153,10 +155,14 @@ The application cannot function until this is resolved.
 
     try {
       // C2/C3 FIX: loginUser queries only the matching user by ID — never fetches all users
-      const result = await loginUser(loginId, loginPass)
+      const result = await loginUser(loginId, loginPass, loginRegion)
 
       if (result.error === 'invalid_credentials') {
         setError('Invalid Personnel ID or Password.')
+        return
+      }
+      if (result.error === 'invalid_region') {
+        setError(`Access denied. Your account is not registered in ${loginRegion}.`)
         return
       }
       if (result.error === 'pending') {
@@ -203,16 +209,16 @@ The application cannot function until this is resolved.
   // ── Register ────────────────────────────────────────────────
   async function handleRegister(e) {
     e.preventDefault()
-    if (!regId || !regName || !regUnit || !regRole || !regPass) { setError('All fields are required.'); return }
+    if (!regId || !regName || !regUnit || !regRole || !regPass || !regRegion) { setError('All fields are required.'); return }
     setLoading(true); setError('')
     try {
-      const result = await registerUser({ id: regId.trim(), name: regName, email: regEmail, unit: regUnit, role: regRole, pass: regPass })
+      const result = await registerUser({ id: regId.trim(), name: regName, email: regEmail, unit: regUnit, role: regRole, pass: regPass, region: regRegion })
       if (result === 'SUCCESS') {
         setSuccess('Registration submitted! Your account is pending approval by the Director.')
         setTab('login')
         setRegId(''); setRegName(''); setRegEmail(''); setRegUnit(''); setRegRole('Employee'); setRegPass('')
       } else if (result === 'EXISTS') {
-        setError('This Personnel ID is already registered.')
+        setError('This Personnel ID or Email is already registered.')
       }
     } catch { setError('Registration failed. Please try again.') }
     finally  { setLoading(false) }
@@ -371,6 +377,26 @@ The application cannot function until this is resolved.
                   {/* Manual login form */}
                   <form onSubmit={handleLogin} className="space-y-5">
                     <div>
+                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Region</label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <i className="bi bi-geo-alt-fill text-sm" />
+                        </div>
+                        <select
+                          className="w-full pl-12 pr-4 py-3 lg:py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm lg:text-lg font-medium appearance-none"
+                          value={loginRegion}
+                          onChange={e => setLoginRegion(e.target.value)}
+                          required
+                        >
+                          {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                          <i className="bi bi-chevron-down text-sm" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
                       <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Personnel ID</label>
                       <div className="relative">
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -510,6 +536,23 @@ The application cannot function until this is resolved.
                           <option value="Unit Head">Unit Head</option>
                           <option value="Director">Director</option>
                         </select>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Assigned Region</label>
+                        <div className="relative">
+                          <select
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 appearance-none"
+                            value={regRegion}
+                            onChange={e => setRegRegion(e.target.value)}
+                            required
+                          >
+                            {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                            <i className="bi bi-chevron-down text-sm" />
+                          </div>
+                        </div>
                       </div>
                     </div>
 

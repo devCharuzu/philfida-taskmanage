@@ -318,13 +318,53 @@
   border: 0;
 }
 
-/* Print styles */
-@media print {
-  .no-print { display: none !important; }
-  .print-only { display: block !important; }
-  
-  .card {
-    border: 1px solid #000;
-    background: #fff;
+/* ===== PREMIUM UI UTILITIES ===== */
+@layer utilities {
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .premium-shadow {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  }
+
+  .hover-lift {
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.1);
+  }
+
+  .animate-in-up {
+    animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(15px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .region-badge {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 }

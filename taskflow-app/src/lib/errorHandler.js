@@ -58,7 +58,7 @@ export function handleError(error, fallbackMessage = ERROR_MESSAGES.GENERAL) {
       case '28P01':
         return 'Database connection error. Please try again later.'
       default:
-        return ERROR_MESSAGES.DATABASE
+        return error.message || ERROR_MESSAGES.DATABASE
     }
   }
   

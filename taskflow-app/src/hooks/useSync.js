@@ -67,7 +67,7 @@ export function useSync() {
     const session = useStore.getState().session
     if (!session) return
     try {
-      const data = await getData(session.ID)
+      const data = await getData(session.ID, session.Region || 'Central Office')
       if (data) useStore.getState().setGlobalData(data)
       return data
     } catch (e) {
@@ -77,6 +77,8 @@ export function useSync() {
 
   useEffect(() => {
     if (!sessionId) return
+
+    const role = useStore.getState().session?.Role
 
     // Initial fetch
     sync()
@@ -133,6 +135,23 @@ export function useSync() {
           console.warn(`Failed to create ${table} subscription:`, err)
         }
       })
+
+      // User list drives Director / Unit Head roster; poll alone can lag minutes.
+      if (role === 'Director' || role === 'Unit Head') {
+        try {
+          const usersCh = supabase
+            .channel(`users-roster-${sessionId}`)
+            .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'Users' },
+              () => sync()
+            )
+            .subscribe()
+          channelsRef.current.push(usersCh)
+        } catch (err) {
+          console.warn('Failed to create Users subscription:', err)
+        }
+      }
     }
 
     // M6 FIX: When realtime is active, poll every 2 min as a heartbeat only.

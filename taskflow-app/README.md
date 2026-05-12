@@ -431,7 +431,9 @@ See [supabase-migration-v2.sql](./taskflow-app/supabase-migration-v2.sql) for co
 ## 📞 Support & Documentation
 
 For detailed system architecture, database mappings, and advanced configurations, see:
+- [PHILFIDA_TASKFLOW_MANUAL.md](./PHILFIDA_TASKFLOW_MANUAL.md) — Complete System Manual & User Guide
 - [SYSTEM_DOCUMENTATION.md](./SYSTEM_DOCUMENTATION.md) — Comprehensive technical documentation
+
 - [Supabase Documentation](https://supabase.com/docs) — Backend setup & configuration
 - [React Documentation](https://react.dev) — Frontend framework
 - [Tailwind CSS](https://tailwindcss.com/docs) — Styling utility framework

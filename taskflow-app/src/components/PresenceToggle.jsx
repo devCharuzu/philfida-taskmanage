@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { updatePresence } from '../lib/api'
+import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { updatePresence, uploadFiles } from '../lib/api'
 
 // ── Exported helper: normalizes stored status string to base key ──
 export function normalizeStatus(raw) {
@@ -38,49 +39,49 @@ const OPTIONS = [
   },
 ]
 
-// ── Change Confirmation Modal ─────────────────────────────────
 function ChangeConfirmModal({ current, target, onConfirm, onCancel }) {
   const from = OPTIONS.find(o => o.value === current)
   const to   = OPTIONS.find(o => o.value === target)
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
       onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="px-5 py-4 flex items-center gap-3"
-          style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
-          <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-            <i className="bi bi-arrow-left-right text-white text-base" />
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        <div className="px-6 py-5 flex items-center gap-4"
+          style={{ background: 'linear-gradient(135deg, #014d2a, #016837)' }}>
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
+            <i className="bi bi-arrow-left-right text-white text-lg" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-none">Change Availability</p>
-            <p className="text-green-300 text-xs mt-0.5">Confirm status change</p>
+            <p className="text-white font-black text-sm uppercase tracking-tight leading-none">Change Availability</p>
+            <p className="text-green-300/80 text-[10px] mt-1 font-bold uppercase tracking-widest">Confirmation Required</p>
           </div>
-          <button onClick={onCancel} className="ml-auto text-green-300 hover:text-white text-xl leading-none">&times;</button>
         </div>
-        <div className="p-5">
-          <div className="flex items-center gap-3 mb-5">
-            <span className={`flex-1 text-center py-2 rounded-xl text-xs font-bold border ${
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className={`flex-1 text-center py-2 rounded-lg text-[10px] font-black uppercase border shadow-sm ${
               current === 'Available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
               current === 'Official Travel' ? 'bg-blue-50 text-blue-700 border-blue-200' :
               'bg-red-50 text-red-700 border-red-200'
             }`}>{from?.label || current}</span>
             <i className="bi bi-arrow-right text-slate-400 flex-shrink-0" />
-            <span className={`flex-1 text-center py-2 rounded-xl text-xs font-bold border ${
+            <span className={`flex-1 text-center py-2 rounded-lg text-[10px] font-black uppercase border shadow-sm ${
               target === 'Available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
               target === 'Official Travel' ? 'bg-blue-50 text-blue-700 border-blue-200' :
               'bg-red-50 text-red-700 border-red-200'
             }`}>{to?.label || target}</span>
           </div>
-          <p className="text-slate-600 text-sm mb-5 text-center">
-            Are you sure you want to change your availability?
+          <p className="text-slate-600 text-[13px] mb-6 text-center font-medium leading-relaxed">
+            Are you sure you want to update your current availability status? This action will be reflected in real-time.
           </p>
           <div className="flex gap-3">
-            <button onClick={onCancel} className="btn-secondary flex-1 py-2.5">Cancel</button>
-            <button onClick={onConfirm} className="btn-primary flex-1 py-2.5">Confirm</button>
+            <button onClick={onCancel} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100">Cancel</button>
+            <button onClick={onConfirm} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-green-900/20 active:scale-95 transition-all"
+              style={{ background: 'linear-gradient(135deg, #016837, #027a42)' }}>Confirm</button>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -92,69 +93,89 @@ function TravelModal({ onConfirm, onCancel }) {
   const [dateEnd,   setDateEnd]   = useState('')
   const [error,     setError]     = useState('')
 
+  const fileInputRef = useRef(null)
+  const [files, setFiles] = useState([])
+
   function handleSubmit(e) {
     e.preventDefault()
     if (!eventName || !location || !dateStart || !dateEnd) { setError('All fields are required.'); return }
+    if (files.length === 0) { setError('Travel Order file is required.'); return }
     if (dateEnd < dateStart) { setError('End date must be after start date.'); return }
-    onConfirm({ eventName, location, dateStart, dateEnd })
+    onConfirm({ eventName, location, dateStart, dateEnd, files })
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-      onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4"
-          style={{ background: 'linear-gradient(135deg,#1e40af,#2563eb)' }}>
-          <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-            <i className="bi bi-airplane-fill text-white text-base" />
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9998] animate-in fade-in duration-300" />
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
+        onClick={e => e.target === e.currentTarget && onCancel()}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-4 px-6 py-5 rounded-t-2xl"
+            style={{ background: 'linear-gradient(135deg, #1e40af, #2563eb)' }}>
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
+              <i className="bi bi-airplane-fill text-white text-lg" />
+            </div>
+            <div>
+              <p className="text-white font-black text-sm uppercase tracking-tight leading-none">Official Travel</p>
+              <p className="text-blue-200/80 text-[10px] mt-1 font-bold uppercase tracking-widest">Travel Order Required</p>
+            </div>
           </div>
-          <div>
-            <p className="text-white font-bold text-sm leading-none">Official Travel</p>
-            <p className="text-blue-200 text-xs mt-0.5">Enter your travel details</p>
-          </div>
-          <button onClick={onCancel} className="ml-auto text-blue-200 hover:text-white text-xl leading-none">&times;</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg px-3 py-2"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
-          <div>
-            <label className="label">Event / Activity Name</label>
-            <input className="input" placeholder="e.g. Regional Fiber Industry Summit"
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Event / Activity Name</label>
+            <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+              placeholder="e.g. Regional Fiber Industry Summit"
               value={eventName} onChange={e => setEventName(e.target.value)} autoFocus />
           </div>
-          <div>
-            <label className="label">Location / Venue</label>
-            <input className="input" placeholder="e.g. Manila Hotel, Manila"
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location / Venue</label>
+            <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+              placeholder="e.g. Manila Hotel, Manila"
               value={location} onChange={e => setLocation(e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Date Start</label>
-              <input className="input" type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Start</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+                type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
-            <div>
-              <label className="label">Date End</label>
-              <input className="input" type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date End</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+                type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
             </div>
           </div>
-          {dateStart && dateEnd && eventName && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-700 space-y-1">
-              <p className="font-bold">{eventName}</p>
-              <p><i className="bi bi-geo-alt-fill mr-1" />{location || '—'}</p>
-              <p><i className="bi bi-calendar-range mr-1" />
-                {new Date(dateStart).toLocaleDateString('en-PH', { dateStyle: 'medium' })} — {new Date(dateEnd).toLocaleDateString('en-PH', { dateStyle: 'medium' })}
-              </p>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+              <span>Travel Order Attachment</span>
+              <span className="text-red-500 font-black">REQUIRED</span>
+            </label>
+            <div className="relative">
+              <input type="file" ref={fileInputRef} className="hidden" 
+                onChange={e => setFiles(Array.from(e.target.files))} />
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed transition-all
+                  ${files.length > 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50'}`}>
+                <i className={`bi ${files.length > 0 ? 'bi-file-earmark-check-fill' : 'bi-cloud-upload'} text-lg`} />
+                <span className="text-xs font-bold truncate">
+                  {files.length > 0 ? files[0].name : 'Select Travel Order File'}
+                </span>
+              </button>
             </div>
-          )}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onCancel} className="btn-secondary flex-1 py-2.5">Cancel</button>
-            <button type="submit" className="flex-1 py-2.5 text-white font-bold text-sm rounded-xl"
-              style={{ background: 'linear-gradient(135deg,#1e40af,#2563eb)' }}>
-              <i className="bi bi-check-lg mr-1" /> Confirm Travel
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onCancel} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100">Cancel</button>
+            <button type="submit" className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+              style={{ background: 'linear-gradient(135deg, #1e40af, #2563eb)' }}>
+              Confirm Travel
             </button>
           </div>
         </form>
       </div>
     </div>
+    </>,
+    document.body
   )
 }
 
@@ -165,39 +186,45 @@ function LeaveModal({ onConfirm, onCancel }) {
   const [dateStart, setDateStart] = useState('')
   const [dateEnd,   setDateEnd]   = useState('')
   const [error,     setError]     = useState('')
+  const [files, setFiles] = useState([])
+  const fileInputRef = useRef(null)
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!leaveType || !reason || !dateStart || !dateEnd) { setError('All fields are required.'); return }
-    if (dateEnd < dateStart) { setError('End date must be after start date.'); return }
-    onConfirm({ leaveType, reason, dateStart, dateEnd })
+    if (!leaveType) { setError('Please select a leave type.'); return }
+    if (!reason.trim()) { setError('Please provide a reason for the leave.'); return }
+    if (!dateStart || !dateEnd) { setError('Start and end dates are required.'); return }
+    if (new Date(dateStart) > new Date(dateEnd)) { setError('Start date cannot be after end date.'); return }
+    if (files.length === 0) { setError('Leave attachment is required.'); return }
+    onConfirm({ leaveType, reason, dateStart, dateEnd, files })
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-      onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4"
-          style={{ background: 'linear-gradient(135deg,#991b1b,#dc2626)' }}>
-          <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-            <i className="bi bi-calendar-x-fill text-white text-base" />
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9998] animate-in fade-in duration-300" />
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
+        onClick={e => e.target === e.currentTarget && onCancel()}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-4 px-6 py-5"
+            style={{ background: 'linear-gradient(135deg, #991b1b, #dc2626)' }}>
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
+              <i className="bi bi-calendar-x-fill text-white text-lg" />
+            </div>
+            <div>
+              <p className="text-white font-black text-sm uppercase tracking-tight leading-none">On Leave</p>
+              <p className="text-red-200/80 text-[10px] mt-1 font-bold uppercase tracking-widest">Leave Details Required</p>
+            </div>
           </div>
-          <div>
-            <p className="text-white font-bold text-sm leading-none">On Leave</p>
-            <p className="text-red-200 text-xs mt-0.5">Enter your leave details</p>
-          </div>
-          <button onClick={onCancel} className="ml-auto text-red-200 hover:text-white text-xl leading-none">&times;</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg px-3 py-2"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
-          <div>
-            <label className="label">Type of Leave</label>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Type of Leave</label>
             <div className="grid grid-cols-2 gap-1.5">
               {LEAVE_TYPES.map(type => {
                 const active = leaveType === type
                 return (
                   <button key={type} type="button" onClick={() => setLeaveType(type)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-all
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase text-left transition-all
                       ${active ? 'bg-red-600 text-white border-red-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-red-50 hover:border-red-200'}`}>
                     <div className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center
                       ${active ? 'border-white' : 'border-slate-300'}`}>
@@ -209,47 +236,62 @@ function LeaveModal({ onConfirm, onCancel }) {
               })}
             </div>
           </div>
-          <div>
-            <label className="label">Reason</label>
-            <textarea className="input resize-none" rows={2} placeholder="Brief reason for leave..."
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason</label>
+            <textarea className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium resize-none" 
+              rows={2} placeholder="Brief reason for leave..."
               value={reason} onChange={e => setReason(e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Date Start</label>
-              <input className="input" type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Start</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
+                type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
-            <div>
-              <label className="label">Date End</label>
-              <input className="input" type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date End</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
+                type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
             </div>
           </div>
-          {leaveType && dateStart && dateEnd && (
-            <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-xs text-red-700 space-y-1">
-              <p className="font-bold">{leaveType}</p>
-              {reason && <p className="italic">"{reason}"</p>}
-              <p><i className="bi bi-calendar-range mr-1" />
-                {new Date(dateStart).toLocaleDateString('en-PH', { dateStyle: 'medium' })} — {new Date(dateEnd).toLocaleDateString('en-PH', { dateStyle: 'medium' })}
-              </p>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+              <span>Leave File Attachment</span>
+              <span className="text-red-500 font-black">REQUIRED</span>
+            </label>
+            <div className="relative">
+              <input type="file" ref={fileInputRef} className="hidden" 
+                onChange={e => setFiles(Array.from(e.target.files))} />
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed transition-all
+                  ${files.length > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-red-300 hover:bg-red-50'}`}>
+                <i className={`bi ${files.length > 0 ? 'bi-file-earmark-check-fill' : 'bi-cloud-upload'} text-lg`} />
+                <span className="text-xs font-bold truncate">
+                  {files.length > 0 ? files[0].name : 'Select Leave File'}
+                </span>
+              </button>
             </div>
-          )}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onCancel} className="btn-secondary flex-1 py-2.5">Cancel</button>
-            <button type="submit" className="flex-1 py-2.5 text-white font-bold text-sm rounded-xl"
-              style={{ background: 'linear-gradient(135deg,#991b1b,#dc2626)' }}>
-              <i className="bi bi-check-lg mr-1" /> Confirm Leave
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onCancel} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100">Cancel</button>
+            <button type="submit" className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-red-900/20 active:scale-95 transition-all"
+              style={{ background: 'linear-gradient(135deg, #991b1b, #dc2626)' }}>
+              Confirm Leave
             </button>
           </div>
         </form>
       </div>
     </div>
+    </>,
+    document.body
   )
 }
 
 // ── Main Component ────────────────────────────────────────────
-export default function PresenceToggle({ value, userId, onChange }) {
+export default function PresenceToggle({ value, userId, onChange, onSync, size = 'small' }) {
   const [modal,          setModal]          = useState(null)  // 'travel' | 'leave' | null
   const [pendingTarget,  setPendingTarget]  = useState(null)  // what they want to switch to
+  const [loading,        setLoading]        = useState(false)
 
   const displayValue = normalizeStatus(value)
 
@@ -281,10 +323,15 @@ export default function PresenceToggle({ value, userId, onChange }) {
   }
 
   // After confirming change — open the appropriate detail modal or set directly
-  function handleChangeConfirmed() {
+  async function handleChangeConfirmed() {
     setModal(null)
     if (pendingTarget === 'Available') {
-      commitStatus('Available', 'Available')
+      setLoading(true)
+      try {
+        await commitStatus('Available', 'Available')
+      } finally {
+        setLoading(false)
+      }
     } else if (pendingTarget === 'Official Travel') {
       setModal('travel')
     } else if (pendingTarget === 'On Leave') {
@@ -296,18 +343,54 @@ export default function PresenceToggle({ value, userId, onChange }) {
   async function commitStatus(displayKey, fullStatus) {
     onChange?.(fullStatus)
     await updatePresence(userId, fullStatus)
+    onSync?.()
   }
 
   async function confirmTravel(details) {
     setModal(null)
-    const full = `Official Travel — ${details.eventName}, ${details.location} (${details.dateStart} to ${details.dateEnd})`
-    await commitStatus('Official Travel', full)
+    setLoading(true)
+    try {
+      let fileInfo = ''
+      if (details.files?.length > 0) {
+        // C1/C2/C3: Ensure file is uploaded first
+        // uploadFiles() returns a pipe-delimited STRING of paths (e.g. "uploads/abc.pdf")
+        // NOT an array — use .split('|')[0] to get the first path, not [0] (first character).
+        const urlStr = await uploadFiles(details.files)
+        const firstPath = urlStr ? urlStr.split('|')[0] : null
+        if (firstPath) {
+          fileInfo = ` [TO:${firstPath}]`
+        }
+      }
+
+      const fullStatus = `Official Travel — ${details.eventName} at ${details.location} (${details.dateStart} to ${details.dateEnd})${fileInfo}`
+      await commitStatus('travel', fullStatus)
+    } catch (error) {
+      console.error('Travel update failed:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function confirmLeave(details) {
     setModal(null)
-    const full = `On Leave — ${details.leaveType}: ${details.reason} (${details.dateStart} to ${details.dateEnd})`
-    await commitStatus('On Leave', full)
+    setLoading(true)
+    try {
+      let fileInfo = ''
+      if (details.files?.length > 0) {
+        const urlStr = await uploadFiles(details.files)
+        const firstPath = urlStr ? urlStr.split('|')[0] : null
+        if (firstPath) {
+          fileInfo = ` [TO:${firstPath}]`
+        }
+      }
+
+      const full = `On Leave — ${details.leaveType}: ${details.reason} (${details.dateStart} to ${details.dateEnd})${fileInfo}`
+      await commitStatus('On Leave', full)
+    } catch (error) {
+      console.error('Leave update failed:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function cancelModal() {
@@ -317,26 +400,35 @@ export default function PresenceToggle({ value, userId, onChange }) {
 
   return (
     <>
-      <div className="flex items-center gap-1.5 bg-white rounded-xl p-1 border border-slate-200 shadow-sm flex-shrink-0">
-        {OPTIONS.map(opt => {
-          const isActive = displayValue === opt.value
-          return (
-            <button key={opt.value} type="button"
-              onClick={() => handleClick(opt.value)}
-              title={isActive ? `Currently: ${value}` : `Switch to ${opt.value}`}
-              disabled={isActive}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-semibold border transition-all duration-200
-                ${isActive
-                  ? `${opt.active} cursor-default scale-[1.02]`
-                  : `${opt.inactive} cursor-pointer hover:scale-[1.02]`
-                }`}>
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-white/90' : opt.dot}`} />
-              <span>{opt.label}</span>
-              {isActive && <i className="bi bi-check2 text-[10px] ml-0.5" />}
-            </button>
-          )
-        })}
-      </div>
+    <div className={`
+      ${size === 'large' 
+        ? 'grid grid-cols-1 sm:grid-cols-3 gap-3 w-full' 
+        : 'flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl shadow-sm flex-shrink-0'}
+    `}>
+      {OPTIONS.map(opt => {
+        const isActive = displayValue === opt.value
+        return (
+          <button key={opt.value} type="button"
+            onClick={() => handleClick(opt.value)}
+            title={isActive ? `Currently: ${value}` : `Switch to ${opt.value}`}
+            disabled={isActive || loading}
+            className={`flex items-center justify-center gap-2 font-bold transition-all duration-200
+              ${size === 'large' ? 'px-4 py-4 text-[13px] rounded-2xl border-2' : 'px-3 py-2 text-[11px] sm:text-xs rounded-lg border'}
+              ${isActive
+                ? `${opt.active} cursor-default scale-[1.02] ${size === 'large' ? 'border-transparent' : ''}`
+                : `${opt.inactive} ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:border-slate-300 hover:bg-slate-50'}`
+              }`}>
+            {loading && isActive ? (
+              <span className={`${size === 'large' ? 'w-4 h-4 border-[3px]' : 'w-2 h-2 border-2'} border-white/30 border-t-white rounded-full animate-spin flex-shrink-0`} />
+            ) : (
+              <span className={`${size === 'large' ? 'w-2.5 h-2.5' : 'w-2 h-2'} rounded-full flex-shrink-0 ${isActive ? 'bg-white' : opt.dot}`} />
+            )}
+            <span className={size === 'large' ? 'uppercase tracking-tighter' : ''}>{opt.label}</span>
+            {isActive && !loading && <i className={`bi bi-check2 ml-0.5 ${size === 'large' ? 'text-base' : 'text-[10px]'}`} />}
+          </button>
+        )
+      })}
+    </div>
 
       {modal === 'confirm' && (
         <ChangeConfirmModal

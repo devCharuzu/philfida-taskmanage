@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { useStore } from '../store/useStore'
 
 const UNITS = [
   'Administrative and Management Unit',
@@ -18,7 +19,20 @@ const OFFICES = [
   'Regional Office',
 ]
 
-export { UNITS, OFFICES }
+const REGIONS = [
+  'Region I',
+  'Region IV',
+  'Region V',
+  'Region VI',
+  'Region VII',
+  'Region VIII',
+  'Region IX',
+  'Region X',
+  'Region XI',
+  'Region XIII',
+]
+
+export { UNITS, OFFICES, REGIONS }
 
 // ── FILE UPLOAD ────────────────────────────────────────────
 // H8 FIX: Bucket is private, so use createSignedUrl (1 hour expiry) instead of getPublicUrl
@@ -65,7 +79,7 @@ export async function getAllUsers() {
 // C2/C3 FIX: Authenticate a single user by ID — never exposes other users' data.
 // Returns the matching user or null; password comparison happens here so the
 // full user list is never sent to the client during login.
-export async function loginUser(userId, password) {
+export async function loginUser(userId, password, region) {
   const { data: user, error } = await supabase
     .from('Users')
     .select('*')
@@ -73,20 +87,27 @@ export async function loginUser(userId, password) {
     .single()
   if (error || !user) return { error: 'invalid_credentials' }
   if (user.Password !== password) return { error: 'invalid_credentials' }
+  
+  // Verify region if provided (skip for users without region set yet during migration)
+  if (region && user.Region && user.Region !== region) {
+    return { error: 'invalid_region' }
+  }
+  
   if (user.AccountStatus === 'Pending') return { error: 'pending' }
   if (user.AccountStatus === 'Deactivated') return { error: 'deactivated' }
   return { user }
 }
 
-export async function registerUser({ id, name, email = '', unit, role, pass }) {
+export async function registerUser({ id, name, email = '', unit, role, pass, region }) {
   const { error } = await supabase.from('Users').insert({
     ID: id,
     Name: name,
-    Email: email,
+    Email: email?.trim() || null,
     Office: unit,
     Unit: unit,
     Role: role,
     Password: pass,
+    Region: region || 'Region I',
     ProfilePic: '',
     Status: 'Available',
     AccountStatus: 'Pending',
@@ -126,10 +147,10 @@ export async function updateUserRole(userId, role, unit, actorDirectorId, direct
 }
 
 // ── DATA FETCH ─────────────────────────────────────────────
-export async function getData(userId) {
+export async function getData(userId, region = 'Region I') {
   const [tasks, users, comments, notifications, history] = await Promise.all([
-    supabase.from('Tasks').select('*').order('CreatedAt', { ascending: true }),
-    supabase.from('Users').select('*'),
+    supabase.from('Tasks').select('*').eq('Region', region).order('CreatedAt', { ascending: true }),
+    supabase.from('Users').select('*').eq('Region', region),
     supabase.from('Comments').select('*').order('ID', { ascending: true }),
     userId
       ? supabase.from('Notifications').select('*')
@@ -148,6 +169,16 @@ export async function getData(userId) {
   }
 }
 
+async function refreshGlobalDataForCurrentSession() {
+  try {
+    const session = useStore.getState().session
+    if (!session?.ID) return
+    const data = await getData(session.ID, session.Region || 'Region I')
+    if (data) useStore.getState().setGlobalData(data)
+  } catch (e) {
+    console.warn('refreshGlobalDataForCurrentSession failed', e)
+  }
+}
 
 // ── TASK HISTORY ────────────────────────────────────────────
 export async function logHistory(taskId, action, actor, note = '') {
@@ -164,15 +195,24 @@ export async function getTaskHistory(taskId) {
 }
 
 // ── TASKS ──────────────────────────────────────────────────
-export async function createTask({ empId, empName, title, instructions, priority, category, deadline, files, actorName = 'Director' }) {
+export async function createTask({ empId, empName, title, instructions, priority, category, deadline, files, actorName = 'Director', priorityFlags = [], purposeCheckboxes = [], approvalAction = '' }) {
   const taskId = 'T-' + Date.now()
   const fileUrl = files?.length ? await uploadFiles(files) : ''
+  
+  // Get creator's region
+  const session = useStore.getState().session
+  const region = session?.Region || 'Region I'
+
   const { error } = await supabase.from('Tasks').insert({
     TaskID: taskId, EmployeeID: empId, EmployeeName: empName,
     Title: title, Instructions: instructions,
     FileLink: fileUrl, Status: 'Assigned',
-    Archived: 'FALSE', Deadline: deadline || '',
+    Archived: 'FALSE', Deadline: deadline || null,
     Priority: priority || 'Normal', Category: category || 'General',
+    PriorityFlags: priorityFlags || [],
+    PurposeCheckboxes: purposeCheckboxes || [],
+    ApprovalAction: approvalAction || '',
+    Region: region,
     CreatedAt: new Date().toISOString(),
   })
   if (error) throw error
@@ -183,7 +223,7 @@ export async function createTask({ empId, empName, title, instructions, priority
 }
 
 export async function editTask({ taskId, title, instructions, priority, category, deadline, files }) {
-  const updates = { Title: title, Instructions: instructions, Priority: priority, Category: category, Deadline: deadline || '' }
+  const updates = { Title: title, Instructions: instructions, Priority: priority, Category: category, Deadline: deadline || null }
   if (files?.length) updates.FileLink = await uploadFiles(files)
   const { error } = await supabase.from('Tasks').update(updates).eq('TaskID', taskId)
   if (error) throw error
@@ -279,38 +319,70 @@ export async function markNotificationRead(notifId) {
   await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('ID', notifId)
 }
 
+export async function markChatNotificationsRead(taskId, userId) {
+  if (!taskId || !userId) return
+  await supabase.from('Notifications')
+    .update({ IsRead: 'TRUE' })
+    .eq('TaskID', String(taskId))
+    .eq('Type', 'chat')
+    .eq('UserID', String(userId))
+    .eq('IsRead', 'FALSE')
+}
+
 export async function deleteNotification(notifId) {
   await supabase.from('Notifications').delete().eq('ID', notifId)
 }
 
 // ── PRESENCE ───────────────────────────────────────────────
 
-// H9 FIX: Do not overwrite ProfilePic — omit it from the update payload so
-// existing profile pictures are preserved when editing other profile fields.
-export async function updateProfile(userId, { name, designation, email, unit, password, profilePic }) {
-  const updatePayload = {
-    Name:        name,
-    Designation: designation,
-    Email:       email,
-    Unit:        unit,
-    Office:      unit,
+// Profile updates use SECURITY DEFINER RPC: Users.ID ≠ auth.uid(); manual login uses anon.
+export async function updateProfile(userId, {
+  name,
+  designation,
+  email,
+  unit,
+  password,
+  profilePic,
+  sessionPassword,
+}) {
+  const rpcArgs = {
+    p_user_id: userId,
+    p_verify_password: sessionPassword ?? '',
+    p_name: name !== undefined ? name : null,
+    p_designation: designation !== undefined ? designation : null,
+    p_email: email !== undefined ? email : null,
+    p_unit: unit !== undefined ? unit : null,
+    p_new_password:
+      password !== undefined && password !== null && String(password).trim() !== ''
+        ? String(password).trim()
+        : null,
+    p_profile_pic: profilePic !== undefined ? profilePic : null,
   }
 
-  // Only update ProfilePic if explicitly provided
-  if (profilePic !== undefined && profilePic !== null) {
-    updatePayload.ProfilePic = profilePic
-  }
-
-  if (password !== undefined && password !== null && password !== '') {
-    updatePayload.Password = password
-  }
-
-  const { error } = await supabase.from('Users').update(updatePayload).eq('ID', userId)
+  const { error } = await supabase.rpc('user_update_own_profile', rpcArgs)
   if (error) throw error
+  await refreshGlobalDataForCurrentSession()
 }
 
 export async function updatePresence(userId, status) {
-  await supabase.from('Users').update({ Status: status }).eq('ID', userId)
+  // Manual login users (anon) cannot update public.Users directly due to RLS.
+  // We use the SECURITY DEFINER RPC to bypass this.
+  const { error } = await supabase.rpc('user_update_status', {
+    p_user_id: userId,
+    p_status: status,
+    p_verify_password: useStore.getState().session?.Password || ''
+  })
+  
+  if (error) {
+    console.error('[PRESENCE] Update failed:', error.message)
+    // We still update local store for optimistic UI, but refresh will revert it
+  }
+
+  // Update session in store to reflect the change
+  const session = useStore.getState().session
+  if (session && String(session.ID) === String(userId)) {
+    useStore.getState().updateSession({ Status: status })
+  }
 }
 
 // ── HELPERS ────────────────────────────────────────────────
@@ -469,8 +541,8 @@ export async function handleGoogleCallback() {
     return { user: { ...existing, Email: email }, isNew: false }
   }
 
-  // New Google user — insert as Pending
-  const newId = 'G-' + Date.now()
+  // New Google user — insert as Pending, using their exact Supabase Auth UUID
+  const newId = authUser.id
   const { error: insertError } = await supabase.from('Users').insert({
     ID:            newId,
     Name:          name,
@@ -483,6 +555,7 @@ export async function handleGoogleCallback() {
     Status:        'Available',
     AccountStatus: 'Pending',
     Designation:   '',
+    Region:        'Region I', // Default for Google users
   })
 
   if (insertError) { console.error('Insert error:', insertError); return null }

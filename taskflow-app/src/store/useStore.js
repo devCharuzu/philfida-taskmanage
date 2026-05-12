@@ -54,6 +54,9 @@ export const useStore = create(
       setGlobalData: (data) => set((state) => ({
         globalData: typeof data === 'function' ? data(state.globalData) : data
       })),
+      updateSession: (updates) => set((state) => ({
+        session: state.session ? { ...state.session, ...updates } : null
+      })),
     }),
     {
       name: 'philfida_session',

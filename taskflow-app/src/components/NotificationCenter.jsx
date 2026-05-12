@@ -75,9 +75,10 @@ export default function NotificationCenter({ isOpen, onClose }) {
   const markAsRead = async (notificationId) => {
     try {
       await markNotificationRead(notificationId)
+      const currentData = useStore.getState().globalData
       setGlobalData({
-        ...globalData,
-        notifications: notifications.map(n => 
+        ...currentData,
+        notifications: currentData.notifications.map(n => 
           n.ID === notificationId ? { ...n, IsRead: 'TRUE' } : n
         ),
       })
@@ -91,9 +92,10 @@ export default function NotificationCenter({ isOpen, onClose }) {
     setLoading(true)
     try {
       await markNotificationsRead(session.ID)
+      const currentData = useStore.getState().globalData
       setGlobalData({
-        ...globalData,
-        notifications: notifications.map(n => ({ ...n, IsRead: 'TRUE' })),
+        ...currentData,
+        notifications: currentData.notifications.map(n => ({ ...n, IsRead: 'TRUE' })),
       })
     } catch (error) {
       console.error('Failed to mark all as read:', error)
@@ -109,7 +111,8 @@ export default function NotificationCenter({ isOpen, onClose }) {
     setLoading(true)
     try {
       await clearNotifications(session.ID)
-      setGlobalData({ ...globalData, notifications: [] })
+      const currentData = useStore.getState().globalData
+      setGlobalData({ ...currentData, notifications: [] })
     } catch (error) {
       console.error('Failed to clear notifications:', error)
     } finally {
@@ -121,9 +124,10 @@ export default function NotificationCenter({ isOpen, onClose }) {
   const deleteNotification = async (notificationId) => {
     try {
       await apiDeleteNotification(notificationId)
+      const currentData = useStore.getState().globalData
       setGlobalData({
-        ...globalData,
-        notifications: notifications.filter(n => n.ID !== notificationId),
+        ...currentData,
+        notifications: currentData.notifications.filter(n => n.ID !== notificationId),
       })
     } catch (error) {
       console.error('Failed to delete notification:', error)

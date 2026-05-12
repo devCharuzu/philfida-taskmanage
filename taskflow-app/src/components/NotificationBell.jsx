@@ -74,9 +74,10 @@ export default function NotificationBell() {
     // Mark as read if unread
     if (notification.IsRead === 'FALSE') {
       markNotificationRead(notification.ID).then(() => {
+        const currentData = useStore.getState().globalData
         setGlobalData({
-          ...globalData,
-          notifications: notifications.map(n => 
+          ...currentData,
+          notifications: currentData.notifications.map(n => 
             n.ID === notification.ID ? { ...n, IsRead: 'TRUE' } : n
           ),
         })

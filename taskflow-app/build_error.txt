@@ -1,0 +1,43 @@
+
+> taskflow-philfida@1.0.0 build
+> vite build
+
+vite v8.0.8 building client environment for production...
+[2Ktransforming...✓ 97 modules transformed.
+✗ Build failed in 383ms
+error during build:
+Build failed with 2 errors:
+
+[31m[builtin:vite-transform] Error:[0m Expected corresponding closing tag for JSX fragment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/pages/DashboardPage.jsx:296:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m196 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m<>
+ [38;5;240m    │[0m             ─┬  
+ [38;5;240m    │[0m              ╰── Opened here
+ [38;5;240m    │[0m 
+ [38;5;246m296 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m/[0mmain[38;5;249m>[0m
+ [38;5;240m    │[0m           ──┬─  
+ [38;5;240m    │[0m             ╰─── Expected `</>`
+[38;5;246m─────╯[0m
+
+[31m[builtin:vite-transform] Error:[0m Expected `,` or `)` but found `{`
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/pages/DashboardPage.jsx:298:9 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m195 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m{[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249mm[0m[38;5;249my[0m[38;5;249m-[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249ms[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m&[0m[38;5;249m&[0m[38;5;249m [0m(
+ [38;5;240m    │[0m                                  ┬  
+ [38;5;240m    │[0m                                  ╰── Opened here
+ [38;5;240m    │[0m 
+ [38;5;246m298 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m{[38;5;249mt[0m[38;5;249ma[0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m&[0m[38;5;249m&[0m[38;5;249m [0m[38;5;249m([0m
+ [38;5;240m    │[0m         ┬  
+ [38;5;240m    │[0m         ╰── `,` or `)` expected
+[38;5;246m─────╯[0m
+
+    at aggregateBindingErrorsIntoJsError (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/rolldown/dist/shared/error-w0u7biK-.mjs:48:18)
+    at unwrapBindingResult (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/rolldown/dist/shared/error-w0u7biK-.mjs:18:128)
+    at #build (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/rolldown/dist/shared/rolldown-build-DtGk-m96.mjs:3313:34)
+    at async buildEnvironment (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/vite/dist/node/chunks/node.js:32954:64)
+    at async Object.build (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/vite/dist/node/chunks/node.js:33376:19)
+    at async Object.buildApp (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/vite/dist/node/chunks/node.js:33373:153)
+    at async CAC.<anonymous> (file:///Users/charles/Projects/philfida-taskmanage/taskflow-app/node_modules/vite/dist/node/cli.js:778:3) {
+  errors: [Getter/Setter]
+}

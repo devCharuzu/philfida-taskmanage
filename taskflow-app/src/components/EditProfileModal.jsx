@@ -27,6 +27,7 @@ export default function EditProfileModal({ onClose }) {
         designation: designation.trim(),
         email:       email.trim(),
         unit:        unit.trim(),
+        sessionPassword: session?.Password ?? '',
       })
       // Update session in Zustand store so UI reflects immediately
       setSession({
@@ -36,7 +37,6 @@ export default function EditProfileModal({ onClose }) {
         Email:             email.trim(),
         Unit:              unit.trim(),
         Office:            unit.trim(),
-        ProfilePic:        '',
         _needsProfileSetup: false,
       })
       setSuccess(true)

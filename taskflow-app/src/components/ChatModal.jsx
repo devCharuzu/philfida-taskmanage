@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../store/useStore'
-import { addComment, markChatRead, parseMsg } from '../lib/api'
+import { addComment, markChatRead, markChatNotificationsRead, parseMsg } from '../lib/api'
 import Lightbox from './Lightbox'
 
 const ICON_MAP = {
@@ -47,7 +47,9 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
 
   // Mark messages as read on open
   useEffect(() => {
-    markChatRead(taskId, session.Name).then(() => onSync())
+    markChatRead(taskId, session.Name).then(() => {
+      markChatNotificationsRead(taskId, session.ID).then(() => onSync())
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

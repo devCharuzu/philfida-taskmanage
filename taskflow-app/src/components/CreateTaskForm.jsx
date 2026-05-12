@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore'
 import { createTask } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES } from '../lib/errorHandler'
 
-const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.mp4,.mp3,.mov,.avi,.csv'
+const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.mp4,.mp3,.mov,.avi,.csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
 const STATUS_CONFIG = {
   Available:         { pill: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500', ring: 'ring-emerald-400' },
@@ -183,6 +183,9 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
           deadline,
           files,
           actorName:    session?.Name || 'Director',
+          priorityFlags: priorities,
+          purposeCheckboxes: purposes,
+          approvalAction: action,
         })
       }, ERROR_MESSAGES.DATABASE)
 
@@ -221,6 +224,9 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
         deadline,
         files,
         actorName: session?.Name || 'Director',
+        priorityFlags: priorities,
+        purposeCheckboxes: purposes,
+        approvalAction: action,
       })
       setDispatchConfirm(selectedEmp)
       setPersonnelModalOpen?.(false)
