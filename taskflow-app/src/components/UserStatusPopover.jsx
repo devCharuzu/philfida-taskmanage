@@ -115,9 +115,6 @@ export default function UserStatusPopover({
   if (!isSpecial) {
     return (
       <div ref={anchorRef} title={title} className={chipClassName}>
-        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-green-700 flex-shrink-0">
-          {name?.charAt(0) || '?'}
-        </div>
         {name}
       </div>
     )
@@ -157,9 +154,6 @@ export default function UserStatusPopover({
         }}
         onClick={() => setPinned(v => !v)}
       >
-        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-green-700 flex-shrink-0">
-          {name?.charAt(0) || '?'}
-        </div>
         {name}
       </div>
 

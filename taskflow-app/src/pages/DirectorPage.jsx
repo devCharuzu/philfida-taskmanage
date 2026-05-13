@@ -15,7 +15,7 @@ import Lightbox from '../components/Lightbox'
 import UserManagement from '../components/UserManagement'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
-import DeadlineProgress from '../components/DeadlineProgress'
+
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -1149,7 +1149,7 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-          <DeadlineProgress task={t} />
+
         </div>
       )}
 
@@ -1301,7 +1301,7 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-          <DeadlineProgress task={t} />
+
         </div>
       )}
 
@@ -1551,7 +1551,7 @@ function TaskRow({ task: t, unit, idx, isArchived, comments, session, history = 
       {!isArchived && t.Deadline && t.Status !== 'Completed' && (
         <tr>
           <td colSpan={onSelect !== undefined ? "7" : "6"} className="px-4 py-2">
-            <DeadlineProgress task={t} />
+
           </td>
         </tr>
       )}

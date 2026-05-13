@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [loginId,     setLoginId]     = useState('')
   const [loginPass,   setLoginPass]   = useState('')
   const [loginRegion, setLoginRegion] = useState('Region I')
+  const [rememberMe,  setRememberMe]  = useState(false)
   const [showPass,    setShowPass]    = useState(false)
   const [regId,       setRegId]       = useState('')
   const [regName,     setRegName]     = useState('')
@@ -69,6 +70,19 @@ The application cannot function until this is resolved.
     checkConnection()
   }, [])
 
+  // Load remembered credentials
+  useEffect(() => {
+    const savedId = localStorage.getItem('philfida_remember_id')
+    const savedRegion = localStorage.getItem('philfida_remember_region')
+    if (savedId) {
+      setLoginId(savedId)
+      setRememberMe(true)
+    }
+    if (savedRegion) {
+      setLoginRegion(savedRegion)
+    }
+  }, [])
+
   // ── Handle Google OAuth redirect callback ───────────────────
   useEffect(() => {
     // Only run if this looks like an OAuth callback (has code or token in URL)
@@ -100,10 +114,13 @@ The application cannot function until this is resolved.
       await new Promise(r => setTimeout(r, 200))
       window.history.replaceState({}, document.title, window.location.pathname)
 
+      const savedGoogleRegion = localStorage.getItem('philfida_google_region') || 'Region I'
+      localStorage.removeItem('philfida_google_region')
+
       // Retry up to 5 times with 1s delay — allow session / app user row to settle
       let result = null
       for (let i = 0; i < 5; i++) {
-        result = await handleGoogleCallback()
+        result = await handleGoogleCallback(savedGoogleRegion)
         if (result) break
         await new Promise(r => setTimeout(r, 1000))
       }
@@ -126,6 +143,7 @@ The application cannot function until this is resolved.
       const needsSetup = !user.Designation && !user.Unit && !user.Office
       setSession({ ...user, _needsProfileSetup: needsSetup })
       if (user.Role === 'Director')       navigate('/director')
+      else if (user.Role === 'Records')    navigate('/records')
       else if (user.Role === 'Unit Head') navigate('/unithead')
       else                                navigate('/dashboard')
     }
@@ -142,7 +160,7 @@ The application cannot function until this is resolved.
     const validation = validateForm(
       { loginId, loginPass },
       {
-        loginId: { required: true, label: 'Personnel ID' },
+        loginId: { required: true, label: 'Employee ID No.' },
         loginPass: { required: true, label: 'Password', minLength: 1 }
       }
     )
@@ -158,7 +176,7 @@ The application cannot function until this is resolved.
       const result = await loginUser(loginId, loginPass, loginRegion)
 
       if (result.error === 'invalid_credentials') {
-        setError('Invalid Personnel ID or Password.')
+        setError('Invalid Employee ID No. or Password.')
         return
       }
       if (result.error === 'invalid_region') {
@@ -178,11 +196,22 @@ The application cannot function until this is resolved.
         return
       }
 
+      // Handle Remember Me
+      if (rememberMe) {
+        localStorage.setItem('philfida_remember_id', loginId)
+        localStorage.setItem('philfida_remember_region', loginRegion)
+      } else {
+        localStorage.removeItem('philfida_remember_id')
+        localStorage.removeItem('philfida_remember_region')
+      }
+
       const user = result.user
       // Set session and navigate based on role
       setSession(user)
       if (user.Role === 'Director') {
         navigate('/director')
+      } else if (user.Role === 'Records') {
+        navigate('/records')
       } else if (user.Role === 'Unit Head') {
         navigate('/unithead')
       } else {
@@ -199,6 +228,7 @@ The application cannot function until this is resolved.
   async function handleGoogleSignIn() {
     setGoogleLoading(true); setError('')
     try {
+      localStorage.setItem('philfida_google_region', loginRegion)
       await signInWithGoogle()
     } catch (e) {
       setError(`Could not connect to Google. ${e?.message || ''} Please try again.`)
@@ -218,7 +248,7 @@ The application cannot function until this is resolved.
         setTab('login')
         setRegId(''); setRegName(''); setRegEmail(''); setRegUnit(''); setRegRole('Employee'); setRegPass('')
       } else if (result === 'EXISTS') {
-        setError('This Personnel ID or Email is already registered.')
+        setError('This Employee ID No. or Email is already registered.')
       }
     } catch { setError('Registration failed. Please try again.') }
     finally  { setLoading(false) }
@@ -350,6 +380,27 @@ The application cannot function until this is resolved.
                     <p className="text-slate-600 text-xs lg:text-sm">Sign in to access your dashboard</p>
                   </div>
 
+                  {/* Region Selection (Applies to both) */}
+                  <div>
+                    <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Select Region</label>
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        <i className="bi bi-geo-alt-fill text-sm" />
+                      </div>
+                      <select
+                        className="w-full pl-12 pr-4 py-3 lg:py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm lg:text-lg font-medium appearance-none"
+                        value={loginRegion}
+                        onChange={e => setLoginRegion(e.target.value)}
+                        required
+                      >
+                        {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <i className="bi bi-chevron-down text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Google Sign In */}
                   <button
                     onClick={handleGoogleSignIn}
@@ -377,27 +428,7 @@ The application cannot function until this is resolved.
                   {/* Manual login form */}
                   <form onSubmit={handleLogin} className="space-y-5">
                     <div>
-                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Region</label>
-                      <div className="relative">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          <i className="bi bi-geo-alt-fill text-sm" />
-                        </div>
-                        <select
-                          className="w-full pl-12 pr-4 py-3 lg:py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50 text-sm lg:text-lg font-medium appearance-none"
-                          value={loginRegion}
-                          onChange={e => setLoginRegion(e.target.value)}
-                          required
-                        >
-                          {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                          <i className="bi bi-chevron-down text-sm" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Personnel ID</label>
+                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Employee ID No.</label>
                       <div className="relative">
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                           <i className="bi bi-person-fill text-sm" />
@@ -406,7 +437,7 @@ The application cannot function until this is resolved.
                           type="text"
                           className="w-full px-4 py-3 lg:py-5 bg-white border-2 border-slate-200 rounded-xl text-sm lg:text-lg font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent transition-all"
                           style={{ paddingLeft: '3rem' }}
-                          placeholder="Enter your Personnel ID"
+                          placeholder="Enter your Employee ID No."
                           value={loginId}
                           onChange={e => setLoginId(e.target.value)}
                           autoComplete="username"
@@ -436,6 +467,21 @@ The application cannot function until this is resolved.
                           <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'} text-sm`} />
                         </button>
                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className="relative flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            className="peer appearance-none w-5 h-5 rounded-md border-2 border-slate-300 checked:border-green-600 checked:bg-green-600 transition-all duration-200 cursor-pointer"
+                            checked={rememberMe}
+                            onChange={e => setRememberMe(e.target.checked)}
+                          />
+                          <i className="bi bi-check text-white text-xs absolute opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+                        </div>
+                        <span className="text-sm lg:text-base text-slate-600 group-hover:text-slate-800 transition-colors font-medium">Remember my ID & Region</span>
+                      </label>
                     </div>
 
                     <button
@@ -488,7 +534,7 @@ The application cannot function until this is resolved.
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">Personnel ID</label>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Employee ID No.</label>
                         <input
                           className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-slate-50/50"
                           placeholder="e.g. 001"
@@ -535,6 +581,7 @@ The application cannot function until this is resolved.
                           <option value="Employee">Unit Personnel</option>
                           <option value="Unit Head">Unit Head</option>
                           <option value="Director">Director</option>
+                          <option value="Records">Records</option>
                         </select>
                       </div>
 

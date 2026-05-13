@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase'
 import LoginPage     from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import DirectorPage  from './pages/DirectorPage'
+import RecordsPage   from './pages/RecordsPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
 
 /**
@@ -182,6 +183,7 @@ function LoginRoute({ hydrated, error }) {
   // Already logged in — redirect to their dashboard
   if (session) {
     if (session.Role === 'Director')       return <Navigate to="/director"  replace />
+    if (session.Role === 'Records')        return <Navigate to="/records"   replace />
     if (session.Role === 'Unit Head')      return <Navigate to="/unithead"  replace />
     return <Navigate to="/dashboard" replace />
   }
@@ -199,6 +201,7 @@ export default function App() {
       <Route path="/dashboard" element={<ProtectedRoute hydrated={hydrated} error={error}><DashboardPage /></ProtectedRoute>} />
       <Route path="/unithead"  element={<ProtectedRoute role="Unit Head" hydrated={hydrated} error={error}><UnitHeadPage /></ProtectedRoute>} />
       <Route path="/director"  element={<ProtectedRoute role="Director" hydrated={hydrated} error={error}><DirectorPage /></ProtectedRoute>} />
+      <Route path="/records"   element={<ProtectedRoute role="Records" hydrated={hydrated} error={error}><RecordsPage /></ProtectedRoute>} />
       <Route path="*"          element={<Navigate to="/" replace />} />
     </Routes>
   )

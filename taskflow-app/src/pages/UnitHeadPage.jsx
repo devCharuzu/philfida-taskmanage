@@ -14,7 +14,7 @@ import CreateTaskForm from '../components/CreateTaskForm'
 import { normalizeStatus } from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
-import DeadlineProgress from '../components/DeadlineProgress'
+
 
 const STATUS_CFG = {
   Available:         { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
@@ -1108,7 +1108,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-          <DeadlineProgress task={t} />
+
         </div>
       )}
 
@@ -1272,7 +1272,7 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-          <DeadlineProgress task={t} />
+
         </div>
       )}
 

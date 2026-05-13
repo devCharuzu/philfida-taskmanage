@@ -10,7 +10,7 @@ import ChatModal from '../components/ChatModal'
 import FileThumb from '../components/FileThumb'
 import Lightbox from '../components/Lightbox'
 import TaskTimeline from '../components/TaskTimeline'
-import DeadlineProgress from '../components/DeadlineProgress'
+
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -886,7 +886,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-          <DeadlineProgress task={t} />
+
         </div>
       )}
 

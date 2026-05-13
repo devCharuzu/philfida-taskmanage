@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
-import { updateProfile, getSignedFileUrl } from '../lib/api'
-import PresenceToggle from './PresenceToggle'
+import { updateProfile, getSignedFileUrl, UNITS, OFFICES } from '../lib/api'
+import PresenceToggle, { normalizeStatus } from './PresenceToggle'
 import { supabase } from '../lib/supabase'
 import SettingsModal from './SettingsModal'
 
 export default function UserProfileTab({ presence, setPresence }) {
   const session = useStore(s => s.session)
   const setSession = useStore(s => s.setSession)
+  const globalData = useStore(s => s.globalData)
   const [name, setName] = useState(session?.Name || '')
   const [email, setEmail] = useState(session?.Email || '')
+  const [unit, setUnit] = useState(session?.Unit || session?.Office || '')
+  const [designation, setDesignation] = useState(session?.Designation || '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -36,6 +39,24 @@ export default function UserProfileTab({ presence, setPresence }) {
     }
   }, [presence])
 
+  const director = globalData.users.find(u => u.Role === 'Director')
+  const [dirSignedUrl, setDirSignedUrl] = useState('')
+  const [loadingDirUrl, setLoadingDirUrl] = useState(false)
+
+  useEffect(() => {
+    if (!director?.Status) return
+    const fileMatch = director.Status.match(/\[TO:(.*?)\]/)
+    const rawUrl = fileMatch ? fileMatch[1] : null
+    if (rawUrl) {
+      setLoadingDirUrl(true)
+      getSignedFileUrl(rawUrl)
+        .then(url => { setDirSignedUrl(url); setLoadingDirUrl(false) })
+        .catch(() => setLoadingDirUrl(false))
+    } else {
+      setDirSignedUrl('')
+    }
+  }, [director?.Status])
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!name.trim()) {
@@ -54,6 +75,8 @@ export default function UserProfileTab({ presence, setPresence }) {
       await updateProfile(session.ID, {
         name: name.trim(),
         email: email.trim() || null,
+        unit: unit.trim() || null,
+        designation: designation.trim() || null,
         password: password ? password.trim() : undefined,
         sessionPassword: session?.Password ?? '',
       })
@@ -62,6 +85,9 @@ export default function UserProfileTab({ presence, setPresence }) {
         ...session,
         Name: name.trim(),
         Email: email.trim() || null,
+        Unit: unit.trim() || null,
+        Office: unit.trim() || null,
+        Designation: designation.trim() || null,
         ...(password?.trim() ? { Password: password.trim() } : {}),
       })
 
@@ -107,7 +133,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                     {session?.Name?.charAt(0)}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-black text-base truncate leading-tight uppercase tracking-tight">{session?.Name}</h4>
+                    <h4 className="font-black text-base truncate leading-tight uppercase tracking-tight text-white">{session?.Name}</h4>
                     <span className="inline-block mt-1 px-2 py-0.5 bg-white/10 text-green-300 text-[10px] font-black uppercase rounded-lg border border-white/10">
                       {session?.Role || 'User'}
                     </span>
@@ -251,13 +277,13 @@ export default function UserProfileTab({ presence, setPresence }) {
 
                 <button
                   onClick={logout}
-                  className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-100 rounded-xl hover:bg-red-50 hover:border-red-100 transition-all group"
+                  className="w-full flex items-center gap-4 px-4 py-3 bg-red-600 border border-red-700 rounded-xl hover:bg-red-700 shadow-sm shadow-red-200 transition-all group"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-red-600 group-hover:bg-white transition-colors">
+                  <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center text-white group-hover:bg-white/30 transition-colors">
                     <i className="bi bi-box-arrow-right text-lg" />
                   </div>
-                  <span className="text-sm font-bold text-red-700 flex-1 text-left">Sign Out</span>
-                  <i className="bi bi-arrow-right-short text-red-200 group-hover:text-red-400 transition-colors text-xl" />
+                  <span className="text-sm font-bold text-white flex-1 text-left">Sign Out</span>
+                  <i className="bi bi-arrow-right-short text-white/50 group-hover:text-white transition-colors text-xl" />
                 </button>
               </div>
             </div>
@@ -266,7 +292,7 @@ export default function UserProfileTab({ presence, setPresence }) {
 
           {/* Right Column: Personal Details */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 order-1 lg:order-2">
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
               <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -282,7 +308,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                 </div>
               </div>
 
-              <div className="p-6 md:p-8 flex-1">
+              <div className="p-6 md:p-8">
                 {error && (
                   <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 text-red-600 text-[13px] rounded-xl px-4 py-3.5">
                     <i className="bi bi-exclamation-circle-fill flex-shrink-0" />
@@ -317,6 +343,35 @@ export default function UserProfileTab({ presence, setPresence }) {
                         placeholder="user@philfida.gov.ph"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Unit / Office</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm font-medium appearance-none"
+                          value={unit}
+                          onChange={e => setUnit(e.target.value)}
+                        >
+                          <option value="">-- Select Unit/Office --</option>
+                          {(session?.Role === 'Director' || session?.Role === 'Records' ? OFFICES : UNITS).map(u => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                          <i className="bi bi-chevron-down text-sm" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Designation / Position</label>
+                      <input
+                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm placeholder:text-slate-300 font-medium"
+                        placeholder="e.g. Project Assistant II"
+                        value={designation}
+                        onChange={e => setDesignation(e.target.value)}
                       />
                     </div>
                   </div>
@@ -391,6 +446,110 @@ export default function UserProfileTab({ presence, setPresence }) {
                 </form>
               </div>
             </div>
+
+            {/* Director's Availability Section */}
+            {session?.Role !== 'Director' && director && (
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-6">
+                <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <i className="bi bi-shield-shaded text-green-700" />
+                      Director's Availability
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Stay informed about the Director's current events</p>
+                  </div>
+                  <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-black uppercase rounded-lg border border-green-100">
+                    Live Status
+                  </span>
+                </div>
+
+                <div className="p-6">
+                  <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="w-12 h-12 rounded-xl bg-green-800 flex items-center justify-center text-lg font-black text-white shadow-lg shadow-green-900/20">
+                      {director.Name?.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-900 text-sm leading-tight uppercase">{director.Name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`w-2 h-2 rounded-full ${
+                          normalizeStatus(director.Status) === 'Available' ? 'bg-emerald-500' :
+                          normalizeStatus(director.Status) === 'Official Travel' ? 'bg-blue-500' : 'bg-red-500'
+                        }`} />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          {normalizeStatus(director.Status)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {director.Status && director.Status !== 'Available' ? (() => {
+                    const statusData = (() => {
+                      const fileMatch = director.Status.match(/\[TO:(.*?)\]/)
+                      const fileUrl = fileMatch ? fileMatch[1] : null
+                      const cleanStr = director.Status.replace(/\[TO:.*?\]/, '').trim()
+
+                      if (cleanStr.startsWith('Official Travel — ')) {
+                        const content = cleanStr.replace('Official Travel — ', '')
+                        const dateMatch = content.match(/\((.*?)\)$/)
+                        const dates = dateMatch ? dateMatch[1] : ''
+                        const rest = content.replace(/\s*\(.*?\)$/, '')
+                        const parts = rest.split(' at ')
+                        return { type: 'Official Travel', title: parts[0], location: parts[1] || '', dates, fileUrl }
+                      }
+
+                      if (cleanStr.startsWith('On Leave — ')) {
+                        const content = cleanStr.replace('On Leave — ', '')
+                        const dateMatch = content.match(/\((.*?)\)$/)
+                        const dates = dateMatch ? dateMatch[1] : ''
+                        const rest = content.replace(/\s*\(.*?\)$/, '')
+                        const parts = rest.split(': ')
+                        return { type: 'On Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl }
+                      }
+
+                      return { type: 'Away', title: cleanStr, fileUrl }
+                    })()
+
+                    return (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Event / Activity</p>
+                            <p className="text-sm text-slate-900 font-bold leading-tight">{statusData.title}</p>
+                          </div>
+                          <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                              {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
+                            </p>
+                            <p className="text-sm text-slate-900 font-bold leading-tight">{statusData.location || statusData.reason || '—'}</p>
+                          </div>
+                          <div className="p-4 bg-white border border-slate-100 rounded-xl md:col-span-2">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Inclusive Dates</p>
+                            <p className="text-sm text-slate-900 font-bold leading-tight">{statusData.dates || '—'}</p>
+                          </div>
+                        </div>
+
+                        {statusData.fileUrl && (
+                          <div className="flex gap-2">
+                            <button onClick={() => dirSignedUrl && window.open(dirSignedUrl, '_blank')}
+                              className={`flex-1 flex items-center justify-center gap-2 py-2.5 border text-[10px] font-black uppercase rounded-lg transition-all
+                                ${dirSignedUrl ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50' : 'bg-slate-50 border-slate-100 text-slate-300 cursor-wait'}`}
+                            >
+                              {loadingDirUrl ? <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <i className="bi bi-file-earmark-text" />}
+                              View Travel Order
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })() : (
+                    <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      <i className="bi bi-calendar-check text-slate-300 text-3xl mb-2" />
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No scheduled events</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

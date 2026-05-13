@@ -461,9 +461,6 @@ export default function UserManagement({ users, onSync }) {
             <div className="p-5 space-y-4">
               {/* Who is being deleted */}
               <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-xl p-3">
-                <div className="w-9 h-9 rounded-full bg-red-200 flex items-center justify-center flex-shrink-0">
-                  <span className="text-red-700 font-bold text-sm">{deleteTarget.Name?.charAt(0)}</span>
-                </div>
                 <div className="min-w-0">
                   <p className="font-bold text-slate-800 text-sm">{deleteTarget.Name}</p>
                   <p className="text-slate-500 text-xs">ID: {deleteTarget.ID} · {deleteTarget.Unit || deleteTarget.Office}</p>
