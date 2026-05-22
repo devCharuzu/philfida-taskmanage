@@ -1,13 +1,20 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-// Mobile-safe storage check
+// Director sessions use sessionStorage (no auto-login across browser sessions).
+// Regular users use localStorage (persistent login).
+const ADMIN_STORAGE_KEY = 'philfida_admin_session'
+const USER_STORAGE_KEY = 'philfida_session'
+
 const mobileSafeStorage = {
   getItem: (name) => {
     try {
+      // Check sessionStorage first for admin sessions
+      const adminData = sessionStorage.getItem(ADMIN_STORAGE_KEY)
+      if (adminData) return adminData
       return localStorage.getItem(name)
     } catch (error) {
-      console.warn('localStorage access failed, trying sessionStorage:', error)
+      console.warn('Storage access failed:', error)
       try {
         return sessionStorage.getItem(name)
       } catch (sessionError) {
@@ -18,9 +25,24 @@ const mobileSafeStorage = {
   },
   setItem: (name, value) => {
     try {
-      localStorage.setItem(name, value)
+      // Parse the value to check if the session is a Director
+      let parsed = null
+      try { parsed = JSON.parse(value) } catch { /* ignore */ }
+      const isDirector = parsed?.state?.session?.Role === 'Director'
+
+      if (isDirector) {
+        // Director: store in sessionStorage only (no auto-login)
+        sessionStorage.setItem(ADMIN_STORAGE_KEY, value)
+        // Remove any existing localStorage session to prevent auto-login
+        localStorage.removeItem(name)
+      } else {
+        // Regular user: store in localStorage (persistent)
+        localStorage.setItem(name, value)
+        // Clean up any admin session
+        sessionStorage.removeItem(ADMIN_STORAGE_KEY)
+      }
     } catch (error) {
-      console.warn('localStorage write failed, trying sessionStorage:', error)
+      console.warn('Storage write failed:', error)
       try {
         sessionStorage.setItem(name, value)
       } catch (sessionError) {
@@ -31,13 +53,9 @@ const mobileSafeStorage = {
   removeItem: (name) => {
     try {
       localStorage.removeItem(name)
+      sessionStorage.removeItem(ADMIN_STORAGE_KEY)
     } catch (error) {
-      console.warn('localStorage remove failed, trying sessionStorage:', error)
-      try {
-        sessionStorage.removeItem(name)
-      } catch (sessionError) {
-        console.warn('sessionStorage remove failed:', sessionError)
-      }
+      console.warn('Storage remove failed:', error)
     }
   }
 }
@@ -59,7 +77,7 @@ export const useStore = create(
       })),
     }),
     {
-      name: 'philfida_session',
+      name: USER_STORAGE_KEY,
       version: 2,
       partialize: (state) => ({ session: state.session }),
       storage: persistStorage,

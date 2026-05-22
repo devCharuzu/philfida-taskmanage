@@ -224,6 +224,70 @@ The application cannot function until this is resolved.
     }
   }
 
+  // ── Admin login (Director only, no session persistence) ─────
+  async function handleAdminLogin(e) {
+    e.preventDefault()
+    setLoading(true); setError('')
+
+    const validation = validateForm(
+      { loginId, loginPass },
+      {
+        loginId: { required: true, label: 'Admin ID' },
+        loginPass: { required: true, label: 'Password', minLength: 1 }
+      }
+    )
+
+    if (!validation.isValid) {
+      setError(Object.values(validation.errors)[0])
+      setLoading(false)
+      return
+    }
+
+    try {
+      const result = await loginUser(loginId, loginPass, loginRegion)
+
+      if (result.error === 'invalid_credentials') {
+        setError('Invalid Admin ID or Password.')
+        setLoading(false)
+        return
+      }
+      if (result.error === 'invalid_region') {
+        setError(`Access denied. This admin account is not registered in ${loginRegion}.`)
+        setLoading(false)
+        return
+      }
+      if (result.error === 'pending') {
+        setError('This admin account is pending activation.')
+        setLoading(false)
+        return
+      }
+      if (result.error === 'deactivated') {
+        setError('This admin account has been deactivated.')
+        setLoading(false)
+        return
+      }
+      if (result.error) {
+        setError('Admin login failed. Please try again.')
+        setLoading(false)
+        return
+      }
+
+      const user = result.user
+      if (user.Role !== 'Director') {
+        setError('Access denied. This login is for Director/Admin accounts only. Use the Sign In tab for employee access.')
+        setLoading(false)
+        return
+      }
+
+      setSession(user)
+      navigate('/director')
+    } catch (error) {
+      setError(error.message || 'Admin login failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // ── Google sign in ──────────────────────────────────────────
   async function handleGoogleSignIn() {
     setGoogleLoading(true); setError('')
@@ -328,7 +392,7 @@ The application cannot function until this is resolved.
             {/* Tab switcher */}
             <div className="flex bg-slate-50/80 border-b border-slate-200/50">
               <button onClick={() => switchTab('login')}
-                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 py-4 px-4 text-sm font-semibold transition-all duration-300 ${
                   tab === 'login'
                     ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
                     : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
@@ -336,12 +400,20 @@ The application cannot function until this is resolved.
                 Sign In
               </button>
               <button onClick={() => switchTab('register')}
-                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 py-4 px-4 text-sm font-semibold transition-all duration-300 ${
                   tab === 'register'
                     ? 'bg-white text-green-800 shadow-sm border-b-2 border-green-600'
                     : 'text-slate-600 hover:text-green-700 hover:bg-white/50'
                 }`}>
                 Register
+              </button>
+              <button onClick={() => switchTab('admin')}
+                className={`flex-1 py-4 px-4 text-sm font-semibold transition-all duration-300 ${
+                  tab === 'admin'
+                    ? 'bg-white text-amber-800 shadow-sm border-b-2 border-amber-600'
+                    : 'text-slate-600 hover:text-amber-700 hover:bg-white/50'
+                }`}>
+                <i className="bi bi-shield-lock-fill mr-1" />Admin
               </button>
             </div>
 
@@ -638,6 +710,112 @@ The application cannot function until this is resolved.
                         <span className="flex items-center justify-center gap-3">
                           <i className="bi bi-person-plus-fill" />
                           Create Account
+                        </span>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* ADMIN LOGIN TAB */}
+              {tab === 'admin' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-50 border-2 border-amber-200 mb-3">
+                      <i className="bi bi-shield-lock-fill text-2xl text-amber-700" />
+                    </div>
+                    <h2 className="text-lg lg:text-xl font-bold text-slate-800 mb-2">Admin Login</h2>
+                    <p className="text-slate-600 text-xs lg:text-sm">Director & Administrative Access</p>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <i className="bi bi-info-circle-fill text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium mb-1">Secure Admin Session</p>
+                        <p>Admin sessions are not saved between browser sessions. You will need to log in each time for security.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Admin Region Selection */}
+                  <div>
+                    <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Select Region</label>
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        <i className="bi bi-geo-alt-fill text-sm" />
+                      </div>
+                      <select
+                        className="w-full pl-12 pr-4 py-3 lg:py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-slate-50/50 text-sm lg:text-lg font-medium appearance-none"
+                        value={loginRegion}
+                        onChange={e => setLoginRegion(e.target.value)}
+                        required
+                      >
+                        {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <i className="bi bi-chevron-down text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAdminLogin} className="space-y-5">
+                    <div>
+                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Admin / Director ID</label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500">
+                          <i className="bi bi-shield-fill text-sm" />
+                        </div>
+                        <input
+                          type="text"
+                          className="w-full px-4 py-3 lg:py-5 bg-white border-2 border-slate-200 rounded-xl text-sm lg:text-lg font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all"
+                          style={{ paddingLeft: '3rem' }}
+                          placeholder="Enter Admin ID (e.g. DIR-001)"
+                          value={loginId}
+                          onChange={e => setLoginId(e.target.value)}
+                          autoComplete="username"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm lg:text-base font-semibold text-slate-700 mb-2 lg:mb-3">Admin Password</label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500">
+                          <i className="bi bi-lock-fill text-sm" />
+                        </div>
+                        <input
+                          className="w-full pl-12 pr-12 py-3 lg:py-5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-slate-50/50 text-sm lg:text-lg"
+                          type={showPass ? 'text' : 'password'}
+                          placeholder="Enter admin password"
+                          value={loginPass}
+                          onChange={e => setLoginPass(e.target.value)}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPass(!showPass)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'} text-sm`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      className="w-full py-4 lg:py-6 px-6 lg:px-8 text-white font-bold text-sm lg:text-lg rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                      style={{ background: 'linear-gradient(135deg, #92400e, #b45309)' }}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-3">
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Authenticating...
+                        </span>
+                      ) : (
+                        <span className="flex items-center justify-center gap-3">
+                          <i className="bi bi-shield-lock-fill" />
+                          Admin Sign In
                         </span>
                       )}
                     </button>

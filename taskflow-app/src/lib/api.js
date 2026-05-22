@@ -1,6 +1,16 @@
 import { supabase } from './supabase'
 import { useStore } from '../store/useStore'
 
+// Helper: get actor credentials for RPC calls
+// Returns { id, password } from the current session
+function getActorCredentials() {
+  const session = useStore.getState().session
+  return {
+    id: session?.ID || '',
+    password: session?.Password || '',
+  }
+}
+
 const UNITS = [
   'Administrative and Management Unit',
   'Planning Unit',
@@ -182,10 +192,22 @@ async function refreshGlobalDataForCurrentSession() {
 
 // ── TASK HISTORY ────────────────────────────────────────────
 export async function logHistory(taskId, action, actor, note = '') {
-  await supabase.from('TaskHistory').insert({
-    TaskID: String(taskId), Action: action, Actor: actor,
-    Note: note, CreatedAt: new Date().toISOString(),
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_log_history', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: String(taskId),
+    p_action: action,
+    p_actor_name: actor,
+    p_note: note || '',
   })
+  if (error) {
+    console.warn('[logHistory] RPC failed, falling back to direct insert:', error.message)
+    await supabase.from('TaskHistory').insert({
+      TaskID: String(taskId), Action: action, Actor: actor,
+      Note: note, CreatedAt: new Date().toISOString(),
+    })
+  }
 }
 
 export async function getTaskHistory(taskId) {
@@ -199,42 +221,60 @@ export async function createTask({ empId, empName, title, instructions, priority
   const taskId = 'T-' + Date.now()
   const fileUrl = files?.length ? await uploadFiles(files) : ''
   
-  // Get creator's region
   const session = useStore.getState().session
   const region = session?.Region || 'Region I'
+  const { id, password } = getActorCredentials()
 
-  const { error } = await supabase.from('Tasks').insert({
-    TaskID: taskId, EmployeeID: empId, EmployeeName: empName,
-    Title: title, Instructions: instructions,
-    FileLink: fileUrl, Status: 'Assigned',
-    Archived: 'FALSE', Deadline: deadline || null,
-    Priority: priority || 'Normal', Category: category || 'General',
-    PriorityFlags: priorityFlags || [],
-    PurposeCheckboxes: purposeCheckboxes || [],
-    ApprovalAction: approvalAction || '',
-    Region: region,
-    CreatedAt: new Date().toISOString(),
+  const { error } = await supabase.rpc('rpc_create_task', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+    p_employee_id: empId,
+    p_employee_name: empName,
+    p_title: title,
+    p_instructions: instructions,
+    p_file_link: fileUrl,
+    p_deadline: deadline || null,
+    p_priority: priority || 'Normal',
+    p_category: category || 'General',
+    p_priority_flags: priorityFlags || [],
+    p_purpose_checkboxes: purposeCheckboxes || [],
+    p_approval_action: approvalAction || '',
+    p_region: region,
   })
   if (error) throw error
   await createNotification(empId, `📋 New task assigned to you: "${title}"`, 'task', taskId)
-  // Log history — actor is the dispatcher (fetched from task record)
   await logHistory(taskId, 'Dispatched', actorName)
   return taskId
 }
 
 export async function editTask({ taskId, title, instructions, priority, category, deadline, files }) {
-  const updates = { Title: title, Instructions: instructions, Priority: priority, Category: category, Deadline: deadline || null }
-  if (files?.length) updates.FileLink = await uploadFiles(files)
-  const { error } = await supabase.from('Tasks').update(updates).eq('TaskID', taskId)
+  const fileUrl = files?.length ? await uploadFiles(files) : null
+  const { id, password } = getActorCredentials()
+
+  const { error } = await supabase.rpc('rpc_update_task', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+    p_title: title,
+    p_instructions: instructions,
+    p_priority: priority,
+    p_category: category,
+    p_deadline: deadline || null,
+    p_file_link: fileUrl,
+  })
   if (error) throw error
-  // History logged externally with actor name
 }
 
 export async function setTaskStatus(taskId, status, actorName = '', actorId = null) {
-  const col = status === 'Received' ? 'ReceivedAt' : 'CompletedAt'
-  const { error } = await supabase.from('Tasks').update({
-    Status: status, [col]: new Date().toISOString(),
-  }).eq('TaskID', taskId)
+  const { id, password } = getActorCredentials()
+
+  const { error } = await supabase.rpc('rpc_set_task_status', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+    p_status: status,
+  })
   if (error) throw error
   if (actorName) await logHistory(taskId, status, actorName)
 
@@ -257,9 +297,13 @@ export async function setTaskStatus(taskId, status, actorName = '', actorId = nu
 }
 
 export async function toggleArchive(taskId, archived) {
-  const { error } = await supabase.from('Tasks')
-    .update({ Archived: archived ? 'TRUE' : 'FALSE' })
-    .eq('TaskID', taskId)
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_toggle_archive', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+    p_archived: archived ? 'TRUE' : 'FALSE',
+  })
   if (error) throw error
 }
 
@@ -271,9 +315,14 @@ export async function addComment({ taskId, sender, message, files }) {
     ? JSON.stringify({ text: message || '', files: fileUrl })
     : (message || '')
 
-  const { error } = await supabase.from('Comments').insert({
-    TaskID: taskId, SenderName: sender,
-    Message: payload, TimeStamp: new Date().toISOString(), HiddenBy: '',
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_add_comment', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+    p_sender_name: sender,
+    p_message: payload,
+    p_hidden_by: '',
   })
   if (error) throw error
 
@@ -305,32 +354,81 @@ export async function addComment({ taskId, sender, message, files }) {
 
 // ── NOTIFICATIONS ──────────────────────────────────────────
 export async function createNotification(userId, message, type = 'info', taskId = '') {
-  await supabase.from('Notifications').insert({
-    UserID: String(userId), Message: message, Type: type,
-    IsRead: 'FALSE', CreatedAt: new Date().toISOString(), TaskID: String(taskId),
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_create_notification', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_user_id: String(userId),
+    p_message: message,
+    p_type: type,
+    p_task_id: String(taskId),
   })
+  if (error) {
+    console.warn('[createNotification] RPC failed, falling back:', error.message)
+    await supabase.from('Notifications').insert({
+      UserID: String(userId), Message: message, Type: type,
+      IsRead: 'FALSE', CreatedAt: new Date().toISOString(), TaskID: String(taskId),
+    })
+  }
 }
 
 export async function markNotificationsRead(userId) {
-  await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('UserID', userId)
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_mark_notifications_read', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_user_id: userId,
+  })
+  if (error) {
+    console.warn('[markNotificationsRead] RPC failed, falling back:', error.message)
+    await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('UserID', userId)
+  }
 }
 
 export async function markNotificationRead(notifId) {
-  await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('ID', notifId)
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_mark_notification_read', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_notif_id: notifId,
+  })
+  if (error) {
+    console.warn('[markNotificationRead] RPC failed, falling back:', error.message)
+    await supabase.from('Notifications').update({ IsRead: 'TRUE' }).eq('ID', notifId)
+  }
 }
 
 export async function markChatNotificationsRead(taskId, userId) {
   if (!taskId || !userId) return
-  await supabase.from('Notifications')
-    .update({ IsRead: 'TRUE' })
-    .eq('TaskID', String(taskId))
-    .eq('Type', 'chat')
-    .eq('UserID', String(userId))
-    .eq('IsRead', 'FALSE')
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_mark_chat_notifications_read', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: String(taskId),
+    p_user_id: String(userId),
+  })
+  if (error) {
+    console.warn('[markChatNotificationsRead] RPC failed, falling back:', error.message)
+    await supabase.from('Notifications')
+      .update({ IsRead: 'TRUE' })
+      .eq('TaskID', String(taskId))
+      .eq('Type', 'chat')
+      .eq('UserID', String(userId))
+      .eq('IsRead', 'FALSE')
+  }
 }
 
 export async function deleteNotification(notifId) {
-  await supabase.from('Notifications').delete().eq('ID', notifId)
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_delete_notification', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_notif_id: notifId,
+  })
+  if (error) {
+    console.warn('[deleteNotification] RPC failed, falling back:', error.message)
+    await supabase.from('Notifications').delete().eq('ID', notifId)
+  }
 }
 
 // ── PRESENCE ───────────────────────────────────────────────
@@ -409,10 +507,12 @@ export function getUnreadCommentCount(comments, taskId, sessionName) {
 
 // ── DELETE TASK PERMANENTLY ────────────────────────────────
 export async function deleteTask(taskId) {
-  // Delete comments first (foreign key)
-  await supabase.from('Comments').delete().eq('TaskID', taskId)
-  await supabase.from('Notifications').delete().eq('TaskID', taskId)
-  const { error } = await supabase.from('Tasks').delete().eq('TaskID', taskId)
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_delete_task', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+  })
   if (error) throw error
 }
 
@@ -434,28 +534,43 @@ export async function deleteUser(userId, actorDirectorId, directorPassword = '')
 }
 
 export async function clearNotifications(userId) {
-  await supabase.from('Notifications').delete().eq('UserID', userId)
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_clear_notifications', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_user_id: userId,
+  })
+  if (error) {
+    console.warn('[clearNotifications] RPC failed, falling back:', error.message)
+    await supabase.from('Notifications').delete().eq('UserID', userId)
+  }
 }
 
 export async function markChatRead(taskId, sessionName) {
-  // Append sessionName to HiddenBy on all messages they haven't sent in this task
-  const { data: comments } = await supabase
-    .from('Comments')
-    .select('ID, HiddenBy, SenderName')
-    .eq('TaskID', taskId)
-
-  if (!comments?.length) return
-
-  const toUpdate = comments.filter(c =>
-    c.SenderName !== sessionName &&
-    !String(c.HiddenBy || '').includes(sessionName)
-  )
-
-  await Promise.all(toUpdate.map(c =>
-    supabase.from('Comments').update({
-      HiddenBy: c.HiddenBy ? `${c.HiddenBy},${sessionName}` : sessionName
-    }).eq('ID', c.ID)
-  ))
+  const { id, password } = getActorCredentials()
+  const { error } = await supabase.rpc('rpc_mark_chat_read', {
+    p_actor_id: id,
+    p_actor_password: password,
+    p_task_id: taskId,
+    p_session_name: sessionName,
+  })
+  if (error) {
+    console.warn('[markChatRead] RPC failed, falling back to direct update:', error.message)
+    const { data: comments } = await supabase
+      .from('Comments')
+      .select('ID, HiddenBy, SenderName')
+      .eq('TaskID', taskId)
+    if (!comments?.length) return
+    const toUpdate = comments.filter(c =>
+      c.SenderName !== sessionName &&
+      !String(c.HiddenBy || '').includes(sessionName)
+    )
+    await Promise.all(toUpdate.map(c =>
+      supabase.from('Comments').update({
+        HiddenBy: c.HiddenBy ? `${c.HiddenBy},${sessionName}` : sessionName
+      }).eq('ID', c.ID)
+    ))
+  }
 }
 // ── GOOGLE AUTH ────────────────────────────────────────────────
 export async function signInWithGoogle() {
