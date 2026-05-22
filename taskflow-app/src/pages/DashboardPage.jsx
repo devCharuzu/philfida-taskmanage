@@ -3,14 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { useSync } from '../hooks/useSync'
 import { supabase } from '../lib/supabase'
-import { setTaskStatus, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount } from '../lib/api'
+import { setTaskStatus, getUnreadCommentCount } from '../lib/api'
 import NotificationBell from '../components/NotificationBell'
 import UserProfileTab from '../components/UserProfileTab'
 import ChatModal from '../components/ChatModal'
 import FileThumb from '../components/FileThumb'
 import Lightbox from '../components/Lightbox'
 import TaskTimeline from '../components/TaskTimeline'
-
+import DeadlineProgress from '../components/DeadlineProgress'
+import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
+import FieldReportSubmitModal from '../components/FieldReportSubmitModal'
+import FieldReportViewer from '../components/FieldReportViewer'
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -26,17 +29,57 @@ export default function DashboardPage() {
   const [loadingTask,  setLoadingTask]  = useState(null)
   const [tab,          setTab]          = useState('my-tasks')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [globalPrintPreview, setGlobalPrintPreview] = useState(null)
-
-
+  const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
+  
+  // Field report modal state
+  const [fieldReportModalTask, setFieldReportModalTask] = useState(null)
+  const [viewFieldReportTask, setViewFieldReportTask] = useState(null)
 
   // Sync presence state with session status (H11 fix for refresh persistence)
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
 
+  // Background automated presence checker (Travel/Leave Scheduler) via calendar reminders
+  useEffect(() => {
+    if (!session?.ID) return
+    
+    const runSchedulerCheck = async () => {
+      try {
+        await checkAndApplyScheduledPresence(session.ID, sync)
+      } catch (err) {
+        console.error('[PRESENCE-SCHEDULER] error:', err)
+      }
+    }
+    
+    // Run immediately on dashboard load
+    runSchedulerCheck()
+    
+    // Periodically run check every 30 seconds
+    const checkTimer = setInterval(runSchedulerCheck, 30000)
+    return () => clearInterval(checkTimer)
+  }, [session?.ID, sync])
+
+  // Listener for auto-applied status toasts
+  useEffect(() => {
+    const handleAutoUpdate = (e) => {
+      setAutoUpdateAlert(e.detail.status)
+      setPresence(e.detail.status)
+      sync()
+      // Auto-dismiss the float toast after 10 seconds
+      const alertTimer = setTimeout(() => setAutoUpdateAlert(null), 10000)
+      return () => clearTimeout(alertTimer)
+    }
+    window.addEventListener('presence-auto-updated', handleAutoUpdate)
+    return () => window.removeEventListener('presence-auto-updated', handleAutoUpdate)
+  }, [])
+
   const myTasks = globalData.tasks
     .filter(t => String(t.EmployeeID) === String(session?.ID) && String(t.Archived).toUpperCase() !== 'TRUE')
+    .slice().reverse()
+
+  const myCalendarTasks = globalData.tasks
+    .filter(t => String(t.EmployeeID) === String(session?.ID))
     .slice().reverse()
 
   const filteredMyTasks = myTasks.filter(t => {
@@ -54,432 +97,13 @@ export default function DashboardPage() {
     finally { setLoadingTask(null) }
   }
 
-  function handleGlobalPrintPreview(task) {
-    setGlobalPrintPreview(task)
-  }
-
-  function handleConfirmGlobalPrint() {
-    if (!globalPrintPreview) return
-    
-    const { hasUrgent, hasPriority, hasConfidential, checkboxStates, approvalStates, allPurposes } = parseCheckboxesFromTask(globalPrintPreview)
-    
-    // Clean remarks - remove Purpose and Action lines as they're shown in checkboxes
-    const cleanRemarks = (text) => {
-      if (!text) return 'Please acknowledge the receipt of this document. Thanks.'
-      return text
-        .replace(/^Purpose:[\s\S]*?(?=Action:|Remarks:|$)/mi, '')
-        .replace(/^Action:.*$/gmi, '')
-        .replace(/^From:.*$/gmi, '')
-        .replace(/\n\n+/g, '\n')
-        .trim() || 'Please acknowledge the receipt of this document. Thanks.'
-    }
-    const remarksText = cleanRemarks(globalPrintPreview.Description || globalPrintPreview.Instructions)
-    
-    // All possible action checkboxes from CreateTaskForm
-    const allActionOptions = [
-      'For compliance',
-      'For appropriate action',
-      'For information',
-      'Please review/comment',
-      'Please draft reply',
-      'Please monitor/follow up',
-      'Please handle',
-      'Please attend',
-      'Please see me',
-      'Please disseminate/circulate',
-      'Please return/forward to:',
-      'Please schedule',
-      'Please file',
-    ]
-    
-    // Generate action checkboxes - show all options, check the selected ones
-    const actionCheckboxesHtml = allActionOptions.map(option => {
-      const isChecked = allPurposes.includes(option)
-      return `<div class="action-item"><div class="checkbox ${isChecked ? 'checked' : ''}"></div><span>${option}</span></div>`
-    }).join('')
-    
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Action/Routing Slip - ${globalPrintPreview.TaskID}</title>
-        <style>
-          body { font-family: Cambria, 'Times New Roman', serif; padding: 30px; line-height: 1.4; font-size: 12pt; background: #fff; }
-          .page-wrapper { width: 160mm; margin: 15mm 15mm; border: 1px solid #ccc; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); background: #fff; }
-          .container { max-width: 100%; border: 2px solid #000; padding: 25px; }
-          .header { display: flex; align-items: center; gap: 15px; padding-bottom: 15px; margin-bottom: 20px; }
-          .logo-placeholder { width: 80px; height: 80px; border: 1px dashed #999; display: flex; align-items: center; justify-content: center; flex-shrink-0; background: #f9f9f9; }
-          .logo-placeholder img { max-width: 100%; max-height: 100%; object-fit: contain; }
-          .logo-text { font-size: 8pt; color: #999; text-align: center; }
-          .header-content { flex: 1; text-align: left; }
-          .agency-name { font-size: 11pt; margin-bottom: 5px; }
-          .agency-name .bold { font-weight: bold; }
-          .title { font-size: 11pt; font-weight: bold; text-transform: uppercase; text-align: center; }
-          .field-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
-          .field { display: flex; align-items: center; border-bottom: 1px solid #000; padding: 5px 0; }
-          .field-label { font-weight: bold; min-width: 100px; font-size: 10pt; }
-          .field-value { flex: 1; padding-left: 10px; }
-          .checkboxes { display: flex; gap: 40px; margin: 20px 0; padding: 10px 0; border-bottom: 1px solid #000; }
-          .checkbox-item { display: flex; align-items: center; gap: 8px; }
-          .checkbox { width: 18px; height: 18px; border: 2px solid #000; }
-          .checkbox.checked { background: #000; }
-          .checkbox.checked::after { content: '✓'; color: white; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-          .section { margin: 20px 0; padding: 15px; border: 1px solid #000; }
-          .section-title { font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 11pt; }
-          .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-          .action-item { display: flex; align-items: center; gap: 8px; }
-          .approval-section { display: flex; gap: 40px; margin-top: 15px; }
-          .approval-item { display: flex; align-items: center; gap: 8px; }
-          .remarks-box { min-height: 100px; padding: 10px; margin-top: 10px; border: 1px solid #000; white-space: pre-wrap; }
-          .signature-section { margin-top: 40px; text-align: center; }
-          .signature-line { border-bottom: 2px solid #000; width: 300px; margin: 40px auto 10px auto; }
-          .signature-label { font-size: 10pt; font-weight: bold; }
-          @media print { body { padding: 0; } .container { border: none; } }
-          @media screen and (max-width: 640px) {
-            .page-wrapper { width: 100%; margin: 0; padding: 8px; transform: scale(0.45); transform-origin: top center; }
-            .container { padding: 12px; }
-            .header { flex-direction: column; gap: 8px; }
-            .header-content { text-align: center; }
-            .checkboxes { flex-wrap: wrap; gap: 15px; }
-            .actions-grid { grid-template-columns: 1fr; }
-            .approval-section { flex-wrap: wrap; gap: 15px; }
-            .signature-line { width: 200px; }
-          }
-          @media screen and (min-width: 641px) and (max-width: 768px) {
-            .page-wrapper { width: 100%; margin: 0; transform: scale(0.65); transform-origin: top center; }
-          }
-          @media screen and (min-width: 769px) and (max-width: 1024px) {
-            .page-wrapper { width: 100%; margin: 0; transform: scale(0.85); transform-origin: top center; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="page-wrapper">
-        <div class="container">
-          <div style="text-align: right; font-size: 7pt; color: #666; margin-bottom: 5px; padding-right: 5px;">
-            REC-FORM 009/REV 00/17 AUG 2022
-          </div>
-          <div class="header">
-            <div class="logo-placeholder">
-              <img src="/philfida-logo.png" alt="Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'logo-text\\'>[LOGO]</span>';" />
-            </div>
-            <div class="header-content">
-              <div class="agency-name">Republic of the Philippines<br/>Department of Agriculture<br/><span class="bold">PHILIPPINE FIBER INDUSTRY DEVELOPMENT AUTHORITY</span><br/><span class="bold">REGIONAL OFFICE XIII</span></div>
-              <div class="title">ACTION/ROUTING SLIP</div>
-            </div>
-          </div>
-
-          <div style="text-align: right; font-size: 10pt; color: #333; margin-bottom: 10px;">
-            <strong>No: ${globalPrintPreview.DocumentNo || globalPrintPreview.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || globalPrintPreview.TaskID}</strong>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <span class="field-label">DATE:</span>
-              <span class="field-value">${new Date().toLocaleDateString()}</span>
-            </div>
-            <div class="field">
-              <span class="field-label">FOR/TO:</span>
-              <span class="field-value">${session?.Name || '—'}</span>
-            </div>
-          </div>
-
-          <div class="checkboxes">
-            <div class="checkbox-item">
-              <div class="checkbox ${hasUrgent ? 'checked' : ''}"></div>
-              <span>URGENT</span>
-            </div>
-            <div class="checkbox-item">
-              <div class="checkbox ${hasPriority ? 'checked' : ''}"></div>
-              <span>PRIORITY</span>
-            </div>
-            <div class="checkbox-item">
-              <div class="checkbox ${hasConfidential ? 'checked' : ''}"></div>
-              <span>CONFIDENTIAL</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">ACTION:</div>
-            <div class="actions-grid">
-              ${actionCheckboxesHtml}
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">APPROVAL:</div>
-            <div class="approval-section">
-              <div class="approval-item"><div class="checkbox ${approvalStates.noted ? 'checked' : ''}"></div><span>NOTED</span></div>
-              <div class="approval-item"><div class="checkbox ${approvalStates.approved ? 'checked' : ''}"></div><span>APPROVED</span></div>
-              <div class="approval-item"><div class="checkbox ${approvalStates.disapproved ? 'checked' : ''}"></div><span>DISAPPROVED</span></div>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">REMARKS:</div>
-            <div class="remarks-box"><strong>Subject:</strong> ${globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}<br/><br/>${remarksText}</div>
-          </div>
-
-          <div class="signature-section">
-            <div class="signature-line"></div>
-            <div class="signature-label">SAMUEL M. NACINO JR.</div>
-            <div class="signature-label">OIC-Regional Director</div>
-          </div>
-
-        </div>
-        </div>
-      </body>
-      </html>
-    `
-    
-    const printWindow = window.open('', '_blank')
-    printWindow.document.write(printContent)
-    printWindow.document.close()
-    printWindow.focus()
-    printWindow.print()
-    printWindow.close()
-    setGlobalPrintPreview(null)
-  }
-
-  function parseCheckboxesFromTask(task) {
-    // Parse checkbox states from database fields
-    // Handle both old format (plain strings) and new format (JSON arrays)
-    let priorityFlags = []
-    let purposeCheckboxes = []
-    
-    try {
-      if (task.PriorityFlags) {
-        // Try to parse as JSON array first
-        priorityFlags = JSON.parse(task.PriorityFlags)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PriorityFlags === 'string') {
-        priorityFlags = task.PriorityFlags.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    try {
-      if (task.PurposeCheckboxes) {
-        // Try to parse as JSON array first
-        purposeCheckboxes = JSON.parse(task.PurposeCheckboxes)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PurposeCheckboxes === 'string') {
-        purposeCheckboxes = task.PurposeCheckboxes.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    // Fallback: if no purpose checkboxes found, try to parse from instructions
-    if (purposeCheckboxes.length === 0) {
-      const instructions = task.Description || task.Instructions || ''
-      const purposeMatch = instructions.match(/Purpose:\s*(.*?)(?=\nAction:|\nRemarks:|\nFrom:|$)/i)
-      if (purposeMatch && purposeMatch[1]) {
-        // Parse comma-separated purposes from instructions
-        purposeCheckboxes = purposeMatch[1].split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    const approvalAction = task.ApprovalAction || ''
-
-    // Map priority flags
-    const hasUrgent = priorityFlags.includes('Urgent') || task.Priority === 'Urgent' || task.Priority === 'High'
-    const hasPriority = priorityFlags.includes('Priority') || task.Priority === 'Medium'
-    const hasConfidential = priorityFlags.includes('Confidential') || task.Category === 'Confidential'
-
-    // Map purpose checkboxes - check for all possible options
-    const checkboxStates = {
-      compliance: purposeCheckboxes.includes('For compliance'),
-      appropriateAction: purposeCheckboxes.includes('For appropriate action'),
-      info: purposeCheckboxes.includes('For information'),
-      review: purposeCheckboxes.includes('Please review/comment'),
-      draftReply: purposeCheckboxes.includes('Please draft reply'),
-      monitor: purposeCheckboxes.includes('Please monitor/follow up'),
-      handle: purposeCheckboxes.includes('Please handle'),
-      attend: purposeCheckboxes.includes('Please attend'),
-      seeMe: purposeCheckboxes.includes('Please see me'),
-      disseminate: purposeCheckboxes.includes('Please disseminate/circulate'),
-      returnForward: purposeCheckboxes.includes('Please return/forward to:'),
-      schedule: purposeCheckboxes.includes('Please schedule'),
-      file: purposeCheckboxes.includes('Please file'),
-    }
-
-    // Map approval action
-    const approvalStates = {
-      noted: approvalAction === 'Noted',
-      approved: approvalAction === 'Approved',
-      disapproved: approvalAction === 'Disapproved',
-    }
-
-    return {
-      hasUrgent,
-      hasPriority,
-      hasConfidential,
-      checkboxStates,
-      approvalStates,
-      allPurposes: purposeCheckboxes, // Return all purposes for dynamic rendering
-    }
-  }
-
   const activeCount    = myTasks.filter(t => t.Status !== 'Completed').length
   const completedCount = myTasks.filter(t => t.Status === 'Completed').length
+  const assignedCount  = myTasks.filter(t => t.Status === 'Assigned').length
+  const receivedCount  = myTasks.filter(t => t.Status === 'Received').length
 
   return (
-    <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
-
-      {/* Global Print Preview Modal - Above all divs */}
-      {globalPrintPreview && (
-        <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800">Print Preview - Action/Routing Slip</h3>
-              <button onClick={() => setGlobalPrintPreview(null)} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
-            </div>
-            <div className="overflow-auto p-6 bg-slate-100" style={{ maxHeight: 'calc(90vh - 140px)' }}>
-              <div className="bg-white p-6 rounded-lg border border-slate-200">
-                <div className="mb-4">
-                  <h4 className="font-semibold text-slate-800 mb-2">{globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}</h4>
-                  {globalPrintPreview.DocumentNo && (
-                    <p className="text-sm text-slate-600 mb-2">Document No: {globalPrintPreview.DocumentNo}</p>
-                  )}
-                </div>
-                
-                {/* Document Preview */}
-                <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden bg-white">
-                  <div className="mx-auto" style={{ maxWidth: '210mm', fontFamily: 'Cambria, "Times New Roman", serif', lineHeight: '1.4', fontSize: '12pt', padding: '15mm', border: '1px solid #ccc', background: '#fff' }}>
-                    <div style={{ textAlign: 'right', fontSize: '7pt', color: '#666', marginBottom: '5px', paddingRight: '5px' }}>
-                      REC-FORM 009/REV 00/17 AUG 2022
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
-                      <div style={{ width: '80px', height: '80px', border: '1px dashed #999', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0', background: '#f9f9f9' }}>
-                        <img src="/philfida-logo.png" alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                             onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style=\"font-size:8pt;color:#999\">[LOGO]</span>'; }} />
-                      </div>
-                      <div style={{ flex: '1', textAlign: 'left' }}>
-                        <div style={{ fontSize: '11pt', marginBottom: '5px' }}>
-                          Republic of the Philippines<br/>
-                          Department of Agriculture<br/>
-                          <span style={{ fontWeight: 'bold' }}>PHILIPPINE FIBER INDUSTRY DEVELOPMENT AUTHORITY</span><br/>
-                          <span style={{ fontWeight: 'bold' }}>REGIONAL OFFICE XIII</span>
-                        </div>
-                        <div style={{ fontSize: '11pt', fontWeight: 'bold', textAlign: 'center', marginTop: '5px' }}>ACTION/ROUTING SLIP</div>
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: 'right', fontSize: '10pt', color: '#333', marginBottom: '10px' }}>
-                      <strong>No: {globalPrintPreview.DocumentNo || globalPrintPreview.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || globalPrintPreview.TaskID}</strong>
-                    </div>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #000', padding: '5px 0' }}>
-                        <span style={{ fontWeight: 'bold', minWidth: '100px', fontSize: '10pt' }}>DATE:</span>
-                        <span style={{ fontSize: '10pt' }}>{new Date().toLocaleDateString()}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #000', padding: '5px 0' }}>
-                        <span style={{ fontWeight: 'bold', minWidth: '100px', fontSize: '10pt' }}>FOR/TO:</span>
-                        <span style={{ fontSize: '10pt' }}>{session?.Name || '—'}</span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '40px', margin: '20px 0', padding: '10px 0', borderBottom: '1px solid #000' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: parseCheckboxesFromTask(globalPrintPreview).hasUrgent ? '#000' : 'transparent' }}></div>
-                        <span style={{ fontSize: '10pt' }}>URGENT</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: parseCheckboxesFromTask(globalPrintPreview).hasPriority ? '#000' : 'transparent' }}></div>
-                        <span style={{ fontSize: '10pt' }}>PRIORITY</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: parseCheckboxesFromTask(globalPrintPreview).hasConfidential ? '#000' : 'transparent' }}></div>
-                        <span style={{ fontSize: '10pt' }}>CONFIDENTIAL</span>
-                      </div>
-                    </div>
-
-                    <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #000' }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase', fontSize: '11pt' }}>ACTION:</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                        {[
-                          'For compliance',
-                          'For appropriate action', 
-                          'For information',
-                          'Please review/comment',
-                          'Please draft reply',
-                          'Please monitor/follow up',
-                          'Please handle',
-                          'Please attend',
-                          'Please see me',
-                          'Please disseminate/circulate',
-                          'Please return/forward to:',
-                          'Please schedule',
-                          'Please file',
-                        ].map(option => {
-                          const isChecked = parseCheckboxesFromTask(globalPrintPreview).allPurposes.includes(option)
-                          return (
-                            <div key={option} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: isChecked ? '#000' : 'transparent' }}></div>
-                              <span style={{ fontSize: '10pt' }}>{option}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #000' }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase', fontSize: '11pt' }}>APPROVAL:</div>
-                      <div style={{ display: 'flex', gap: '40px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: parseCheckboxesFromTask(globalPrintPreview).approvalStates.noted ? '#000' : 'transparent' }}></div>
-                          <span style={{ fontSize: '10pt' }}>NOTED</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: parseCheckboxesFromTask(globalPrintPreview).approvalStates.approved ? '#000' : 'transparent' }}></div>
-                          <span style={{ fontSize: '10pt' }}>APPROVED</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '18px', height: '18px', border: '2px solid #000', backgroundColor: parseCheckboxesFromTask(globalPrintPreview).approvalStates.disapproved ? '#000' : 'transparent' }}></div>
-                          <span style={{ fontSize: '10pt' }}>DISAPPROVED</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #000' }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase', fontSize: '11pt' }}>REMARKS:</div>
-                      <div style={{ minHeight: '100px', padding: '10px', marginTop: '10px', border: '1px solid #000', whiteSpace: 'pre-wrap', fontSize: '10pt' }}>
-                        <strong>Subject:</strong> {globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}<br/><br/>
-                        {(() => {
-                          const text = globalPrintPreview.Description || globalPrintPreview.Instructions || ''
-                          return text
-                            .replace(/^Purpose:[\s\S]*?(?=Action:|Remarks:|$)/mi, '')
-                            .replace(/^Action:.*$/gmi, '')
-                            .replace(/^From:.*$/gmi, '')
-                            .replace(/\n\n+/g, '\n')
-                            .trim() || 'Please acknowledge the receipt of this document. Thanks.'
-                        })()}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: '40px', textAlign: 'center' }}>
-                      <div style={{ borderBottom: '2px solid #000', width: '300px', margin: '40px auto 10px auto' }}></div>
-                      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>SAMUEL M. NACINO JR.</div>
-                      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>OIC-Regional Director</div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex justify-end gap-3">
-                  <button onClick={() => setGlobalPrintPreview(null)} className="px-6 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50">
-                    Cancel
-                  </button>
-                  <button onClick={handleConfirmGlobalPrint} className="px-6 py-2 rounded-lg font-semibold text-white bg-green-700 hover:bg-green-800">
-                    <i className="bi bi-printer-fill mr-2" /> Print
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="h-dvh flex overflow-hidden" style={{ background: '#f6f8f5' }}>
 
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
@@ -490,7 +114,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 shadow-inner">
-              <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
+              <img src="/philfida-logo.png" alt="PhilFIDA Logo" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:white;">PF</span>' }} />
             </div>
             <div className="flex flex-col min-w-0">
@@ -505,31 +129,51 @@ export default function DashboardPage() {
               </span>
             )}
             <NotificationBell />
-            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
-              <i className="bi bi-x-lg text-base" />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 rounded">
+              <i className="bi bi-x-lg text-base" aria-hidden="true" />
+              <span className="sr-only">Close sidebar</span>
             </button>
           </div>
         </div>
 
         {/* ── Nav ── */}
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto" role="tablist" aria-label="Dashboard views">
           <button
+            role="tab"
+            aria-selected={tab === 'my-tasks'}
+            aria-controls="panel-my-tasks"
+            id="tab-my-tasks"
             onClick={() => setTab('my-tasks')}
-            className={`nav-item w-full text-left ${tab === 'my-tasks' ? 'active' : ''}`}
+            className={`nav-item w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-yellow-500 ${tab === 'my-tasks' ? 'active' : ''}`}
           >
-            <i className="bi bi-grid-fill text-base" />
+            <i className="bi bi-grid-fill text-base" aria-hidden="true" />
             <span className="flex-1 text-sm">My Assignments</span>
             {activeCount > 0 && (
-              <span className="w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center" aria-label={`${activeCount} active tasks`}>
                 {activeCount}
               </span>
             )}
           </button>
           <button
-            onClick={() => setTab('profile')}
-            className={`nav-item w-full text-left mt-1 ${tab === 'profile' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'calendar'}
+            aria-controls="panel-calendar"
+            id="tab-calendar"
+            onClick={() => setTab('calendar')}
+            className={`nav-item w-full text-left mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-yellow-500 ${tab === 'calendar' ? 'active' : ''}`}
           >
-            <i className="bi bi-person-circle text-base" />
+            <i className="bi bi-calendar3 text-base" aria-hidden="true" />
+            <span className="flex-1 text-sm">Personal Calendar</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'profile'}
+            aria-controls="panel-profile"
+            id="tab-profile"
+            onClick={() => setTab('profile')}
+            className={`nav-item w-full text-left mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-yellow-500 ${tab === 'profile' ? 'active' : ''}`}
+          >
+            <i className="bi bi-person-circle text-base" aria-hidden="true" />
             <span className="flex-1 text-sm">My Profile</span>
           </button>
         </nav>
@@ -541,8 +185,12 @@ export default function DashboardPage() {
 
         {/* Mobile top bar */}
         <div className="md:hidden sticky top-0 z-40 glass-effect flex items-center justify-between px-4 py-3 bg-white/80 border-b border-slate-200 flex-shrink-0">
-          <button onClick={() => setSidebarOpen(true)} className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors">
-            <i className="bi bi-list text-2xl" />
+          <button 
+            onClick={() => setSidebarOpen(true)} 
+            className="p-1.5 -ml-1 text-slate-600 hover:text-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 rounded-lg"
+            aria-label="Open sidebar"
+          >
+            <i className="bi bi-list text-2xl" aria-hidden="true" />
           </button>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-green-900 rounded-lg flex items-center justify-center overflow-hidden shadow-md">
@@ -556,32 +204,53 @@ export default function DashboardPage() {
 
         <main className="flex-1 overflow-y-auto flex flex-col md:pb-0 pb-16">
 
-          {/* ── TOP BAR ── */}
+          {/* My Tasks Panel */}
           {tab === 'my-tasks' && (
-            <>
-              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
-                <div className="min-w-0">
-                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                    My Assignments <span className="text-green-600 font-medium">— {session?.Region}</span>
-                  </h2>
-                  <p className="text-slate-400 text-[10px] sm:text-xs mt-1.5 font-medium">{session?.Designation || session?.Role} — {session?.Office || session?.Unit}</p>
+            <div
+              id="panel-my-tasks"
+              role="tabpanel"
+              aria-labelledby="tab-my-tasks"
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              <div className="px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">
+                      My Assignments
+                    </h1>
+                    <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">
+                      {session?.Office || session?.Unit || 'PhilFIDA TaskFlow'}
+                    </p>
+                  </div>
+                  {myTasks.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 xl:min-w-[520px]">
+                      <SummaryStat label="Active" value={activeCount} tone="green" icon="bi-activity" />
+                      <SummaryStat label="To Accept" value={assignedCount} tone="amber" icon="bi-inbox-fill" />
+                      <SummaryStat label="In Progress" value={receivedCount} tone="blue" icon="bi-arrow-repeat" />
+                      <SummaryStat label="Completed" value={completedCount} tone="slate" icon="bi-check2-circle" />
+                    </div>
+                  )}
                 </div>
               </div>
 
               {myTasks.length > 0 && (
-                <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 flex items-center gap-2 flex-wrap">
+                <div className="px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white/95 flex-shrink-0 flex items-center gap-2.5 flex-wrap">
                   <div className="relative flex-1 min-w-[140px] max-w-sm">
-                    <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                    <label htmlFor="task-search" className="sr-only">Search assignments</label>
+                    <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true" />
                     <input
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none"
+                      id="task-search"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none focus-visible:ring-2 focus-visible:ring-green-600"
                       placeholder="Search tasks..."
                       value={filterSearch}
                       onChange={e => setFilterSearch(e.target.value)}
                     />
                   </div>
                   <div className="flex items-center gap-2">
+                    <label htmlFor="task-status-filter" className="sr-only">Filter by Status</label>
                     <select 
-                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-green-500/20"
+                      id="task-status-filter"
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus-visible:ring-2 focus-visible:ring-green-600"
                       value={filterStatus} 
                       onChange={e => setFilterStatus(e.target.value)}
                     >
@@ -592,79 +261,87 @@ export default function DashboardPage() {
                     </select>
                   </div>
                   {(filterStatus !== 'All' || filterSearch) && (
-                    <button onClick={() => { setFilterStatus('All'); setFilterSearch('') }}
-                      className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all flex items-center gap-1.5">
-                      <i className="bi bi-x-circle-fill" /> Reset
+                    <button 
+                      onClick={() => { setFilterStatus('All'); setFilterSearch('') }}
+                      className="px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+                    >
+                      <i className="bi bi-x-circle-fill" aria-hidden="true" /> Reset
                     </button>
                   )}
                 </div>
               )}
 
               {/* ── TASK CONTENT ── */}
-              <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-4 pb-0">
+              <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-5 pb-6">
                 {myTasks.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm max-w-full mb-4 text-center py-16">
-                <i className="bi bi-clipboard-x text-3xl block mb-2 opacity-30 text-slate-400" />
-                <p className="text-slate-400">No tasks assigned yet.</p>
-              </div>
-            ) : (
-              <>
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
-                    <div className="text-2xl font-bold text-emerald-600">{activeCount}</div>
-                    <div className="text-xs text-slate-500 font-medium mt-1">Active Tasks</div>
-                  </div>
-                  <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
-                    <div className="text-2xl font-bold text-blue-600">{completedCount}</div>
-                    <div className="text-xs text-slate-500 font-medium mt-1">Completed</div>
-                  </div>
-                  <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
-                    <div className="text-2xl font-bold text-purple-600">{myTasks.length}</div>
-                    <div className="text-xs text-slate-500 font-medium mt-1">Total Tasks</div>
-                  </div>
-                  <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
-                    <div className="text-2xl font-bold text-orange-600">
-                      {Math.round((completedCount / myTasks.length) * 100) || 0}%
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm max-w-2xl mx-auto mt-10 text-center py-16 px-6">
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-slate-400 ring-1 ring-slate-200" aria-hidden="true">
+                      <i className="bi bi-clipboard-check text-2xl" />
                     </div>
-                    <div className="text-xs text-slate-500 font-medium mt-1">Completion Rate</div>
+                    <h2 className="mb-0 text-base font-bold tracking-tight text-slate-900">No assignments yet</h2>
+                    <p className="mb-0 mt-1 text-sm text-slate-500">New tasks assigned to you will appear here.</p>
                   </div>
-                </div>
-
-                {/* Task Cards */}
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm max-w-full mb-4">
-                  <div className="p-4 md:p-6 lg:p-8 space-y-4">
-                    {filteredMyTasks.length === 0 ? (
-                      <div className="text-center py-12 text-slate-400">
-                        <i className="bi bi-search text-3xl block mb-2 opacity-30" />
-                        <p>No matching tasks found for your search/filters.</p>
-                      </div>
-                    ) : filteredMyTasks.map(t => (
-                      <TaskCard
-                        key={t.TaskID}
-                        task={t}
-                        session={session}
-                        comments={globalData.comments}
-                        loading={loadingTask === t.TaskID}
-                        history={globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))}
-                        onStatusUpdate={handleStatusUpdate}
-                        onOpenChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
-                        onOpenFile={(url, name) => setLightboxFile({ url, name })}
-                        onPrintPreview={() => handleGlobalPrintPreview(t)}
-                      />
-                    ))}
+                ) : (
+                  <div className="max-w-full mb-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      {filteredMyTasks.length === 0 ? (
+                        <div className="xl:col-span-2 text-center py-14 text-slate-500 bg-white border border-dashed border-slate-300 rounded-xl">
+                          <i className="bi bi-search text-3xl block mb-3 opacity-40" aria-hidden="true" />
+                          <p className="mb-0 text-sm font-semibold">No matching tasks found.</p>
+                        </div>
+                      ) : filteredMyTasks.map(t => (
+                        <TaskCard
+                          key={t.TaskID}
+                          task={t}
+                          session={session}
+                          comments={globalData.comments}
+                          loading={loadingTask === t.TaskID}
+                          history={globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))}
+                          onStatusUpdate={handleStatusUpdate}
+                          onOpenChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
+                          onOpenFile={(url, name) => setLightboxFile({ url, name })}
+                          onOpenFieldReport={() => setFieldReportModalTask(t)}
+                          onViewFieldReport={() => setViewFieldReportTask(t)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
-        </>
-      )}
+                )}
+              </div>
+            </div>
+          )}
 
-      {tab === 'profile' && (
-        <UserProfileTab presence={presence} setPresence={setPresence} />
-      )}
-    </main>
+          {/* Calendar Panel */}
+          {tab === 'calendar' && (
+            <div
+              id="panel-calendar"
+              role="tabpanel"
+              aria-labelledby="tab-calendar"
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              <PersonalCalendarTab 
+                tasks={myCalendarTasks} 
+                userId={session?.ID} 
+                onViewTask={(taskId, titleText) => {
+                  setTab('my-tasks')
+                  setFilterSearch(titleText.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim())
+                }} 
+              />
+            </div>
+          )}
+
+          {/* Profile Panel */}
+          {tab === 'profile' && (
+            <div
+              id="panel-profile"
+              role="tabpanel"
+              aria-labelledby="tab-profile"
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              <UserProfileTab presence={presence} setPresence={setPresence} />
+            </div>
+          )}
+        </main>
 
         {/* FOOTER */}
         <footer className="bg-white border-t border-slate-100/80 py-1.5 sm:py-2 px-3 sm:px-4 md:px-6 lg:px-8 flex-shrink-0">
@@ -672,250 +349,337 @@ export default function DashboardPage() {
             <p className="text-[9px] sm:text-[10px] text-slate-400 truncate">© {new Date().getFullYear()} PhilFIDA</p>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <span className="text-[9px] sm:text-[10px] text-slate-400 hidden sm:inline">User Dashboard</span>
-              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gradient-to-r from-[#016837] to-[#027a42]"></span>
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gradient-to-r from-[#016837] to-[#027a42]" aria-hidden="true" />
             </div>
           </div>
         </footer>
       </div>
 
       {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 flex z-30 shadow-lg">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 flex z-30 shadow-lg" role="tablist" aria-label="Mobile navigation">
         <button
+          role="tab"
+          aria-selected={tab === 'my-tasks'}
+          aria-controls="panel-my-tasks"
+          id="mobile-tab-my-tasks"
           onClick={() => setTab('my-tasks')}
-          className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold transition-colors relative ${tab === 'my-tasks' ? 'text-green-800' : 'text-slate-400'}`}
+          className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-bold transition-colors relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-600 ${tab === 'my-tasks' ? 'text-green-800' : 'text-slate-500'}`}
         >
-          <i className="bi bi-grid-fill text-xl" />
-          Assignments
+          <i className="bi bi-grid-fill text-xl" aria-hidden="true" />
+          <span>Assignments</span>
           {activeCount > 0 && (
-            <span className="absolute top-2 right-1/4 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+            <span className="absolute top-2 right-1/4 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center" aria-label={`${activeCount} active tasks`}>
               {activeCount}
             </span>
           )}
         </button>
         <button
-          onClick={() => setTab('profile')}
-          className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold transition-colors relative ${tab === 'profile' ? 'text-green-800' : 'text-slate-400'}`}
+          role="tab"
+          aria-selected={tab === 'calendar'}
+          aria-controls="panel-calendar"
+          id="mobile-tab-calendar"
+          onClick={() => setTab('calendar')}
+          className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-bold transition-colors relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-600 ${tab === 'calendar' ? 'text-green-800' : 'text-slate-500'}`}
         >
-          <i className="bi bi-person-circle text-xl" />
-          Profile
+          <i className="bi bi-calendar3 text-xl" aria-hidden="true" />
+          <span>Calendar</span>
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'profile'}
+          aria-controls="panel-profile"
+          id="mobile-tab-profile"
+          onClick={() => setTab('profile')}
+          className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-bold transition-colors relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-600 ${tab === 'profile' ? 'text-green-800' : 'text-slate-500'}`}
+        >
+          <i className="bi bi-person-circle text-xl" aria-hidden="true" />
+          <span>Profile</span>
         </button>
       </nav>
 
       {chat         && <ChatModal taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}
       {lightboxFile && <Lightbox file={lightboxFile} onClose={() => setLightboxFile(null)} />}
+      
+      {/* Field Report Submit Modal */}
+      {fieldReportModalTask && (
+        <FieldReportSubmitModal
+          isOpen={!!fieldReportModalTask}
+          onClose={() => {
+            setFieldReportModalTask(null)
+            sync()
+          }}
+          taskId={fieldReportModalTask.TaskID}
+          onReportSubmitted={() => {
+            setFieldReportModalTask(null)
+            sync()
+          }}
+        />
+      )}
+      
+      {/* Field Report Viewer Modal */}
+      {viewFieldReportTask && (
+        <FieldReportViewer
+          task={viewFieldReportTask}
+          isOpen={!!viewFieldReportTask}
+          onClose={() => setViewFieldReportTask(null)}
+        />
+      )}
+
+      {/* ── AUTO-UPDATE TOAST ALERT ── */}
+      {autoUpdateAlert && (
+        <div className="fixed top-4 right-4 z-[9999] max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
+          <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
+            <i className="bi bi-patch-check-fill text-lg leading-none" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-xs font-black uppercase tracking-wider text-green-400">Status Triggered</h4>
+            <p className="text-[11px] font-bold text-slate-100 leading-snug mt-1">
+              Your availability presence has been auto-updated in advance based on your schedule:
+            </p>
+            <p className="text-[10px] font-mono bg-black/30 rounded px-2 py-1 mt-1.5 text-green-300 font-semibold border border-white/5 break-all select-all">
+              {autoUpdateAlert}
+            </p>
+          </div>
+          <button 
+            onClick={() => setAutoUpdateAlert(null)}
+            className="text-slate-400 hover:text-white text-base font-bold leading-none select-none transition-colors"
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function TaskCard({ task: t, session, comments, history = [], loading, onStatusUpdate, onOpenChat, onOpenFile, onPrintPreview }) {
-  const unreadChat = getUnreadCommentCount(comments, t.TaskID, session.Name)
+const SUMMARY_TONES = {
+  green: 'text-green-800 bg-green-50 ring-green-100',
+  amber: 'text-amber-800 bg-amber-50 ring-amber-100',
+  blue:  'text-blue-800 bg-blue-50 ring-blue-100',
+  slate: 'text-slate-700 bg-slate-50 ring-slate-200',
+}
 
-  function parseCheckboxesFromTask(task) {
-    // Parse checkbox states from database fields
-    // Handle both old format (plain strings) and new format (JSON arrays)
-    let priorityFlags = []
-    let purposeCheckboxes = []
-    
-    try {
-      if (task.PriorityFlags) {
-        // Try to parse as JSON array first
-        priorityFlags = JSON.parse(task.PriorityFlags)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PriorityFlags === 'string') {
-        priorityFlags = task.PriorityFlags.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
+const STATUS_TONES = {
+  Assigned: {
+    label:  'To accept',
+    icon:   'bi-inbox-fill',
+    accent: 'border-l-amber-400',
+    chip:   'bg-amber-50 text-amber-850 ring-amber-200',
+    dot:    'bg-amber-500',
+  },
+  Received: {
+    label:  'In progress',
+    icon:   'bi-arrow-repeat',
+    accent: 'border-l-blue-500',
+    chip:   'bg-blue-50 text-blue-850 ring-blue-200',
+    dot:    'bg-blue-500',
+  },
+  Completed: {
+    label:  'Completed',
+    icon:   'bi-check2-circle',
+    accent: 'border-l-green-600',
+    chip:   'bg-green-50 text-green-850 ring-green-200',
+    dot:    'bg-green-600',
+  },
+}
 
-    try {
-      if (task.PurposeCheckboxes) {
-        // Try to parse as JSON array first
-        purposeCheckboxes = JSON.parse(task.PurposeCheckboxes)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PurposeCheckboxes === 'string') {
-        purposeCheckboxes = task.PurposeCheckboxes.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
+const PRIORITY_TONES = {
+  Urgent: 'bg-red-50 text-red-700 ring-red-200',
+  High:   'bg-orange-50 text-orange-700 ring-orange-200',
+  Medium: 'bg-amber-50 text-amber-700 ring-amber-200',
+  Low:    'bg-slate-50 text-slate-700 ring-slate-200',
+  Normal: 'bg-green-50 text-green-700 ring-green-200',
+}
 
-    // Fallback: if no purpose checkboxes found, try to parse from instructions
-    if (purposeCheckboxes.length === 0) {
-      const instructions = task.Description || task.Instructions || ''
-      const purposeMatch = instructions.match(/Purpose:\s*(.*?)(?=\nAction:|\nRemarks:|\nFrom:|$)/i)
-      if (purposeMatch && purposeMatch[1]) {
-        // Parse comma-separated purposes from instructions
-        purposeCheckboxes = purposeMatch[1].split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
+function SummaryStat({ label, value, tone, icon }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white px-3.5 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="mb-0 text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">{label}</p>
+          <p className="mb-0 mt-2 text-xl font-black tracking-normal text-slate-900 leading-none">{value}</p>
+        </div>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ring-1 ${SUMMARY_TONES[tone] || SUMMARY_TONES.slate}`} aria-hidden="true">
+          <i className={`bi ${icon} text-sm`} />
+        </span>
+      </div>
+    </div>
+  )
+}
 
-    const approvalAction = task.ApprovalAction || ''
+function StatusPill({ status }) {
+  const tone = STATUS_TONES[status] || STATUS_TONES.Assigned
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${tone.chip}`}>
+      <i className={`bi ${tone.icon} text-[10px]`} aria-hidden="true" />
+      {tone.label}
+    </span>
+  )
+}
 
-    // Map priority flags
-    const hasUrgent = priorityFlags.includes('Urgent') || task.Priority === 'Urgent' || task.Priority === 'High'
-    const hasPriority = priorityFlags.includes('Priority') || task.Priority === 'Medium'
-    const hasConfidential = priorityFlags.includes('Confidential') || task.Category === 'Confidential'
+function PriorityPill({ priority }) {
+  if (!priority) return <span className="text-sm font-semibold text-slate-400">None</span>
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${PRIORITY_TONES[priority] || PRIORITY_TONES.Normal}`}>
+      {priority}
+    </span>
+  )
+}
 
-    // Map purpose checkboxes - check for all possible options
-    const checkboxStates = {
-      compliance: purposeCheckboxes.includes('For compliance'),
-      appropriateAction: purposeCheckboxes.includes('For appropriate action'),
-      info: purposeCheckboxes.includes('For information'),
-      review: purposeCheckboxes.includes('Please review/comment'),
-      draftReply: purposeCheckboxes.includes('Please draft reply'),
-      monitor: purposeCheckboxes.includes('Please monitor/follow up'),
-      handle: purposeCheckboxes.includes('Please handle'),
-      attend: purposeCheckboxes.includes('Please attend'),
-      seeMe: purposeCheckboxes.includes('Please see me'),
-      disseminate: purposeCheckboxes.includes('Please disseminate/circulate'),
-      returnForward: purposeCheckboxes.includes('Please return/forward to:'),
-      schedule: purposeCheckboxes.includes('Please schedule'),
-      file: purposeCheckboxes.includes('Please file'),
-    }
+function InfoTile({ label, icon, children }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 flex flex-col justify-between">
+      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-2">
+        <i className={`bi ${icon} text-[11px]`} aria-hidden="true" />
+        {label}
+      </span>
+      {children}
+    </div>
+  )
+}
 
-    // Map approval action
-    const approvalStates = {
-      noted: approvalAction === 'Noted',
-      approved: approvalAction === 'Approved',
-      disapproved: approvalAction === 'Disapproved',
-    }
+function getDocNumber(task) {
+  if (task.DocumentNo) return task.DocumentNo
+  return task.Title?.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || ''
+}
 
-    return {
-      hasUrgent,
-      hasPriority,
-      hasConfidential,
-      checkboxStates,
-      approvalStates,
-      allPurposes: purposeCheckboxes, // Return all purposes for dynamic rendering
-    }
-  }
+function getCleanTitle(task) {
+  const title = task.Title || 'Untitled assignment'
+  return title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || title
+}
 
+function formatDate(iso) {
+  if (!iso) return 'No deadline'
+  return new Date(iso).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
 
+function getDeadlineMeta(deadline, status) {
+  if (!deadline) return { label: 'No deadline', className: 'text-slate-500', icon: 'bi-calendar' }
+  if (status === 'Completed') return { label: formatDate(deadline), className: 'text-slate-650 font-semibold', icon: 'bi-calendar-check' }
+
+  const now = new Date()
+  const due = new Date(deadline)
+  const days = Math.ceil((due - now) / 86400000)
+
+  if (Number.isNaN(due.getTime())) return { label: 'Invalid date', className: 'text-slate-500', icon: 'bi-calendar' }
+  if (days < 0) return { label: `${formatDate(deadline)} · Overdue`, className: 'text-red-750 font-bold', icon: 'bi-exclamation-triangle-fill' }
+  if (days === 0) return { label: `${formatDate(deadline)} · Due today`, className: 'text-red-750 font-bold', icon: 'bi-exclamation-circle-fill' }
+  if (days <= 3) return { label: `${formatDate(deadline)} · ${days}d left`, className: 'text-amber-800 font-bold', icon: 'bi-clock-fill' }
+  return { label: formatDate(deadline), className: 'text-slate-750 font-semibold', icon: 'bi-calendar-event' }
+}
+
+function TaskCard({ task: t, session, comments, history = [], loading, onStatusUpdate, onOpenChat, onOpenFile, onOpenFieldReport, onViewFieldReport }) {
+  const unreadChat = getUnreadCommentCount(comments, t.TaskID, session?.Name || '')
+  const statusTone = STATUS_TONES[t.Status] || STATUS_TONES.Assigned
+  const deadline = getDeadlineMeta(t.Deadline, t.Status)
+  const docNumber = getDocNumber(t)
+  const files = t.FileLink?.split('|').filter(Boolean) || []
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full overflow-hidden animate-in-up group">
-
-      {/* ── SECTION 1: Task Header ── */}
-      <div className="bg-slate-50/50 px-3 sm:px-4 py-3 border-b border-slate-100 group-hover:bg-green-50/30 transition-colors">
-        <div className="flex items-center justify-between gap-2 sm:gap-3">
-          {/* Task ID & Status */}
-          <div className="min-w-0 flex-1 flex items-center gap-1.5 sm:gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">Assigned to you</p>
-            </div>
+    <article className={`bg-white border border-l-4 ${statusTone.accent} border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col h-full overflow-hidden animate-in-up`}>
+      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-500">
+              <span className={`h-2 w-2 rounded-full ${statusTone.dot}`} aria-hidden="true" />
+              Assigned to you
+            </p>
+            {docNumber && (
+              <span className="mb-2 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700 ring-1 ring-slate-200">
+                <i className="bi bi-hash text-green-700" aria-hidden="true" />
+                {docNumber}
+              </span>
+            )}
+            <h2 className="mb-0 text-[15px] sm:text-base font-semibold tracking-tight leading-snug text-slate-900">
+              {getCleanTitle(t)}
+            </h2>
+            {t.Category && (
+              <span className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                {t.Category}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Comments indicator */}
+          <div className="flex flex-shrink-0 flex-col items-end gap-2">
+            <StatusPill status={t.Status} />
             {unreadChat > 0 && (
               <button
                 onClick={onOpenChat}
-                className="flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-100 rounded-full text-red-600 hover:bg-red-100 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
               >
-                <i className="bi bi-chat-dots-fill text-[12px]" />
-                <span className="text-[11px] font-bold">{unreadChat > 9 ? '9+' : unreadChat}</span>
+                <i className="bi bi-chat-dots-fill text-[10px]" aria-hidden="true" />
+                {unreadChat > 9 ? '9+' : unreadChat} new
               </button>
             )}
           </div>
         </div>
-      </div>
 
-      {/* ── SECTION 2: Task Details ── */}
-      <div className="px-3 sm:px-4 py-4 border-b border-slate-100 bg-white">
-        {/* Document Number Badge - Modern Stacked Layout */}
-        {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
-          <div className="mb-2">
-            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
-              <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
-              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
-                {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
-              </span>
-            </span>
+        {t.Instructions && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4">
+            <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Instructions</span>
+            <p
+              className="mb-0 text-sm text-slate-700 leading-relaxed font-medium"
+              style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+            >
+              {t.Instructions}
+            </p>
           </div>
         )}
-        {/* Clean Title - Document Number Extracted */}
-        <p className="font-semibold text-slate-800 text-sm sm:text-base leading-snug">
-          {t.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || t.Title}
-        </p>
-        {/* Category badge */}
-        {t.Category && (
-          <span className="text-[10px] sm:text-[11px] font-medium bg-slate-100 text-slate-600 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded mt-1.5 sm:mt-2 inline-block">
-            {t.Category}
-          </span>
+
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {files.map((url, idx) => {
+              const name = decodeURIComponent(url.split('?')[0].split('/').pop())
+              return (
+                <button key={idx} onClick={() => onOpenFile(url, name)}
+                  className="inline-flex max-w-full items-center gap-1.5 truncate rounded-xl border border-green-100/50 bg-green-50/50 px-3 py-2 text-xs font-semibold text-green-800 hover:border-green-200 hover:bg-green-100/60 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+                  <i className="bi bi-paperclip flex-shrink-0 text-green-700" aria-hidden="true" />
+                  <span className="truncate">{name}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <InfoTile label="Priority" icon="bi-flag-fill">
+            <PriorityPill priority={t.Priority} />
+          </InfoTile>
+          <InfoTile label="Deadline" icon={deadline.icon}>
+            <span className={`text-sm font-bold ${deadline.className}`}>{deadline.label}</span>
+          </InfoTile>
+          <InfoTile label="Task ID" icon="bi-upc-scan">
+            <span className="truncate text-sm font-bold text-slate-700" title={t.TaskID}>{t.TaskID}</span>
+          </InfoTile>
+        </div>
+
+        <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4 overflow-x-auto">
+          <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-3">Task timeline</span>
+          <TaskTimeline task={t} history={history} />
+        </div>
+
+        {t.Deadline && t.Status !== 'Completed' && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50/30 p-4">
+            <DeadlineProgress task={t} />
+          </div>
         )}
       </div>
 
-      {/* ── SECTION 3: File & Meta ── */}
-      {t.FileLink && (
-        <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-50/30 border-b border-slate-100 flex flex-wrap gap-2">
-          {t.FileLink.split('|').filter(Boolean).map((url, idx) => {
-            const name = decodeURIComponent(url.split('?')[0].split('/').pop())
-            return (
-              <button key={idx} onClick={() => onOpenFile(url, name)}
-                className="text-[10px] sm:text-[11px] font-medium text-green-700 hover:text-green-800 flex items-center gap-1 sm:gap-1.5 py-1 bg-green-50 px-2 rounded border border-green-100 truncate max-w-[200px]">
-                <i className="bi bi-paperclip flex-shrink-0" /> <span className="truncate">{name}</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── SECTION 4: Status Grid ── */}
-      <div className="grid grid-cols-3 gap-0 divide-x divide-slate-100">
-        <div className="px-2 sm:px-3 py-2 sm:py-3 text-center">
-          <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">Status</p>
-          <span className={getStatusBadgeClass(t.Status)}>{t.Status}</span>
-        </div>
-        <div className="px-2 sm:px-3 py-2 sm:py-3 text-center">
-          <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">Priority</p>
-          {t.Priority ? <span className={getPriorityClass(t.Priority)}>{t.Priority}</span> : <span className="text-[10px] sm:text-xs text-slate-300">—</span>}
-        </div>
-        <div className="px-2 sm:px-3 py-2 sm:py-3 text-center">
-          <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">Deadline</p>
-          {t.Deadline
-            ? <p className="text-[10px] sm:text-xs text-red-500 font-semibold">{new Date(t.Deadline).toLocaleDateString()}</p>
-            : <p className="text-[10px] sm:text-xs text-slate-300">—</p>}
-        </div>
-      </div>
-
-      {/* ── SECTION 5: Timeline ── */}
-      <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-50/30">
-        <TaskTimeline task={t} history={history} />
-      </div>
-
-      {/* ── SECTION 6: Progress ── */}
-      {t.Deadline && t.Status !== 'Completed' && (
-        <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-
-        </div>
-      )}
-
-      {/* ── SECTION 7: Actions ── */}
-      <div className="px-3 sm:px-4 py-3 border-t border-slate-100 bg-white">
-        <div className="flex gap-2">
+      <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap gap-2">
           {t.Status === 'Assigned' && (
             <button 
               disabled={loading} 
               onClick={() => onStatusUpdate(t.TaskID, 'Received')} 
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0"
-              style={{
-                background: 'linear-gradient(135deg, #016837 0%, #027a42 50%, #016837 100%)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                boxShadow: '0 4px 12px rgba(16, 71, 17, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #027a42 0%, #038c4d 50%, #027a42 100%)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 71, 17, 0.35), inset 0 1px 0 rgba(255,255,255,0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #016837 0%, #027a42 50%, #016837 100%)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 71, 17, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)';
-              }}
+              className="flex-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-green-700 hover:bg-green-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:shadow transition-all disabled:cursor-wait disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
             >
               {loading ? (
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" aria-hidden="true" />
               ) : (
-                <><i className="bi bi-check-lg" /> Accept Task</>
+                <><i className="bi bi-check-lg" aria-hidden="true" /> Accept Task</>
               )}
             </button>
           )}
@@ -923,46 +687,52 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
             <button 
               disabled={loading} 
               onClick={() => onStatusUpdate(t.TaskID, 'Completed')} 
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0"
-              style={{
-                background: 'linear-gradient(135deg, #16a34a, #15803d)',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #15803d, #166534)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #16a34a, #15803d)'}
+              className="flex-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-green-700 hover:bg-green-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:shadow transition-all disabled:cursor-wait disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
             >
               {loading ? (
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" aria-hidden="true" />
               ) : (
-                <><i className="bi bi-check-lg" /> Complete Task</>
+                <><i className="bi bi-check2-circle" aria-hidden="true" /> Complete Task</>
               )}
             </button>
           )}
           {t.Status === 'Completed' && (
-            <button disabled className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white bg-slate-400 cursor-not-allowed">
-              <i className="bi bi-check-circle-fill" /> Completed
+            <button disabled className="flex-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-500 cursor-not-allowed">
+              <i className="bi bi-check-circle-fill text-slate-400" aria-hidden="true" /> Completed
             </button>
           )}
-          <button 
-            onClick={onOpenChat} 
-            className="flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all relative"
+          
+          {/* Field Report Button - only for employees on their received/completed tasks */}
+          {session?.Role === 'Employee' && String(t.EmployeeID) === String(session?.ID) && (t.Status === 'Received' || t.Status === 'Completed') && (
+            <button
+              onClick={() => {
+                if (t.field_location || t.field_photos || t.field_notes) {
+                  onViewFieldReport()
+                } else {
+                  onOpenFieldReport()
+                }
+              }}
+              className="flex min-h-11 flex-shrink-0 items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 hover:border-green-300 hover:bg-green-100 px-4 py-2.5 text-sm font-bold text-green-800 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
+            >
+              <i className="bi bi-geo-alt-fill text-green-700" aria-hidden="true" />
+              <span>{t.field_location || t.field_photos || t.field_notes ? 'View Report' : 'Add Field Report'}</span>
+            </button>
+          )}
+          
+          <button
+            onClick={onOpenChat}
+            className="relative flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
           >
-            <i className="bi bi-chat-text-fill text-green-700" />
-            Chat
+            <i className="bi bi-chat-text-fill text-green-700" aria-hidden="true" />
+            <span>Chat</span>
             {unreadChat > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+              <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white" aria-label={`${unreadChat} unread comments`}>
                 {unreadChat > 9 ? '9+' : unreadChat}
               </span>
             )}
           </button>
-          <button
-            onClick={() => onPrintPreview && onPrintPreview(t)}
-            className="flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all"
-            title="Print task"
-          >
-            <i className="bi bi-printer-fill text-slate-600" />
-          </button>
         </div>
       </div>
-    </div>
+    </article>
   )
 }

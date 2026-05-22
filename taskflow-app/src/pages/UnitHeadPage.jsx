@@ -14,7 +14,8 @@ import CreateTaskForm from '../components/CreateTaskForm'
 import { normalizeStatus } from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
-
+import DeadlineProgress from '../components/DeadlineProgress'
+import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
 
 const STATUS_CFG = {
   Available:         { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
@@ -56,10 +57,49 @@ export default function UnitHeadPage() {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
 
+  // Background automated presence checker (Travel/Leave Scheduler) via calendar reminders
+  useEffect(() => {
+    if (!session?.ID) return
+    
+    const runSchedulerCheck = async () => {
+      try {
+        await checkAndApplyScheduledPresence(session.ID, sync)
+      } catch (err) {
+        console.error('[PRESENCE-SCHEDULER] error:', err)
+      }
+    }
+    
+    // Run immediately on dashboard load
+    runSchedulerCheck()
+    
+    // Periodically run check every 30 seconds
+    const checkTimer = setInterval(runSchedulerCheck, 30000)
+    return () => clearInterval(checkTimer)
+  }, [session?.ID, sync])
+
+  // Listener for auto-applied status toasts
+  const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
+  useEffect(() => {
+    const handleAutoUpdate = (e) => {
+      setAutoUpdateAlert(e.detail.status)
+      setPresence(e.detail.status)
+      sync()
+      // Auto-dismiss the float toast after 10 seconds
+      const alertTimer = setTimeout(() => setAutoUpdateAlert(null), 10000)
+      return () => clearTimeout(alertTimer)
+    }
+    window.addEventListener('presence-auto-updated', handleAutoUpdate)
+    return () => window.removeEventListener('presence-auto-updated', handleAutoUpdate)
+  }, [])
+
   const myUnit = session?.Unit || session?.Office || ''
 
   const myTasks = globalData.tasks
     .filter(t => String(t.EmployeeID) === String(session?.ID) && String(t.Archived).toUpperCase() !== 'TRUE')
+    .slice().reverse()
+
+  const myCalendarTasks = globalData.tasks
+    .filter(t => String(t.EmployeeID) === String(session?.ID))
     .slice().reverse()
 
   const unitEmployees = globalData.users.filter(u =>
@@ -476,6 +516,7 @@ export default function UnitHeadPage() {
           {[
             { key: 'my-tasks', icon: 'bi-person-check-fill', label: 'My Assignments', badge: stats.myActive },
             { key: 'monitor',  icon: 'bi-speedometer2',       label: 'Unit Monitor',   badge: stats.unitActive },
+            { key: 'calendar', icon: 'bi-calendar3',          label: 'Personal Calendar' },
             { key: 'profile',  icon: 'bi-person-circle',      label: 'My Profile' },
           ].map(item => (
             <button key={item.key} onClick={() => { setTab(item.key); if (item.key === 'monitor') setMonitorFilter('director-assigned'); setSidebarOpen(false) }}
@@ -738,6 +779,18 @@ export default function UnitHeadPage() {
             </div>
           )}
 
+          {/* ── CALENDAR TAB ── */}
+          {tab === 'calendar' && (
+            <PersonalCalendarTab 
+              tasks={myCalendarTasks} 
+              userId={session?.ID} 
+              onViewTask={(taskId, titleText) => {
+                setTab('my-tasks')
+                setFilterSearch(titleText.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim())
+              }} 
+            />
+          )}
+
           {/* ── PROFILE TAB ── */}
           {tab === 'profile' && (
             <UserProfileTab presence={presence} setPresence={setPresence} />
@@ -761,8 +814,9 @@ export default function UnitHeadPage() {
       <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 flex z-30 shadow-lg mobile-nav-safe">
         {[
           { key: 'my-tasks', icon: 'bi-person-check-fill', label: 'My Tasks', badge: stats.myActive },
-          { key: 'monitor', icon: 'bi-speedometer2',       label: 'Monitor', badge: stats.unitActive },
-          { key: 'profile', icon: 'bi-person-circle',      label: 'Profile' },
+          { key: 'monitor',  icon: 'bi-speedometer2',       label: 'Monitor',  badge: stats.unitActive },
+          { key: 'calendar', icon: 'bi-calendar3',          label: 'Calendar' },
+          { key: 'profile',  icon: 'bi-person-circle',      label: 'Profile' },
         ].map(item => (
           <button key={item.key} onClick={() => setTab(item.key)}
             className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold transition-colors relative ${tab === item.key ? 'text-green-800' : 'text-slate-400'}`}>
@@ -874,6 +928,23 @@ export default function UnitHeadPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {/* ── AUTO-UPDATE TOAST ALERT ── */}
+      {autoUpdateAlert && (
+        <div className="fixed top-4 right-4 z-[9999] max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
+          <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
+            <i className="bi bi-patch-check-fill text-lg leading-none" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-xs leading-tight uppercase tracking-wider text-green-400">Status Activated</p>
+            <p className="text-[11px] text-green-100 font-medium mt-1 leading-relaxed">
+              Your availability status has been automatically updated to <span className="font-bold underline text-white">{autoUpdateAlert}</span> based on your advance personal calendar schedule.
+            </p>
+          </div>
+          <button onClick={() => setAutoUpdateAlert(null)} className="text-white/40 hover:text-white transition-colors p-1 -mt-1 -mr-1">
+            <i className="bi bi-x-lg text-xs" />
+          </button>
         </div>
       )}
     </div>
@@ -1108,7 +1179,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-
+          <DeadlineProgress task={t} />
         </div>
       )}
 
@@ -1272,7 +1343,7 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
       {/* ── SECTION 6: Progress ── */}
       {t.Deadline && t.Status !== 'Completed' && (
         <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5 sm:pt-1">
-
+          <DeadlineProgress task={t} />
         </div>
       )}
 

@@ -182,8 +182,10 @@ async function refreshGlobalDataForCurrentSession() {
 
 // ── TASK HISTORY ────────────────────────────────────────────
 export async function logHistory(taskId, action, actor, note = '') {
+  const session = useStore.getState().session
+  const actorId = session?.ID || null
   await supabase.from('TaskHistory').insert({
-    TaskID: String(taskId), Action: action, Actor: actor,
+    TaskID: String(taskId), Action: action, Actor: actor, ActorID: actorId,
     Note: note, CreatedAt: new Date().toISOString(),
   })
 }
@@ -245,12 +247,47 @@ export async function setTaskStatus(taskId, status, actorName = '', actorId = nu
         ? `✅ ${task.EmployeeName} accepted "${task.Title}"`
         : `✅ ${task.EmployeeName} completed "${task.Title}"`
 
-      const { data: adminUsers, error: dirError } = await supabase.from('Users').select('ID').in('Role', ['Director', 'Records'])
-      if (!dirError && adminUsers?.length) {
-        await Promise.all(adminUsers
-          .filter(d => String(d.ID) !== String(actorId || ''))
-          .map(d => createNotification(d.ID, msg, 'task', taskId))
-        )
+      // Find the user who dispatched (attached) this task
+      const { data: historyEntries } = await supabase
+        .from('TaskHistory')
+        .select('*')
+        .eq('TaskID', taskId)
+        .eq('Action', 'Dispatched')
+        .order('CreatedAt', { ascending: true })
+        .limit(1)
+
+      const dispatchEntry = historyEntries?.[0]
+      let dispatcherId = null
+
+      if (dispatchEntry) {
+        if (dispatchEntry.ActorID) {
+          dispatcherId = dispatchEntry.ActorID
+        } else if (dispatchEntry.Actor) {
+          // Look up user by Name as fallback
+          const { data: usr } = await supabase
+            .from('Users')
+            .select('ID')
+            .eq('Name', dispatchEntry.Actor)
+            .limit(1)
+          if (usr?.length) {
+            dispatcherId = usr[0].ID
+          }
+        }
+      }
+
+      if (dispatcherId) {
+        if (String(dispatcherId) !== String(actorId || '')) {
+          await createNotification(dispatcherId, msg, 'task', taskId)
+        }
+      } else {
+        // Safe fallback: notify Directors only
+        const { data: directors } = await supabase.from('Users').select('ID').eq('Role', 'Director')
+        if (directors?.length) {
+          await Promise.all(directors
+            .filter(d => String(d.ID) !== String(actorId || ''))
+            .map(d => createNotification(d.ID, msg, 'task', taskId))
+          )
+        }
       }
     }
   }
@@ -282,21 +319,50 @@ export async function addComment({ taskId, sender, message, files }) {
     const notifText = fileUrl ? '📎 Sent an attachment' : (message || '').substring(0, 50)
     const messageText = `💬 New message on "${task.Title}": ${notifText}`
 
+    // Find the task sender (dispatcher) who attached the task
+    const { data: historyEntries } = await supabase
+      .from('TaskHistory')
+      .select('*')
+      .eq('TaskID', taskId)
+      .eq('Action', 'Dispatched')
+      .order('CreatedAt', { ascending: true })
+      .limit(1)
+
+    const dispatchEntry = historyEntries?.[0]
+    let dispatcherId = null
+
+    if (dispatchEntry) {
+      if (dispatchEntry.ActorID) {
+        dispatcherId = dispatchEntry.ActorID
+      } else if (dispatchEntry.Actor) {
+        // Fallback: look up user by Name
+        const { data: usr } = await supabase
+          .from('Users')
+          .select('ID')
+          .eq('Name', dispatchEntry.Actor)
+          .limit(1)
+        if (usr?.length) {
+          dispatcherId = usr[0].ID
+        }
+      }
+    }
+
+    const session = useStore.getState().session
+    const currentUserId = session?.ID
+
     const senderNorm = String(sender || '').trim().toLowerCase()
     const employeeNameNorm = String(task.EmployeeName || '').trim().toLowerCase()
     const isEmployeeSender = senderNorm === employeeNameNorm
 
     if (isEmployeeSender) {
-      const { data: adminUsers, error: dirError } = await supabase.from('Users').select('ID').in('Role', ['Director', 'Records'])
-      if (!dirError && adminUsers?.length) {
-        await Promise.all(adminUsers
-          .filter(d => String(d.ID) !== String(task.EmployeeID))
-          .map(d => createNotification(d.ID, messageText, 'chat', taskId))
-        )
+      // Receiver (Employee) sent a comment -> notify the task sender (dispatcher)
+      if (dispatcherId && String(dispatcherId) !== String(currentUserId || '')) {
+        await createNotification(dispatcherId, messageText, 'chat', taskId)
       }
     } else {
+      // Task sender (dispatcher) sent a comment -> notify the task receiver (Employee)
       const notifyId = task.EmployeeID
-      if (notifyId) {
+      if (notifyId && String(notifyId) !== String(currentUserId || '')) {
         await createNotification(notifyId, messageText, 'chat', taskId)
       }
     }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import { createTask } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES } from '../lib/errorHandler'
+import FieldReportSubmitModal from './FieldReportSubmitModal'
 
 const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.mp4,.mp3,.mov,.avi,.csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
@@ -90,6 +91,12 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
   const [loading,      setLoading]      = useState(false)
   const [success,      setSuccess]      = useState('')
   const [error,        setError]        = useState('')
+  
+  // Field report modal state
+  const [showFieldReportModal, setShowFieldReportModal] = useState(false)
+  const [includeFieldReport, setIncludeFieldReport] = useState(false)
+  const [fieldReportData, setFieldReportData] = useState(null)
+  const [createdTaskId, setCreatedTaskId] = useState(null)
 
   // Reset form when drawer closes (dispatchConfirm becomes null after confirmation)
   useEffect(() => {
@@ -105,6 +112,9 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
       setFiles([])
       setError('')
       setSuccess('')
+      setIncludeFieldReport(false)
+      setFieldReportData(null)
+      setCreatedTaskId(null)
     }
   }, [dispatchConfirm, pendingDispatch])
 
@@ -172,8 +182,8 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
         : priorities.includes('Priority') ? 'High'
         : 'Normal'
 
-      await withErrorHandling(async () => {
-        await createTask({
+      const result = await withErrorHandling(async () => {
+        return await createTask({
           empId,
           empName:      selectedEmp.Name,
           title:        buildTitle(),
@@ -190,20 +200,66 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
       }, ERROR_MESSAGES.DATABASE)
 
       await onSync()
-      // Reset form
-      setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
-      setPriorities([]); setPurposes([]); setForwardTo('')
-      setAction(''); setRemarks(''); setEmpId('')
-      setSenderName(session?.Name || '')
-      setSuccess(`Task dispatched to ${selectedEmp.Name}.`)
-      setTimeout(() => setSuccess(''), 4000)
-      // Close drawer after showing success message
-      setTimeout(() => {
-        onCloseDrawer?.()
-      }, 2000)
+      
+      // Store the created task ID for field report submission
+      if (result?.taskId) {
+        setCreatedTaskId(result.taskId)
+      }
+
+      // If field report is optional and checked, show the modal
+      if (includeFieldReport) {
+        setShowFieldReportModal(true)
+        setSuccess(`Task dispatched to ${selectedEmp.Name}. Please submit the field report.`)
+      } else {
+        // Reset form and close drawer
+        setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
+        setPriorities([]); setPurposes([]); setForwardTo('')
+        setAction(''); setRemarks(''); setEmpId('')
+        setSenderName(session?.Name || '')
+        setSuccess(`Task dispatched to ${selectedEmp.Name}.`)
+        setTimeout(() => setSuccess(''), 4000)
+        setTimeout(() => {
+          onCloseDrawer?.()
+        }, 2000)
+      }
     } catch (error) {
       setError(error.message)
     } finally { setLoading(false) }
+  }
+
+  // Handle field report submission
+  const handleFieldReportSubmitted = (reportData) => {
+    setFieldReportData(reportData)
+    setShowFieldReportModal(false)
+    
+    // Reset form and close drawer
+    setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
+    setPriorities([]); setPurposes([]); setForwardTo('')
+    setAction(''); setRemarks(''); setEmpId('')
+    setSenderName(session?.Name || '')
+    setIncludeFieldReport(false)
+    setSuccess(`Task dispatched to ${selectedEmp.Name} with field report.`)
+    setTimeout(() => setSuccess(''), 4000)
+    setTimeout(() => {
+      onCloseDrawer?.()
+    }, 2000)
+  }
+
+  // Handle field report modal close without submission
+  const handleFieldReportModalClose = () => {
+    setShowFieldReportModal(false)
+    setIncludeFieldReport(false)
+    
+    // Reset form and close drawer
+    setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
+    setPriorities([]); setPurposes([]); setForwardTo('')
+    setAction(''); setRemarks(''); setEmpId('')
+    setSenderName(session?.Name || '')
+    setSuccess(`Task dispatched to ${selectedEmp.Name}.`)
+    setTimeout(() => setSuccess(''), 4000)
+    setTimeout(() => {
+      onCloseDrawer?.()
+    }, 2000)
   }
 
   async function handleSubmit(e) {
@@ -462,6 +518,26 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
           )}
         </div>
 
+        {/* ── 10. FIELD REPORT (OPTIONAL) ── */}
+        <div>
+          <SectionLabel num="10" title="Field Report (Optional)" />
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 card-enhanced">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border transition-all
+                ${includeFieldReport ? 'bg-green-700 border-green-700' : 'bg-white border-slate-300 hover:border-green-400'}`}
+                onClick={() => setIncludeFieldReport(!includeFieldReport)}>
+                {includeFieldReport && <i className="bi bi-check text-white text-xs" />}
+              </div>
+              <span className="text-sm text-slate-700 font-medium" onClick={() => setIncludeFieldReport(!includeFieldReport)}>
+                Attach a field report to this task
+              </span>
+            </label>
+            <p className="text-[10px] text-slate-400 mt-2 ml-8">
+              If checked, you'll be prompted to submit GPS location, photos, and field observations after dispatching the task.
+            </p>
+          </div>
+        </div>
+
         {/* Alerts */}
         {error   && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2 flex items-center gap-2"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
         {success && <div className="bg-green-50 border border-green-200 text-green-700 text-xs rounded-lg px-3 py-2 flex items-center gap-2"><i className="bi bi-check-circle-fill" />{success}</div>}
@@ -473,6 +549,14 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
             : <><i className="bi bi-send-fill" /> Dispatch Task</>}
         </button>
       </form>
+
+      {/* Field Report Submit Modal */}
+      <FieldReportSubmitModal
+        isOpen={showFieldReportModal}
+        onClose={handleFieldReportModalClose}
+        taskId={createdTaskId}
+        onReportSubmitted={handleFieldReportSubmitted}
+      />
     </div>
   )
 }

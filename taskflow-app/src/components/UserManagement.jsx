@@ -224,7 +224,7 @@ export default function UserManagement({ users, onSync }) {
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2 mt-2 ml-0.5 min-w-0">
                 <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 bg-slate-100 px-1.5 sm:px-2 py-0.5 rounded flex-shrink-0">ID: {u.ID}</span>
-                <span className="text-[10px] sm:text-[11px] text-slate-400 truncate min-w-0">{u.Unit || u.Office}</span>
+                <span className="text-[10px] sm:text-[11px] text-slate-400 truncate min-w-0">{u.Unit || u.Office || 'Unassigned Unit'}</span>
               </div>
             </div>
             <button ref={btnRef} onClick={() => setMenuOpen(!menuOpen)}
@@ -424,6 +424,7 @@ export default function UserManagement({ users, onSync }) {
                   <option value="Employee">Unit Personnel</option>
                   <option value="Unit Head">Unit Head</option>
                   <option value="Director">Director</option>
+                  <option value="Records">Records</option>
                 </select>
               </div>
               <div>

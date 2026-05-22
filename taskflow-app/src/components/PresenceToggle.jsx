@@ -90,7 +90,9 @@ function TravelModal({ onConfirm, onCancel }) {
   const [eventName, setEventName] = useState('')
   const [location,  setLocation]  = useState('')
   const [dateStart, setDateStart] = useState('')
+  const [timeStart, setTimeStart] = useState('08:00')
   const [dateEnd,   setDateEnd]   = useState('')
+  const [timeEnd,   setTimeEnd]   = useState('17:00')
   const [error,     setError]     = useState('')
 
   const fileInputRef = useRef(null)
@@ -101,7 +103,8 @@ function TravelModal({ onConfirm, onCancel }) {
     if (!eventName || !location || !dateStart || !dateEnd) { setError('All fields are required.'); return }
     if (files.length === 0) { setError('Travel Order file is required.'); return }
     if (dateEnd < dateStart) { setError('End date must be after start date.'); return }
-    onConfirm({ eventName, location, dateStart, dateEnd, files })
+    if (dateEnd === dateStart && timeEnd <= timeStart) { setError('End time must be after start time on same day.'); return }
+    onConfirm({ eventName, location, dateStart, timeStart, dateEnd, timeEnd, files })
   }
 
   return createPortal(
@@ -141,9 +144,21 @@ function TravelModal({ onConfirm, onCancel }) {
                 type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
             <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time Start</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+                type="time" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date End</label>
               <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
                 type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time End</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+                type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
@@ -184,7 +199,9 @@ function LeaveModal({ onConfirm, onCancel }) {
   const [leaveType, setLeaveType] = useState('')
   const [reason,    setReason]    = useState('')
   const [dateStart, setDateStart] = useState('')
+  const [timeStart, setTimeStart] = useState('08:00')
   const [dateEnd,   setDateEnd]   = useState('')
+  const [timeEnd,   setTimeEnd]   = useState('17:00')
   const [error,     setError]     = useState('')
   const [files, setFiles] = useState([])
   const fileInputRef = useRef(null)
@@ -195,8 +212,9 @@ function LeaveModal({ onConfirm, onCancel }) {
     if (!reason.trim()) { setError('Please provide a reason for the leave.'); return }
     if (!dateStart || !dateEnd) { setError('Start and end dates are required.'); return }
     if (new Date(dateStart) > new Date(dateEnd)) { setError('Start date cannot be after end date.'); return }
+    if (dateEnd === dateStart && timeEnd <= timeStart) { setError('End time must be after start time on same day.'); return }
     if (files.length === 0) { setError('Leave attachment is required.'); return }
-    onConfirm({ leaveType, reason, dateStart, dateEnd, files })
+    onConfirm({ leaveType, reason, dateStart, timeStart, dateEnd, timeEnd, files })
   }
 
   return createPortal(
@@ -249,9 +267,21 @@ function LeaveModal({ onConfirm, onCancel }) {
                 type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
             <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time Start</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
+                type="time" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date End</label>
               <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
                 type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time End</label>
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
+                type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
@@ -326,9 +356,26 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
   async function handleChangeConfirmed() {
     setModal(null)
     if (pendingTarget === 'Available') {
+      const confirmed = window.confirm(`Note: Resetting your availability to "Available" will also clear/delete any active Travel or Leave reminders on your Personal Calendar. Do you want to proceed?`)
+      if (!confirmed) {
+        setPendingTarget(null)
+        return
+      }
       setLoading(true)
       try {
         await commitStatus('Available', 'Available')
+
+        // Clear active travel/leave reminders from local storage
+        const key = `philfida_calendar_reminders_${userId}`
+        const stored = localStorage.getItem(key)
+        let reminders = []
+        if (stored) {
+          try { reminders = JSON.parse(stored) } catch (e) {}
+        }
+        const filtered = reminders.filter(r => r.type !== 'travel' && r.type !== 'leave')
+        localStorage.setItem(key, JSON.stringify(filtered))
+        window.dispatchEvent(new Event('storage'))
+        window.dispatchEvent(new Event('presence-reminders-changed'))
       } finally {
         setLoading(false)
       }
@@ -347,23 +394,57 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
   }
 
   async function confirmTravel(details) {
+    const confirmed = window.confirm(`Note: Setting your availability to "Official Travel" will also create/update a corresponding travel reminder on your Personal Calendar for these dates. Do you want to proceed?`)
+    if (!confirmed) return
+
     setModal(null)
     setLoading(true)
     try {
       let fileInfo = ''
+      let firstPath = ''
       if (details.files?.length > 0) {
         // C1/C2/C3: Ensure file is uploaded first
         // uploadFiles() returns a pipe-delimited STRING of paths (e.g. "uploads/abc.pdf")
         // NOT an array — use .split('|')[0] to get the first path, not [0] (first character).
         const urlStr = await uploadFiles(details.files)
-        const firstPath = urlStr ? urlStr.split('|')[0] : null
+        firstPath = urlStr ? urlStr.split('|')[0] : null
         if (firstPath) {
           fileInfo = ` [TO:${firstPath}]`
         }
       }
 
-      const fullStatus = `Official Travel — ${details.eventName} at ${details.location} (${details.dateStart} to ${details.dateEnd})${fileInfo}`
+      const fullStatus = `Official Travel — ${details.eventName} at ${details.location} (${details.dateStart} ${details.timeStart} to ${details.dateEnd} ${details.timeEnd})${fileInfo}`
       await commitStatus('travel', fullStatus)
+
+      // Write reminder to local storage
+      const key = `philfida_calendar_reminders_${userId}`
+      const stored = localStorage.getItem(key)
+      let reminders = []
+      if (stored) {
+        try { reminders = JSON.parse(stored) } catch (e) {}
+      }
+      // Filter out existing travel/leave reminders
+      reminders = reminders.filter(r => r.type !== 'travel' && r.type !== 'leave')
+      
+      const newReminder = {
+        id: 'active-travel-' + Date.now(),
+        title: `Official Travel: ${details.eventName} at ${details.location}`,
+        notes: `Official Travel schedule. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
+        time: details.timeStart,
+        timeEnd: details.timeEnd,
+        date: details.dateStart,
+        color: 'blue',
+        type: 'travel',
+        travelActivity: details.eventName,
+        travelLocation: details.location,
+        returnDate: details.dateEnd,
+        attachments: firstPath || '',
+        applied: true
+      }
+      reminders.push(newReminder)
+      localStorage.setItem(key, JSON.stringify(reminders))
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('presence-reminders-changed'))
     } catch (error) {
       console.error('Travel update failed:', error)
     } finally {
@@ -372,20 +453,53 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
   }
 
   async function confirmLeave(details) {
+    const confirmed = window.confirm(`Note: Setting your availability to "On Leave" will also create/update a corresponding leave reminder on your Personal Calendar for these dates. Do you want to proceed?`)
+    if (!confirmed) return
+
     setModal(null)
     setLoading(true)
     try {
       let fileInfo = ''
+      let firstPath = ''
       if (details.files?.length > 0) {
         const urlStr = await uploadFiles(details.files)
-        const firstPath = urlStr ? urlStr.split('|')[0] : null
+        firstPath = urlStr ? urlStr.split('|')[0] : null
         if (firstPath) {
           fileInfo = ` [TO:${firstPath}]`
         }
       }
 
-      const full = `On Leave — ${details.leaveType}: ${details.reason} (${details.dateStart} to ${details.dateEnd})${fileInfo}`
+      const full = `On Leave — ${details.leaveType}: ${details.reason} (${details.dateStart} ${details.timeStart} to ${details.dateEnd} ${details.timeEnd})${fileInfo}`
       await commitStatus('On Leave', full)
+
+      // Write reminder to local storage
+      const key = `philfida_calendar_reminders_${userId}`
+      const stored = localStorage.getItem(key)
+      let reminders = []
+      if (stored) {
+        try { reminders = JSON.parse(stored) } catch (e) {}
+      }
+      reminders = reminders.filter(r => r.type !== 'travel' && r.type !== 'leave')
+
+      const newReminder = {
+        id: 'active-leave-' + Date.now(),
+        title: `On Leave: ${details.leaveType} — ${details.reason}`,
+        notes: `Leave schedule. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
+        time: details.timeStart,
+        timeEnd: details.timeEnd,
+        date: details.dateStart,
+        color: 'red',
+        type: 'leave',
+        leaveType: details.leaveType,
+        leaveReason: details.reason,
+        returnDate: details.dateEnd,
+        attachments: firstPath || '',
+        applied: true
+      }
+      reminders.push(newReminder)
+      localStorage.setItem(key, JSON.stringify(reminders))
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('presence-reminders-changed'))
     } catch (error) {
       console.error('Leave update failed:', error)
     } finally {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
-import { updateProfile, getSignedFileUrl, UNITS, OFFICES } from '../lib/api'
+import { updateProfile, getSignedFileUrl, uploadFiles, UNITS, OFFICES } from '../lib/api'
 import PresenceToggle, { normalizeStatus } from './PresenceToggle'
 import { supabase } from '../lib/supabase'
 import SettingsModal from './SettingsModal'
@@ -21,6 +21,205 @@ export default function UserProfileTab({ presence, setPresence }) {
   const [success, setSuccess] = useState(false)
   const isGoogleUser = !session?.Password
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Presence Reminders / Availability Schedule States
+  const [reminders, setReminders] = useState([])
+  const [editingReminder, setEditingReminder] = useState(null)
+  const [editingFields, setEditingFields] = useState({
+    travelActivity: '',
+    travelLocation: '',
+    leaveType: 'Sick Leave',
+    leaveReason: '',
+    time: '08:00',
+    returnDate: '',
+    returnTime: '17:00',
+    attachments: ''
+  })
+  const [uploadingFiles, setUploadingFiles] = useState(false)
+
+  useEffect(() => {
+    if (!session?.ID) return
+    const loadReminders = () => {
+      const stored = localStorage.getItem(`philfida_calendar_reminders_${session.ID}`)
+      if (stored) {
+        try {
+          setReminders(JSON.parse(stored))
+        } catch (e) {
+          console.error(e)
+        }
+      }
+    }
+    loadReminders()
+    window.addEventListener('storage', loadReminders)
+    window.addEventListener('presence-reminders-changed', loadReminders)
+    return () => {
+      window.removeEventListener('storage', loadReminders)
+      window.removeEventListener('presence-reminders-changed', loadReminders)
+    }
+  }, [session?.ID])
+
+  const saveReminders = (updated) => {
+    setReminders(updated)
+    if (session?.ID) {
+      localStorage.setItem(`philfida_calendar_reminders_${session.ID}`, JSON.stringify(updated))
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('presence-reminders-changed'))
+    }
+  }
+
+  const handleEditActivePresenceClick = (statusData) => {
+    const isTravel = statusData.type === 'Official Travel'
+    
+    // Find active reminder in reminders list to preserve original dates and times if possible
+    const activeReminder = reminders.find(r => r.applied && (r.type === 'travel' || r.type === 'leave'))
+    
+    setEditingReminder(activeReminder || {
+      id: 'active-status',
+      type: isTravel ? 'travel' : 'leave',
+      date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }), // fallback to today
+      time: '08:00',
+      attachments: statusData.attachments || ''
+    })
+
+    setEditingFields({
+      travelActivity: isTravel ? statusData.title : '',
+      travelLocation: isTravel ? statusData.location : '',
+      leaveType: !isTravel ? statusData.title : 'Sick Leave',
+      leaveReason: !isTravel ? statusData.reason : '',
+      time: activeReminder?.time || '08:00',
+      returnDate: activeReminder?.returnDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }),
+      returnTime: activeReminder?.timeEnd || '17:00',
+      attachments: statusData.attachments || ''
+    })
+  }
+
+  const handleSavePresence = () => {
+    if (!editingReminder) return
+    
+    const isTravel = editingReminder.type === 'travel'
+    const confirmed = window.confirm(`Note: Modifying your active ${isTravel ? 'Official Travel' : 'Leave'} details here will also update the corresponding calendar reminder on your Personal Calendar. Do you want to proceed?`)
+    if (!confirmed) return
+
+    const newTitle = isTravel 
+      ? `Official Travel — ${editingFields.travelActivity} at ${editingFields.travelLocation}`
+      : `On Leave — ${editingFields.leaveType}: ${editingFields.leaveReason}`
+
+    // Format display date range with times
+    const startDateObj = new Date(editingReminder.date)
+    const endDateObj = new Date(editingFields.returnDate)
+    
+    const startStr = startDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const endStr = endDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    
+    const dateRangeStr = startStr === endStr ? startStr : `${startStr} to ${endStr}`
+    const timeRangeStr = `${editingFields.time} to ${editingFields.returnTime}`
+    
+    const presenceStr = `${newTitle} (${dateRangeStr} ${timeRangeStr})${editingFields.attachments ? ` [TO:${editingFields.attachments}]` : ''}`
+
+    // Update real scheduled reminder in the reminders list if it exists, or create/update based on active-status
+    let updatedReminders = [...reminders]
+    const targetId = editingReminder.id
+
+    if (targetId !== 'active-status') {
+      updatedReminders = reminders.map(r => {
+        if (r.id === targetId) {
+          const startDateTime = `${r.date}T${editingFields.time}`
+          const manilaNowStr = new Date().toLocaleString('sv', { timeZone: 'Asia/Manila' }).replace(' ', 'T')
+          const isTriggered = manilaNowStr >= startDateTime || r.applied
+          
+          return {
+            ...r,
+            title: isTravel 
+              ? `Official Travel: ${editingFields.travelActivity} at ${editingFields.travelLocation}`
+              : `On Leave: ${editingFields.leaveType} — ${editingFields.leaveReason}`,
+            time: editingFields.time,
+            timeEnd: editingFields.returnTime,
+            travelActivity: isTravel ? editingFields.travelActivity : undefined,
+            travelLocation: isTravel ? editingFields.travelLocation : undefined,
+            leaveType: !isTravel ? editingFields.leaveType : undefined,
+            leaveReason: !isTravel ? editingFields.leaveReason : undefined,
+            returnDate: editingFields.returnDate,
+            attachments: editingFields.attachments,
+            applied: isTriggered
+          }
+        }
+        return r
+      })
+    } else {
+      // Find if we have any existing travel/leave reminder of the same type
+      const existingIdx = reminders.findIndex(r => r.type === editingReminder.type)
+      const dateStr = editingReminder.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
+      const itemToSave = {
+        id: 'active-' + editingReminder.type + '-' + Date.now(),
+        title: isTravel 
+          ? `Official Travel: ${editingFields.travelActivity} at ${editingFields.travelLocation}`
+          : `On Leave: ${editingFields.leaveType} — ${editingFields.leaveReason}`,
+        notes: isTravel 
+          ? `Official Travel schedule. Start: ${dateStr} ${editingFields.time}. Return: ${editingFields.returnDate} ${editingFields.returnTime}.`
+          : `Leave schedule. Start: ${dateStr} ${editingFields.time}. Return: ${editingFields.returnDate} ${editingFields.returnTime}.`,
+        date: dateStr,
+        time: editingFields.time,
+        timeEnd: editingFields.returnTime,
+        color: isTravel ? 'blue' : 'red',
+        type: editingReminder.type,
+        travelActivity: isTravel ? editingFields.travelActivity : undefined,
+        travelLocation: isTravel ? editingFields.travelLocation : undefined,
+        leaveType: !isTravel ? editingFields.leaveType : undefined,
+        leaveReason: !isTravel ? editingFields.leaveReason : undefined,
+        returnDate: editingFields.returnDate,
+        attachments: editingFields.attachments,
+        applied: true
+      }
+      if (existingIdx >= 0) {
+        updatedReminders[existingIdx] = itemToSave
+      } else {
+        updatedReminders.push(itemToSave)
+      }
+    }
+    saveReminders(updatedReminders)
+    window.dispatchEvent(new Event('presence-reminders-changed'))
+
+    setPresence(presenceStr)
+    setEditingReminder(null)
+
+    // Save presence to Supabase database
+    supabase.from('Users')
+      .update({ Status: presenceStr })
+      .eq('ID', session.ID)
+      .then(({ error }) => {
+        if (error) console.error('Failed to sync presence status', error)
+        else {
+          window.dispatchEvent(new Event('presence-status-changed'))
+        }
+      })
+  }
+
+  const handleEditFileChange = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploadingFiles(true)
+    try {
+      const paths = await uploadFiles(files)
+      if (paths) {
+        setEditingFields(prev => ({
+          ...prev,
+          attachments: prev.attachments ? `${prev.attachments}|${paths}` : paths
+        }))
+      }
+    } catch (err) {
+      alert(`Upload failed: ${err.message}`)
+    } finally {
+      setUploadingFiles(false)
+    }
+  }
+
+  const handleRemoveEditAttachment = (pathToRemove) => {
+    const updated = editingFields.attachments.split('|').filter(p => p !== pathToRemove).join('|')
+    setEditingFields(prev => ({
+      ...prev,
+      attachments: updated
+    }))
+  }
 
   const [signedUrl, setSignedUrl] = useState('')
   const [loadingUrl, setLoadingUrl] = useState(false)
@@ -108,12 +307,42 @@ export default function UserProfileTab({ presence, setPresence }) {
     window.location.href = '/'
   }
 
+  const roleTheme = session?.Role === 'Director'
+    ? {
+        badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+        avatarClass: 'from-emerald-50 to-emerald-100/40 border-emerald-200/50 text-emerald-800 shadow-emerald-100/50',
+        dotClass: 'bg-emerald-500',
+        roleText: 'text-emerald-750'
+      }
+    : session?.Role === 'Unit Head'
+    ? {
+        badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+        avatarClass: 'from-indigo-50 to-indigo-100/40 border-indigo-200/50 text-indigo-800 shadow-indigo-100/50',
+        dotClass: 'bg-indigo-500',
+        roleText: 'text-indigo-700'
+      }
+    : session?.Role === 'Records'
+    ? {
+        badgeBg: 'bg-teal-50 text-teal-700 border-teal-100',
+        avatarClass: 'from-teal-50 to-teal-100/40 border-teal-200/50 text-teal-800 shadow-teal-100/50',
+        dotClass: 'bg-teal-500',
+        roleText: 'text-teal-750'
+      }
+    : {
+        badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+        avatarClass: 'from-emerald-50 to-emerald-100/40 border-emerald-200/50 text-emerald-800 shadow-emerald-100/50',
+        dotClass: 'bg-emerald-500',
+        roleText: 'text-emerald-750'
+      }
+
   return (
-    <div className="flex flex-col h-full bg-slate-50/50">
+    <div className="flex flex-col h-full bg-slate-50/30">
       {/* Header */}
-      <div className="px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0">
-        <h2 className="font-bold text-green-900 text-xl leading-none">My Profile</h2>
-        <p className="text-slate-500 text-sm mt-1.5">Manage your personal details and availability status</p>
+      <div className="px-6 md:px-8 py-5 border-b border-slate-150/80 bg-white flex-shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="font-extrabold text-slate-900 text-xl tracking-tight leading-none">My Profile</h2>
+          <p className="text-slate-400 text-xs mt-1.5 font-medium">Manage your personal details and active availability schedule</p>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 py-8 custom-scrollbar">
@@ -122,41 +351,42 @@ export default function UserProfileTab({ presence, setPresence }) {
           {/* Left Column: Status & Actions */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6 order-2 lg:order-1">
 
-            {/* User Info Overview */}
-            <div className="relative overflow-hidden rounded-2xl shadow-md" style={{ background: 'linear-gradient(135deg, #014d2a 0%, #016837 100%)' }}>
-              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <i className="bi bi-person-circle text-[120px] -mr-8 -mt-8" />
-              </div>
-              <div className="relative p-6 text-white">
-                <div className="flex items-center gap-4 mb-5">
-                  <div className="w-14 h-14 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-xl font-black border border-white/20 shadow-inner">
-                    {session?.Name?.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="font-black text-base truncate leading-tight uppercase tracking-tight text-white">{session?.Name}</h4>
-                    <span className="inline-block mt-1 px-2 py-0.5 bg-white/10 text-green-300 text-[10px] font-black uppercase rounded-lg border border-white/10">
-                      {session?.Role || 'User'}
-                    </span>
+            {/* User Info Overview Badge */}
+            <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+              {/* Ambient accent glows */}
+              <div className="absolute -right-10 -top-10 w-28 h-28 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
+              <div className="absolute -left-10 -bottom-10 w-28 h-28 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
+              
+              <div className="relative flex items-center gap-4">
+                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br border flex items-center justify-center text-xl font-bold shadow-sm ${roleTheme.avatarClass}`}>
+                  {session?.Name?.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-extrabold text-base text-slate-800 tracking-tight leading-tight uppercase">{session?.Name}</h4>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${roleTheme.dotClass}`} />
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${roleTheme.roleText}`}>{session?.Role || 'User'}</span>
                   </div>
                 </div>
-                <div className="space-y-3 pt-5 border-t border-white/10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-green-300/60 text-[10px] font-black uppercase tracking-widest">Region</span>
-                    <span className="font-bold text-xs">{session?.Region || 'Central Office'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-green-300/60 text-[10px] font-black uppercase tracking-widest">Unit / Office</span>
-                    <span className="font-bold text-xs truncate max-w-[160px]">{session?.Designation || session?.Unit || session?.Office || 'N/A'}</span>
-                  </div>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Region</span>
+                  <span className="font-bold text-xs text-slate-700 mt-1 block">{session?.Region || 'Central Office'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Unit / Office</span>
+                  <span className="font-bold text-xs text-slate-700 mt-1 block truncate">{session?.Designation || session?.Unit || session?.Office || 'N/A'}</span>
                 </div>
               </div>
             </div>
 
             {/* Availability Section */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <i className="bi bi-clock-history text-green-700" />
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-150/40 bg-slate-50/40">
+                <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+                  <i className="bi bi-clock-history text-slate-600" />
                   My Availability
                 </h3>
               </div>
@@ -168,6 +398,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                     if (!presence || presence === 'Available') return null
                     const fileMatch = presence.match(/\[TO:(.*?)\]/)
                     const fileUrl = fileMatch ? fileMatch[1] : null
+                    const attachments = fileUrl || ''
                     const cleanStr = presence.replace(/\[TO:.*?\]/, '').trim()
 
                     if (cleanStr.startsWith('Official Travel — ')) {
@@ -176,7 +407,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                       const dates = dateMatch ? dateMatch[1] : ''
                       const rest = content.replace(/\s*\(.*?\)$/, '')
                       const parts = rest.split(' at ')
-                      return { type: 'Official Travel', title: parts[0], location: parts[1] || '', dates, fileUrl }
+                      return { type: 'Official Travel', title: parts[0], location: parts[1] || '', dates, fileUrl, attachments }
                     }
 
                     if (cleanStr.startsWith('On Leave — ')) {
@@ -185,69 +416,98 @@ export default function UserProfileTab({ presence, setPresence }) {
                       const dates = dateMatch ? dateMatch[1] : ''
                       const rest = content.replace(/\s*\(.*?\)$/, '')
                       const parts = rest.split(': ')
-                      return { type: 'On Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl }
+                      return { type: 'On Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl, attachments }
                     }
 
-                    return { type: 'Away', title: cleanStr, fileUrl }
+                    return { type: 'Away', title: cleanStr, fileUrl, attachments }
                   })()
 
                   if (!statusData) return null
 
+                  const statusTheme = statusData.type === 'Official Travel'
+                    ? {
+                        bg: 'bg-blue-50/15 border-blue-200/50',
+                        iconBg: 'bg-white border-blue-200/60 text-blue-600',
+                        iconClass: 'bi-airplane',
+                        buttonClass: 'bg-blue-600 hover:bg-blue-700 shadow-blue-100/50',
+                        labelClass: 'text-blue-500'
+                      }
+                    : statusData.type === 'On Leave'
+                    ? {
+                        bg: 'bg-rose-50/15 border-rose-200/50',
+                        iconBg: 'bg-white border-rose-200/60 text-rose-600',
+                        iconClass: 'bi-calendar4-event',
+                        buttonClass: 'bg-rose-600 hover:bg-rose-700 shadow-rose-100/50',
+                        labelClass: 'text-rose-500'
+                      }
+                    : {
+                        bg: 'bg-slate-50 border-slate-200/60',
+                        iconBg: 'bg-white border-slate-200/80 text-slate-600',
+                        iconClass: 'bi-info-circle',
+                        buttonClass: 'bg-slate-900 hover:bg-slate-800 shadow-slate-100/50',
+                        labelClass: 'text-slate-500'
+                      }
+
                   return (
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col gap-4">
+                    <div className={`border rounded-xl p-5 flex flex-col gap-4 transition-all hover:opacity-95 ${statusTheme.bg}`}>
                       <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center flex-shrink-0 text-green-700 shadow-sm">
-                          <i className={`bi text-xl ${statusData.type === 'Official Travel' ? 'bi-airplane-fill' : 'bi-calendar-event-fill'}`} />
+                        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center flex-shrink-0 shadow-sm ${statusTheme.iconBg}`}>
+                          <i className={`bi text-xl ${statusTheme.iconClass}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Current Status Detail</p>
+                          <span className={`text-[9px] font-bold uppercase tracking-wider block mb-2 ${statusTheme.labelClass}`}>Current Status Detail</span>
 
                           <div className="space-y-4">
                             <div>
-                              <p className="text-[10px] font-black text-slate-500 uppercase">Subject</p>
-                              <p className="text-sm text-slate-900 font-bold leading-tight mt-0.5">{statusData.title}</p>
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Subject</span>
+                              <span className="text-sm text-slate-850 font-bold leading-tight mt-1 block">{statusData.title}</span>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                               {statusData.type === 'Official Travel' ? (
                                 <div>
-                                  <p className="text-[10px] font-black text-slate-500 uppercase">Location</p>
-                                  <p className="text-[11px] text-slate-700 font-bold mt-0.5">{statusData.location || '—'}</p>
+                                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Location</span>
+                                  <span className="text-xs text-slate-700 font-bold mt-1 block">{statusData.location || '—'}</span>
                                 </div>
                               ) : (
                                 <div>
-                                  <p className="text-[10px] font-black text-slate-500 uppercase">Reason</p>
-                                  <p className="text-[11px] text-slate-700 font-bold mt-0.5">{statusData.reason || '—'}</p>
+                                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Reason</span>
+                                  <span className="text-xs text-slate-700 font-bold mt-1 block">{statusData.reason || '—'}</span>
                                 </div>
                               )}
 
                               <div>
-                                <p className="text-[10px] font-black text-slate-500 uppercase">Effective</p>
-                                <p className="text-[11px] text-slate-700 font-bold mt-0.5">{statusData.dates || '—'}</p>
+                                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Effective</span>
+                                <span className="text-xs text-slate-700 font-bold mt-1 block">{statusData.dates || '—'}</span>
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {statusData.fileUrl && (
-                        <div className="pt-4 border-t border-slate-200 flex gap-2">
-                          <a href={signedUrl || '#'} target={signedUrl ? "_blank" : "_self"} rel="noopener noreferrer"
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 border text-[10px] font-black uppercase rounded-lg transition-all
-                              ${signedUrl ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300' : 'bg-slate-50 border-slate-100 text-slate-300 cursor-wait'}`}
-                          >
-                            {loadingUrl ? <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <i className="bi bi-eye-fill" />}
-                            View File
-                          </a>
-                          <a href={signedUrl || '#'} download
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 border text-[10px] font-black uppercase rounded-lg transition-all
-                              ${signedUrl ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300' : 'bg-slate-50 border-slate-100 text-slate-300 cursor-wait'}`}
-                          >
-                            <i className="bi bi-download" />
-                            Download
-                          </a>
+                      {/* Display attached documents with signed links */}
+                      {statusData.attachments && (
+                        <div className="pt-4 border-t border-slate-200/60">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider block mb-2 ${statusTheme.labelClass}`}>Attached Files / Travel Orders</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {statusData.attachments.split('|').map((path, idx) => (
+                              <SignedAttachmentLink key={idx} path={path} />
+                            ))}
+                          </div>
                         </div>
                       )}
+
+                      {/* Edit Details & Attachments Button */}
+                      <div className="pt-3 border-t border-slate-200/60">
+                        <button
+                          type="button"
+                          onClick={() => handleEditActivePresenceClick(statusData)}
+                          className={`w-full flex items-center justify-center gap-2 py-2.5 active:scale-[0.98] text-white text-xs font-semibold rounded-xl transition-all shadow-sm ${statusTheme.buttonClass}`}
+                        >
+                          <i className="bi bi-pencil-square" />
+                          Edit Details & Attached Files
+                        </button>
+                      </div>
                     </div>
                   )
                 })()}
@@ -255,10 +515,10 @@ export default function UserProfileTab({ presence, setPresence }) {
             </div>
 
             {/* Account Actions Section */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <i className="bi bi-gear-fill text-green-700" />
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-150/40 bg-slate-50/40">
+                <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+                  <i className="bi bi-sliders text-emerald-605" />
                   System Controls
                 </h3>
               </div>
@@ -266,24 +526,24 @@ export default function UserProfileTab({ presence, setPresence }) {
               <div className="p-4 space-y-2">
                 <button
                   onClick={() => setSettingsOpen(true)}
-                  className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-slate-200 transition-all group"
+                  className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 hover:border-slate-350 transition-all group"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:text-green-700 transition-colors">
-                    <i className="bi bi-sliders text-lg" />
+                  <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:text-emerald-700 transition-colors">
+                    <i className="bi bi-bell text-base" />
                   </div>
-                  <span className="text-sm font-bold text-slate-700 flex-1 text-left">Notifications</span>
-                  <i className="bi bi-chevron-right text-slate-300 group-hover:text-slate-500 transition-colors" />
+                  <span className="text-sm font-semibold text-slate-700 flex-1 text-left">Notifications Settings</span>
+                  <i className="bi bi-chevron-right text-slate-300 group-hover:text-slate-500 transition-colors text-xs" />
                 </button>
 
                 <button
                   onClick={logout}
-                  className="w-full flex items-center gap-4 px-4 py-3 bg-red-600 border border-red-700 rounded-xl hover:bg-red-700 shadow-sm shadow-red-200 transition-all group"
+                  className="w-full flex items-center gap-4 px-4 py-3 bg-red-50/60 hover:bg-red-50 border border-red-200/60 rounded-xl transition-all group"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center text-white group-hover:bg-white/30 transition-colors">
-                    <i className="bi bi-box-arrow-right text-lg" />
+                  <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center text-red-600 group-hover:bg-red-500/20 transition-colors">
+                    <i className="bi bi-box-arrow-right text-base" />
                   </div>
-                  <span className="text-sm font-bold text-white flex-1 text-left">Sign Out</span>
-                  <i className="bi bi-arrow-right-short text-white/50 group-hover:text-white transition-colors text-xl" />
+                  <span className="text-sm font-semibold text-red-700 flex-1 text-left">Sign Out Account</span>
+                  <i className="bi bi-arrow-right text-red-400 group-hover:text-red-600 transition-colors text-sm" />
                 </button>
               </div>
             </div>
@@ -292,17 +552,17 @@ export default function UserProfileTab({ presence, setPresence }) {
 
           {/* Right Column: Personal Details */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 order-1 lg:order-2">
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-150/40 bg-slate-50/40 flex items-center justify-between">
                 <div>
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <i className="bi bi-person-lines-fill text-green-700" />
+                  <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+                    <i className="bi bi-person-badge text-emerald-600" />
                     Personal Details
                   </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Manage your identity and account security</p>
+                  <p className="text-xs text-slate-400 mt-1 font-medium">Update your profile parameters and security credentials</p>
                 </div>
                 <div className="hidden sm:block">
-                  <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-black uppercase rounded-lg border border-green-100">
+                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase rounded-lg border border-emerald-100">
                     Profile Settings
                   </span>
                 </div>
@@ -310,24 +570,24 @@ export default function UserProfileTab({ presence, setPresence }) {
 
               <div className="p-6 md:p-8">
                 {error && (
-                  <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 text-red-600 text-[13px] rounded-xl px-4 py-3.5">
-                    <i className="bi bi-exclamation-circle-fill flex-shrink-0" />
+                  <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 text-red-650 text-xs rounded-xl px-4 py-3.5">
+                    <i className="bi bi-exclamation-circle-fill flex-shrink-0 text-red-500" />
                     <span className="font-semibold">{error}</span>
                   </div>
                 )}
                 {success && (
-                  <div className="mb-6 flex items-center gap-3 bg-green-50 border border-green-100 text-green-700 text-[13px] rounded-xl px-4 py-3.5">
-                    <i className="bi bi-check-circle-fill flex-shrink-0" />
-                    <span className="font-semibold">Profile updated successfully.</span>
+                  <div className="mb-6 flex items-center gap-3 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs rounded-xl px-4 py-3.5">
+                    <i className="bi bi-check-circle-fill flex-shrink-0 text-emerald-605" />
+                    <span className="font-semibold">Profile details updated successfully.</span>
                   </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Full Name</span>
                       <input
-                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm placeholder:text-slate-300 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-350 text-slate-800 font-medium"
                         placeholder="e.g. Juan Dela Cruz"
                         value={name}
                         onChange={e => setName(e.target.value)}
@@ -336,10 +596,10 @@ export default function UserProfileTab({ presence, setPresence }) {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Email Address</span>
                       <input
                         type="email"
-                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm placeholder:text-slate-300 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-350 text-slate-800 font-medium"
                         placeholder="user@philfida.gov.ph"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
@@ -347,12 +607,13 @@ export default function UserProfileTab({ presence, setPresence }) {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Unit / Office</label>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Unit / Office</span>
                       <div className="relative">
                         <select
-                          className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm font-medium appearance-none"
+                           className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm text-slate-800 font-medium appearance-none disabled:opacity-60 disabled:bg-slate-100/50"
                           value={unit}
                           onChange={e => setUnit(e.target.value)}
+                          disabled={session?.Role !== 'Director'}
                         >
                           <option value="">-- Select Unit/Office --</option>
                           {(session?.Role === 'Director' || session?.Role === 'Records' ? OFFICES : UNITS).map(u => (
@@ -363,12 +624,15 @@ export default function UserProfileTab({ presence, setPresence }) {
                           <i className="bi bi-chevron-down text-sm" />
                         </div>
                       </div>
+                      {session?.Role !== 'Director' && (
+                        <p className="text-[10px] text-slate-400 mt-1.5 font-medium italic">Unit/Office assignments are managed strictly by the Director.</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Designation / Position</label>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Designation / Position</span>
                       <input
-                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm placeholder:text-slate-300 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-350 text-slate-800 font-medium"
                         placeholder="e.g. Project Assistant II"
                         value={designation}
                         onChange={e => setDesignation(e.target.value)}
@@ -379,35 +643,35 @@ export default function UserProfileTab({ presence, setPresence }) {
                   {!isGoogleUser ? (
                     <div className="pt-8 border-t border-slate-100">
                       <div className="mb-6">
-                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Security Credentials</h4>
-                        <p className="text-[11px] text-slate-400 mt-1">Leave blank to keep your current password</p>
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Security Credentials</h4>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Leave blank to keep your current password</p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">New Password</label>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">New Password</span>
                           <div className="relative">
                             <input
                               type={showPassword ? 'text' : 'password'}
                               placeholder="Min. 8 characters"
-                              className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm pr-12 font-medium"
+                              className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm pr-12 font-medium"
                               value={password}
                               onChange={e => setPassword(e.target.value)}
                             />
                             <button
                               type="button"
                               onClick={() => setShowPassword(prev => !prev)}
-                              className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-green-600 transition-colors"
+                              className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-emerald-700 transition-colors"
                             >
                               <i className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`} />
                             </button>
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirm Password</label>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Confirm Password</span>
                           <input
                             type={showPassword ? 'text' : 'password'}
                             placeholder="Re-type new password"
-                            className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all shadow-sm font-medium"
+                            className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm font-medium"
                             value={confirmPassword}
                             onChange={e => setConfirmPassword(e.target.value)}
                           />
@@ -416,7 +680,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                     </div>
                   ) : (
                     <div className="pt-4">
-                      <div className="flex items-center gap-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5">
+                      <div className="flex items-center gap-3 text-xs text-slate-500 bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3.5">
                         <i className="bi bi-google text-blue-500" />
                         <p className="font-medium italic">Google-managed account. Password changes are disabled.</p>
                       </div>
@@ -427,19 +691,18 @@ export default function UserProfileTab({ presence, setPresence }) {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="px-6 py-3 rounded-xl font-black text-xs text-white uppercase tracking-widest shadow-md hover:shadow-lg active:scale-95 transition-all w-full sm:w-auto min-w-[160px]"
-                      style={{ background: 'linear-gradient(135deg, #016837, #027a42)' }}
+                      className="px-6 py-3 rounded-xl font-bold text-xs text-white uppercase tracking-widest shadow-md hover:shadow-lg transition-all w-full sm:w-auto min-w-[160px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 flex items-center justify-center gap-2"
                     >
                       {loading ? (
-                        <div className="flex items-center justify-center gap-2">
+                        <>
                           <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           <span>Saving...</span>
-                        </div>
+                        </>
                       ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <i className="bi bi-save2-fill" />
+                        <>
+                          <i className="bi bi-save2" />
                           <span>Update Profile</span>
-                        </div>
+                        </>
                       )}
                     </button>
                   </div>
@@ -449,33 +712,33 @@ export default function UserProfileTab({ presence, setPresence }) {
 
             {/* Director's Availability Section */}
             {session?.Role !== 'Director' && director && (
-              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-6">
-                <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+              <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden mt-6">
+                <div className="px-6 py-5 border-b border-slate-150/40 bg-slate-50/40 flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                      <i className="bi bi-shield-shaded text-green-700" />
+                    <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+                      <i className="bi bi-shield-shaded text-emerald-600" />
                       Director's Availability
                     </h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Stay informed about the Director's current events</p>
+                    <p className="text-xs text-slate-400 mt-1 font-medium">Keep track of the Director's active calendar presence</p>
                   </div>
-                  <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-black uppercase rounded-lg border border-green-100">
+                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase rounded-lg border border-emerald-100">
                     Live Status
                   </span>
                 </div>
 
                 <div className="p-6">
-                  <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="w-12 h-12 rounded-xl bg-green-800 flex items-center justify-center text-lg font-black text-white shadow-lg shadow-green-900/20">
+                  <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200/60">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-800 flex items-center justify-center text-lg font-bold text-white shadow-md shadow-emerald-950/10">
                       {director.Name?.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-black text-slate-900 text-sm leading-tight uppercase">{director.Name}</p>
-                      <div className="flex items-center gap-2 mt-1">
+                      <p className="font-extrabold text-slate-800 text-sm leading-tight uppercase">{director.Name}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
                         <span className={`w-2 h-2 rounded-full ${
-                          normalizeStatus(director.Status) === 'Available' ? 'bg-emerald-500' :
+                          normalizeStatus(director.Status) === 'Available' ? 'bg-emerald-500 animate-pulse' :
                           normalizeStatus(director.Status) === 'Official Travel' ? 'bg-blue-500' : 'bg-red-500'
                         }`} />
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                           {normalizeStatus(director.Status)}
                         </span>
                       </div>
@@ -509,32 +772,47 @@ export default function UserProfileTab({ presence, setPresence }) {
                       return { type: 'Away', title: cleanStr, fileUrl }
                     })()
 
+                    const dirTheme = statusData.type === 'Official Travel'
+                      ? {
+                          blockBg: 'bg-blue-50/15 border-blue-200/50',
+                          spanColor: 'text-blue-500'
+                        }
+                      : statusData.type === 'On Leave'
+                      ? {
+                          blockBg: 'bg-rose-50/15 border-rose-200/50',
+                          spanColor: 'text-rose-500'
+                        }
+                      : {
+                          blockBg: 'bg-slate-50/50 border-slate-200/60',
+                          spanColor: 'text-slate-400'
+                        }
+
                     return (
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="p-4 bg-white border border-slate-100 rounded-xl">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Event / Activity</p>
-                            <p className="text-sm text-slate-900 font-bold leading-tight">{statusData.title}</p>
+                          <div className={`p-4 rounded-xl border ${dirTheme.blockBg}`}>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${dirTheme.spanColor}`}>Event / Activity</span>
+                            <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.title}</p>
                           </div>
-                          <div className="p-4 bg-white border border-slate-100 rounded-xl">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                          <div className={`p-4 rounded-xl border ${dirTheme.blockBg}`}>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${dirTheme.spanColor}`}>
                               {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
-                            </p>
-                            <p className="text-sm text-slate-900 font-bold leading-tight">{statusData.location || statusData.reason || '—'}</p>
+                            </span>
+                            <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.location || statusData.reason || '—'}</p>
                           </div>
-                          <div className="p-4 bg-white border border-slate-100 rounded-xl md:col-span-2">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Inclusive Dates</p>
-                            <p className="text-sm text-slate-900 font-bold leading-tight">{statusData.dates || '—'}</p>
+                          <div className={`p-4 rounded-xl border md:col-span-2 ${dirTheme.blockBg}`}>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${dirTheme.spanColor}`}>Inclusive Dates</span>
+                            <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.dates || '—'}</p>
                           </div>
                         </div>
 
                         {statusData.fileUrl && (
                           <div className="flex gap-2">
                             <button onClick={() => dirSignedUrl && window.open(dirSignedUrl, '_blank')}
-                              className={`flex-1 flex items-center justify-center gap-2 py-2.5 border text-[10px] font-black uppercase rounded-lg transition-all
-                                ${dirSignedUrl ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50' : 'bg-slate-50 border-slate-100 text-slate-300 cursor-wait'}`}
+                              className={`flex-1 flex items-center justify-center gap-2 py-2.5 border text-xs font-semibold rounded-xl transition-all
+                                ${dirSignedUrl ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-300 cursor-wait'}`}
                             >
-                              {loadingDirUrl ? <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <i className="bi bi-file-earmark-text" />}
+                              {loadingDirUrl ? <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <i className="bi bi-file-earmark-text text-slate-500" />}
                               View Travel Order
                             </button>
                           </div>
@@ -543,8 +821,8 @@ export default function UserProfileTab({ presence, setPresence }) {
                     )
                   })() : (
                     <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                      <i className="bi bi-calendar-check text-slate-300 text-3xl mb-2" />
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No scheduled events</p>
+                      <i className="bi bi-calendar-check text-slate-300 text-3xl mb-2 block" />
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">No scheduled events</p>
                     </div>
                   )}
                 </div>
@@ -555,7 +833,262 @@ export default function UserProfileTab({ presence, setPresence }) {
       </div>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} session={session} />}
-    </div>
 
+      {/* ── Edit Presence Modal ── */}
+      {editingReminder && (() => {
+        const isTravel = editingReminder.type === 'travel'
+        
+        // Setup context-aware color themes
+        const headerGradient = isTravel 
+          ? 'from-blue-600 to-indigo-600' 
+          : 'from-red-600 to-rose-600'
+        
+        const subtitleText = isTravel ? 'text-blue-100' : 'text-red-100'
+        const borderFocus = isTravel 
+          ? 'focus:border-blue-400 focus:ring-blue-400/20' 
+          : 'focus:border-red-400 focus:ring-red-400/20'
+          
+        const uploadHover = isTravel 
+          ? 'hover:border-blue-400 hover:bg-blue-50/20 hover:text-blue-800' 
+          : 'hover:border-red-400 hover:bg-red-50/20 hover:text-red-800'
+
+        const saveButtonBg = isTravel 
+          ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-100' 
+          : 'bg-red-600 hover:bg-red-700 shadow-red-100'
+
+        const fileIconColor = isTravel ? 'text-blue-600' : 'text-red-600'
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in-up">
+              
+              {/* Modal Header */}
+              <div className={`bg-gradient-to-r ${headerGradient} px-6 py-4 flex items-center justify-between text-white`}>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black leading-tight uppercase tracking-wide">
+                    Edit Availability Presence
+                  </h3>
+                  <p className={`text-[10px] ${subtitleText} font-black mt-1 uppercase flex items-center gap-1.5`}>
+                    {isTravel ? (
+                      <>
+                        <i className="bi bi-airplane-fill" /> Official Travel
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-calendar-event-fill" /> On Leave
+                      </>
+                    )}
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setEditingReminder(null)}
+                  className="text-white/85 hover:text-white text-2xl font-bold p-1 leading-none select-none transition-colors"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                
+                {/* Form Fields */}
+                {isTravel ? (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Travel Purpose / Activity</label>
+                      <input
+                        type="text"
+                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none`}
+                        placeholder="e.g. Regional Inspection, Conference"
+                        value={editingFields.travelActivity}
+                        onChange={e => setEditingFields(prev => ({ ...prev, travelActivity: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Travel Location</label>
+                      <input
+                        type="text"
+                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none`}
+                        placeholder="e.g. Region I Office, Quezon City"
+                        value={editingFields.travelLocation}
+                        onChange={e => setEditingFields(prev => ({ ...prev, travelLocation: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Leave Type</label>
+                      <select
+                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none appearance-none`}
+                        value={editingFields.leaveType}
+                        onChange={e => setEditingFields(prev => ({ ...prev, leaveType: e.target.value }))}
+                      >
+                        <option value="Sick Leave">Sick Leave</option>
+                        <option value="Vacation Leave">Vacation Leave</option>
+                        <option value="Maternity/Paternity Leave">Maternity/Paternity Leave</option>
+                        <option value="Special Privilege Leave">Special Privilege Leave</option>
+                        <option value="Forced Leave">Forced Leave</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Leave Reason / Description</label>
+                      <input
+                        type="text"
+                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none`}
+                        placeholder="e.g. Medical Checkup, Family Event"
+                        value={editingFields.leaveReason}
+                        onChange={e => setEditingFields(prev => ({ ...prev, leaveReason: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Start Time</label>
+                    <input
+                      type="time"
+                      className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none`}
+                      value={editingFields.time}
+                      onChange={e => setEditingFields(prev => ({ ...prev, time: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Return Date</label>
+                    <input
+                      type="date"
+                      className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none`}
+                      value={editingFields.returnDate}
+                      onChange={e => setEditingFields(prev => ({ ...prev, returnDate: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Attachments Section */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Attached Files / Travel Orders</label>
+                  
+                  {/* Upload Button */}
+                  <div className="flex items-center gap-3">
+                    <label className={`flex-1 flex flex-col items-center justify-center border border-dashed border-slate-200 ${uploadHover} bg-slate-50/50 rounded-xl p-3.5 cursor-pointer transition-colors group`}>
+                      <i className="bi bi-cloud-arrow-up text-lg text-slate-400 group-hover:text-inherit mb-1" />
+                      <span className="text-[10px] font-bold text-slate-500 group-hover:text-inherit uppercase tracking-wide">
+                        {uploadingFiles ? 'Uploading...' : 'Choose File(s)'}
+                      </span>
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={handleEditFileChange}
+                        disabled={uploadingFiles}
+                      />
+                    </label>
+                  </div>
+
+                  {/* List of attachments */}
+                  {editingFields.attachments && (
+                    <div className="space-y-1.5 mt-2.5">
+                      {editingFields.attachments.split('|').map((path, idx) => {
+                        const name = path.split('/').pop().replace(/^\d+_[a-z0-9]+_/i, '')
+                        return (
+                          <div key={idx} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-2 group/file">
+                            <span className="text-[10px] font-bold text-slate-600 truncate max-w-[200px] flex items-center gap-1.5">
+                              <i className={`bi bi-file-earmark-fill ${fileIconColor}`} />
+                              {name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEditAttachment(path)}
+                              className="text-slate-400 hover:text-red-600 text-xs p-1 select-none font-bold font-mono"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingReminder(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-250 text-slate-700 text-xs font-black uppercase rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSavePresence}
+                  className={`px-4 py-2 ${saveButtonBg} text-white text-xs font-black uppercase rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95`}
+                >
+                  <i className="bi bi-check-circle" /> Save Changes
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )
+      })()}
+
+    </div>
+  )
+}
+
+function SignedAttachmentLink({ path }) {
+  const [url, setUrl] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    const fetchUrl = async () => {
+      try {
+        const signed = await getSignedFileUrl(path)
+        if (active) {
+          setUrl(signed)
+          setLoading(false)
+        }
+      } catch (e) {
+        if (active) setLoading(false)
+      }
+    }
+    fetchUrl()
+    return () => { active = false }
+  }, [path])
+
+  if (loading) {
+    return (
+      <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[9px] font-black text-slate-400 uppercase select-none">
+        <span className="w-2.5 h-2.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+        Loading...
+      </span>
+    )
+  }
+  if (!url) {
+    return (
+      <span className="inline-flex items-center gap-1 bg-red-50 border border-red-150 rounded-lg px-2.5 py-1 text-[9px] font-black text-red-650 uppercase select-none">
+        <i className="bi bi-exclamation-triangle-fill text-red-600" />
+        Broken link
+      </span>
+    )
+  }
+
+  const filename = path.split('/').pop().replace(/^\d+_[a-z0-9]+_/i, '')
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 bg-green-50/60 hover:bg-green-50 border border-green-150 rounded-lg px-2.5 py-1 text-[9px] font-black text-green-800 uppercase transition-all hover:border-green-300 active:scale-95"
+    >
+      <i className="bi bi-file-earmark-arrow-down text-green-700 text-xs" />
+      <span className="truncate max-w-[120px]">{filename}</span>
+    </a>
   )
 }

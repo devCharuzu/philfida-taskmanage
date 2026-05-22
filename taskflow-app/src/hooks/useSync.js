@@ -86,13 +86,12 @@ export function useSync() {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       typeof navigator !== 'undefined' ? navigator.userAgent : ''
     )
-    const isSecureConnection =
-      typeof window !== 'undefined' && window.location.protocol === 'https:'
     const isTablet = /iPad|Android(?!.*Mobile)/i.test(
       typeof navigator !== 'undefined' ? navigator.userAgent : ''
     )
-
-    const useRealtime = isSecureConnection && (!isMobile || isTablet)
+    const isSecureConnection = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    const useRealtime = (isSecureConnection || isLocal) && (!isMobile || isTablet)
 
     if (useRealtime) {
       // Notification channel — user-scoped filter
