@@ -95,7 +95,7 @@ function useHydrated() {
     let isAlreadyHydrated = false
     try {
       isAlreadyHydrated = useStore.persist.hasHydrated()
-    } catch {
+    } catch (error) {
       setError('Store hydration failed')
       setHydrated(true)
       return
@@ -128,8 +128,6 @@ function useHydrated() {
 function ProtectedRoute({ children, role, hydrated, error }) {
   const session  = useStore(s => s.session)
 
-  console.log('[PROTECTED] ProtectedRoute render:', { hydrated, session, role })
-
   if (!hydrated) return (
     <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
       <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4" />
@@ -144,14 +142,11 @@ function ProtectedRoute({ children, role, hydrated, error }) {
   )
 
   if (!session) {
-    console.log('[PROTECTED] No session, redirecting to login')
     return <Navigate to="/" replace />
   }
   if (role && session.Role !== role) {
-    console.log('[PROTECTED] Role mismatch, redirecting to login')
     return <Navigate to="/" replace />
   }
-  console.log('[PROTECTED] Access granted')
   return children
 }
 

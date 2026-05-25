@@ -358,13 +358,9 @@ export default function UserProfileTab({ presence, setPresence }) {
               <div className="absolute -left-10 -bottom-10 w-28 h-28 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
               
               <div className="relative flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br border flex items-center justify-center text-xl font-bold shadow-sm ${roleTheme.avatarClass}`}>
-                  {session?.Name?.charAt(0)}
-                </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="font-extrabold text-base text-slate-800 tracking-tight leading-tight uppercase">{session?.Name}</h4>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${roleTheme.dotClass}`} />
                     <span className={`text-[10px] font-bold uppercase tracking-wider ${roleTheme.roleText}`}>{session?.Role || 'User'}</span>
                   </div>
                 </div>
@@ -713,34 +709,52 @@ export default function UserProfileTab({ presence, setPresence }) {
             {/* Director's Availability Section */}
             {session?.Role !== 'Director' && director && (
               <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden mt-6">
-                <div className="px-6 py-5 border-b border-slate-150/40 bg-slate-50/40 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
-                      <i className="bi bi-shield-shaded text-emerald-600" />
-                      Director's Availability
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1 font-medium">Keep track of the Director's active calendar presence</p>
-                  </div>
-                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase rounded-lg border border-emerald-100">
-                    Live Status
-                  </span>
+                <div className="px-6 py-5 border-b border-slate-150/40 bg-gradient-to-r from-emerald-50 to-emerald-100/50">
+                  <h3 className="font-extrabold text-emerald-900 text-xs uppercase tracking-wider flex items-center gap-2">
+                    <i className="bi bi-shield-shaded text-emerald-600" aria-hidden="true" />
+                    Director's Availability
+                  </h3>
                 </div>
 
                 <div className="p-6">
-                  <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200/60">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-800 flex items-center justify-center text-lg font-bold text-white shadow-md shadow-emerald-950/10">
-                      {director.Name?.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-extrabold text-slate-800 text-sm leading-tight uppercase">{director.Name}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`w-2 h-2 rounded-full ${
-                          normalizeStatus(director.Status) === 'Available' ? 'bg-emerald-500 animate-pulse' :
-                          normalizeStatus(director.Status) === 'Official Travel' ? 'bg-blue-500' : 'bg-red-500'
-                        }`} />
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          {normalizeStatus(director.Status)}
-                        </span>
+                  {/* Director Status Card */}
+                  <div className="mb-6 p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl border border-slate-200/60 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-extrabold text-slate-800 text-sm leading-tight uppercase tracking-tight">{director.Name}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span 
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm
+                              ${normalizeStatus(director.Status) === 'Available' 
+                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-emerald-100/50' 
+                                : normalizeStatus(director.Status) === 'Official Travel' 
+                                  ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-blue-100/50' 
+                                  : 'bg-rose-100 text-rose-700 border border-rose-200 shadow-rose-100/50'
+                              }`}
+                            aria-label={`Director status: ${normalizeStatus(director.Status)}`}
+                          >
+                            {normalizeStatus(director.Status)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md
+                          ${normalizeStatus(director.Status) === 'Available' 
+                            ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-emerald-500/30' 
+                            : normalizeStatus(director.Status) === 'Official Travel' 
+                              ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/30' 
+                              : 'bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-rose-500/30'
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <i className={`bi text-xl
+                            ${normalizeStatus(director.Status) === 'Available' 
+                              ? 'bi-check-circle' 
+                              : normalizeStatus(director.Status) === 'Official Travel' 
+                                ? 'bi-airplane' 
+                                : 'bi-calendar-x'
+                            }`} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -774,55 +788,95 @@ export default function UserProfileTab({ presence, setPresence }) {
 
                     const dirTheme = statusData.type === 'Official Travel'
                       ? {
-                          blockBg: 'bg-blue-50/15 border-blue-200/50',
-                          spanColor: 'text-blue-500'
+                          blockBg: 'bg-blue-50/30 border-blue-200/60',
+                          iconBg: 'bg-blue-100 text-blue-600 border-blue-200',
+                          iconClass: 'bi-airplane',
+                          labelColor: 'text-blue-600',
+                          headerBg: 'from-blue-500 to-blue-600'
                         }
                       : statusData.type === 'On Leave'
                       ? {
-                          blockBg: 'bg-rose-50/15 border-rose-200/50',
-                          spanColor: 'text-rose-500'
+                          blockBg: 'bg-rose-50/30 border-rose-200/60',
+                          iconBg: 'bg-rose-100 text-rose-600 border-rose-200',
+                          iconClass: 'bi-calendar4-event',
+                          labelColor: 'text-rose-600',
+                          headerBg: 'from-rose-500 to-rose-600'
                         }
                       : {
                           blockBg: 'bg-slate-50/50 border-slate-200/60',
-                          spanColor: 'text-slate-400'
+                          iconBg: 'bg-slate-100 text-slate-600 border-slate-200',
+                          iconClass: 'bi-info-circle',
+                          labelColor: 'text-slate-500',
+                          headerBg: 'from-slate-500 to-slate-600'
                         }
 
                     return (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className={`p-4 rounded-xl border ${dirTheme.blockBg}`}>
-                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${dirTheme.spanColor}`}>Event / Activity</span>
-                            <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.title}</p>
+                      <div className="space-y-4" role="region" aria-label={`Director ${statusData.type} details`}>
+                        <div className={`p-5 rounded-2xl border ${dirTheme.blockBg} bg-gradient-to-br ${dirTheme.blockBg}`}>
+                          <div className="flex items-start gap-4 mb-4">
+                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center flex-shrink-0 shadow-sm ${dirTheme.iconBg}`}>
+                              <i className={`bi text-lg ${dirTheme.iconClass}`} aria-hidden="true" />
+                            </div>
+                            <div className="flex-1">
+                              <span className={`text-[10px] font-bold uppercase tracking-wider block mb-2 ${dirTheme.labelColor}`}>
+                                {statusData.type} Details
+                              </span>
+                              <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.title}</p>
+                            </div>
                           </div>
-                          <div className={`p-4 rounded-xl border ${dirTheme.blockBg}`}>
-                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${dirTheme.spanColor}`}>
-                              {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
-                            </span>
-                            <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.location || statusData.reason || '—'}</p>
-                          </div>
-                          <div className={`p-4 rounded-xl border md:col-span-2 ${dirTheme.blockBg}`}>
-                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${dirTheme.spanColor}`}>Inclusive Dates</span>
-                            <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.dates || '—'}</p>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-200/50">
+                            <div>
+                              <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1 ${dirTheme.labelColor}`}>
+                                {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
+                              </span>
+                              <p className="text-sm text-slate-700 font-medium leading-tight">{statusData.location || statusData.reason || '—'}</p>
+                            </div>
+                            <div>
+                              <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1 ${dirTheme.labelColor}`}>
+                                Duration
+                              </span>
+                              <p className="text-sm text-slate-700 font-medium leading-tight">{statusData.dates || '—'}</p>
+                            </div>
                           </div>
                         </div>
 
                         {statusData.fileUrl && (
                           <div className="flex gap-2">
-                            <button onClick={() => dirSignedUrl && window.open(dirSignedUrl, '_blank')}
-                              className={`flex-1 flex items-center justify-center gap-2 py-2.5 border text-xs font-semibold rounded-xl transition-all
-                                ${dirSignedUrl ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-300 cursor-wait'}`}
+                            <button 
+                              onClick={() => dirSignedUrl && window.open(dirSignedUrl, '_blank')}
+                              disabled={!dirSignedUrl}
+                              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 border text-xs font-semibold rounded-xl transition-all shadow-sm
+                                ${dirSignedUrl 
+                                  ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98]' 
+                                  : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                }`}
+                              aria-label={loadingDirUrl ? 'Loading travel order' : 'View travel order document'}
                             >
-                              {loadingDirUrl ? <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <i className="bi bi-file-earmark-text text-slate-500" />}
-                              View Travel Order
+                              {loadingDirUrl ? (
+                                <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" aria-hidden="true" />
+                              ) : (
+                                <>
+                                  <i className="bi bi-file-earmark-text text-slate-500" aria-hidden="true" />
+                                  View Travel Order
+                                </>
+                              )}
                             </button>
                           </div>
                         )}
                       </div>
                     )
                   })() : (
-                    <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                      <i className="bi bi-calendar-check text-slate-300 text-3xl mb-2 block" />
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">No scheduled events</p>
+                    <div 
+                      className="py-10 text-center bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 rounded-2xl border border-dashed border-emerald-200/60"
+                      role="status"
+                      aria-label="Director is currently available with no scheduled events"
+                    >
+                      <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <i className="bi bi-check-circle text-emerald-500 text-2xl" aria-hidden="true" />
+                      </div>
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-1">Director Available</p>
+                      <p className="text-[10px] text-emerald-600/70 font-medium">No scheduled events at this time</p>
                     </div>
                   )}
                 </div>

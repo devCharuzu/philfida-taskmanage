@@ -12,17 +12,8 @@ export default function FieldReportViewer({ task, isOpen, onClose }) {
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
 
-  // Debug logging
-  console.log('FieldReportViewer rendered with:', { isOpen, task });
-
   // Check if task has field report data
   const hasFieldReport = task.field_location || task.field_photos || task.field_notes;
-  
-  console.log('hasFieldReport:', hasFieldReport, {
-    field_location: task.field_location,
-    field_photos: task.field_photos,
-    field_notes: task.field_notes
-  });
   
   // Parse field location JSON
   const location = task.field_location 

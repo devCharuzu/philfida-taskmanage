@@ -19,7 +19,7 @@ const getManilaDateString = (dateInput) => {
       day: '2-digit'
     })
     return formatter.format(d)
-  } catch {
+  } catch (error) {
     return d.toISOString().split('T')[0]
   }
 }
@@ -97,7 +97,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
         const map = {}
         parts.forEach(p => { map[p.type] = p.value })
         manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
-      } catch {
+      } catch (error) {
         manilaNowStr = getManilaDateString(now) + ' ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
       }
 
@@ -318,7 +318,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
             const map = {}
             parts.forEach(p => { map[p.type] = p.value })
             manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
-          } catch {
+          } catch (error) {
             manilaNowStr = getManilaDateString(now) + ' 08:00'
           }
 
@@ -373,7 +373,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
         const map = {}
         parts.forEach(p => { map[p.type] = p.value })
         manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
-      } catch {
+      } catch (error) {
         manilaNowStr = getManilaDateString(now) + ' 08:00'
       }
 

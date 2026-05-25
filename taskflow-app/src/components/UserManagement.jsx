@@ -17,6 +17,7 @@ const ROLE_COLORS = {
   Director:    'bg-purple-100 text-purple-700 border-purple-200',
   'Unit Head': 'bg-blue-100 text-blue-700 border-blue-200',
   Employee:    'bg-green-100 text-green-700 border-green-200',
+  Records:     'bg-slate-100 text-slate-700 border-slate-200',
 }
 
 const STATUS_COLORS = {
@@ -141,17 +142,15 @@ export default function UserManagement({ users, onSync }) {
     }
   }
 
-  async function openDeleteConfirm(user) {
+  function openDeleteConfirm(user) {
     setDeleteTarget(user)
     setDirPassword('')
     setDeleteError('')
     setShowPass(false)
-    setOauthForDelete(await hasSupabaseAuthSession())
+    hasSupabaseAuthSession().then(setOauthForDelete)
   }
 
   async function handleConfirmDelete() {
-    if (!dirPassword.trim()) { setDeleteError('Please enter your password.'); return }
-
     setDeleteLoading(true)
     setDeleteError('')
     try {
@@ -160,6 +159,7 @@ export default function UserManagement({ users, onSync }) {
       if (!oauth) {
         if (!dirPassword.trim()) {
           setDeleteError('Please enter your password.')
+          setDeleteLoading(false)
           return
         }
         secret = dirPassword.trim()

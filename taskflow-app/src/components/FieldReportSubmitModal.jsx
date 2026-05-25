@@ -126,7 +126,7 @@ export default function FieldReportSubmitModal({ isOpen, onClose, taskId, onRepo
     if (gpsStatus === 'success' && location) {
       fetchLocationName(location.lat, location.lng);
     }
-  }, [gpsStatus, location]);
+  }, [gpsStatus, location, fetchLocationName]);
 
   // Handle recapture location
   const handleRecaptureLocation = async () => {

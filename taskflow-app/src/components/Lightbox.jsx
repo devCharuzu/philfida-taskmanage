@@ -38,7 +38,7 @@ export default function Lightbox({ file, onClose }) {
       a.href = URL.createObjectURL(blob); a.download = name
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(a.href)
-    } catch { window.open(signedUrl, '_blank') }
+    } catch (error) { window.open(signedUrl, '_blank') }
   }
 
   return (

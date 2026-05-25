@@ -288,7 +288,7 @@ The application cannot function until this is resolved.
       } else if (result === 'EXISTS') {
         setError('This Employee ID No. or Email is already registered.')
       }
-    } catch { setError('Registration failed. Please try again.') }
+    } catch (error) { setError('Registration failed. Please try again.') }
     finally { setLoading(false) }
   }
 

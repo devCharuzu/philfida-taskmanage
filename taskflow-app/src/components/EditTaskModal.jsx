@@ -23,7 +23,7 @@ export default function EditTaskModal({ task, onClose, onSync }) {
       await logHistory(task.TaskID, 'Edited', session?.Name || 'Unknown')
       await onSync()
       onClose()
-    } catch { setError('Failed to update task.') }
+    } catch (error) { setError('Failed to update task.') }
     finally { setLoading(false) }
   }
 

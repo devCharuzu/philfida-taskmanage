@@ -41,7 +41,7 @@ export default function EditProfileModal({ onClose }) {
       })
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onClose() }, 1200)
-    } catch {
+    } catch (error) {
       setError('Failed to update profile. Please try again.')
     } finally { setLoading(false) }
   }

@@ -742,6 +742,23 @@ export default function DirectorPage() {
                     )}
                   </div>
                 </div>
+                
+                {/* Select All Row */}
+                {archivedTasks.length > 0 && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={archivedTasks.length > 0 && archivedTasks.every(t => selected.includes(t.TaskID))}
+                        onChange={() => toggleSelectAll(archivedTasks.map(t => t.TaskID))}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-medium text-slate-600 group-hover:text-slate-800 transition-colors">
+                        Select All ({archivedTasks.length})
+                      </span>
+                    </label>
+                  </div>
+                )}
               </div>
               {selected.length > 0 && (
                 <div className="px-4 md:px-6 lg:px-8 py-2 border-b border-slate-200 bg-white flex-shrink-0">
@@ -1318,7 +1335,7 @@ export default function DirectorPage() {
                                     a.download = fname
                                     document.body.appendChild(a); a.click()
                                     document.body.removeChild(a); URL.revokeObjectURL(a.href)
-                                  } catch {
+                                  } catch (error) {
                                     window.open(travelOrderSignedUrl, '_blank')
                                   }
                                 }}
@@ -1455,7 +1472,11 @@ export default function DirectorPage() {
               <p className="text-red-600 text-xs font-semibold mb-5">⚠ This action cannot be reversed.</p>
               <div className="flex gap-3">
                 <button onClick={() => setDeleteConfirm(false)} className="btn-secondary flex-1 py-2.5">Cancel</button>
-                <button onClick={handleBulkDelete} disabled={bulkLoading === 'delete'} className="btn-danger flex-1 py-2.5">
+                <button 
+                  onClick={handleBulkDelete} 
+                  disabled={bulkLoading === 'delete'} 
+                  className="flex-1 py-2.5 rounded-lg font-semibold text-white border-0 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
                   {bulkLoading === 'delete'
                     ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
                     : <><i className="bi bi-trash3-fill" /> Delete</>}
@@ -1595,12 +1616,6 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
           <button
             type="button"
             onClick={() => {
-              console.log('Opening field report modal for task:', t.TaskID);
-              console.log('Task has field data:', {
-                field_location: t.field_location,
-                field_photos: t.field_photos,
-                field_notes: t.field_notes
-              });
               onViewFieldReport && onViewFieldReport(t);
             }}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl transition-all shadow-md shadow-green-900/20 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer relative z-10"
@@ -1773,12 +1788,6 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
           <button
             type="button"
             onClick={() => {
-              console.log('Opening field report modal for task:', t.TaskID);
-              console.log('Task has field data:', {
-                field_location: t.field_location,
-                field_photos: t.field_photos,
-                field_notes: t.field_notes
-              });
               onViewFieldReport && onViewFieldReport(t);
             }}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl transition-all shadow-md shadow-green-900/20 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer relative z-10"

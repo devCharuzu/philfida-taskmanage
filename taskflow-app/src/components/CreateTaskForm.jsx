@@ -202,8 +202,8 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
       await onSync()
       
       // Store the created task ID for field report submission
-      if (result?.taskId) {
-        setCreatedTaskId(result.taskId)
+      if (result) {
+        setCreatedTaskId(result)
       }
 
       // If field report is optional and checked, show the modal
