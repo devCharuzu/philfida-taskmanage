@@ -12,8 +12,6 @@ import Lightbox from '../components/Lightbox'
 import TaskTimeline from '../components/TaskTimeline'
 import DeadlineProgress from '../components/DeadlineProgress'
 import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
-import FieldReportSubmitModal from '../components/FieldReportSubmitModal'
-import FieldReportViewer from '../components/FieldReportViewer'
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -30,11 +28,6 @@ export default function DashboardPage() {
   const [tab,          setTab]          = useState('my-tasks')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
-  
-  // Field report modal state
-  const [fieldReportModalTask, setFieldReportModalTask] = useState(null)
-  const [viewFieldReportTask, setViewFieldReportTask] = useState(null)
-
   // Sync presence state with session status (H11 fix for refresh persistence)
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
@@ -103,12 +96,12 @@ export default function DashboardPage() {
   const receivedCount  = myTasks.filter(t => t.Status === 'Received').length
 
   return (
-    <div className="h-dvh flex overflow-hidden" style={{ background: '#f6f8f5' }}>
+    <div className="h-dvh flex overflow-hidden page-bg">
 
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: 'linear-gradient(180deg, #014d2a 0%, #016837 100%)' }}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* ── Branding + Notification row ── */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
@@ -300,8 +293,6 @@ export default function DashboardPage() {
                           onStatusUpdate={handleStatusUpdate}
                           onOpenChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
                           onOpenFile={(url, name) => setLightboxFile({ url, name })}
-                          onOpenFieldReport={() => setFieldReportModalTask(t)}
-                          onViewFieldReport={() => setViewFieldReportTask(t)}
                         />
                       ))}
                     </div>
@@ -399,31 +390,6 @@ export default function DashboardPage() {
 
       {chat         && <ChatModal taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}
       {lightboxFile && <Lightbox file={lightboxFile} onClose={() => setLightboxFile(null)} />}
-      
-      {/* Field Report Submit Modal */}
-      {fieldReportModalTask && (
-        <FieldReportSubmitModal
-          isOpen={!!fieldReportModalTask}
-          onClose={() => {
-            setFieldReportModalTask(null)
-            sync()
-          }}
-          taskId={fieldReportModalTask.TaskID}
-          onReportSubmitted={() => {
-            setFieldReportModalTask(null)
-            sync()
-          }}
-        />
-      )}
-      
-      {/* Field Report Viewer Modal */}
-      {viewFieldReportTask && (
-        <FieldReportViewer
-          task={viewFieldReportTask}
-          isOpen={!!viewFieldReportTask}
-          onClose={() => setViewFieldReportTask(null)}
-        />
-      )}
 
       {/* ── AUTO-UPDATE TOAST ALERT ── */}
       {autoUpdateAlert && (
@@ -572,7 +538,7 @@ function getDeadlineMeta(deadline, status) {
   return { label: formatDate(deadline), className: 'text-slate-750 font-semibold', icon: 'bi-calendar-event' }
 }
 
-function TaskCard({ task: t, session, comments, history = [], loading, onStatusUpdate, onOpenChat, onOpenFile, onOpenFieldReport, onViewFieldReport }) {
+function TaskCard({ task: t, session, comments, history = [], loading, onStatusUpdate, onOpenChat, onOpenFile }) {
   const unreadChat = getUnreadCommentCount(comments, t.TaskID, session?.Name || '')
   const statusTone = STATUS_TONES[t.Status] || STATUS_TONES.Assigned
   const deadline = getDeadlineMeta(t.Deadline, t.Status)
@@ -701,24 +667,6 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
               <i className="bi bi-check-circle-fill text-slate-400" aria-hidden="true" /> Completed
             </button>
           )}
-          
-          {/* Field Report Button - only for employees on their received/completed tasks */}
-          {session?.Role === 'Employee' && String(t.EmployeeID) === String(session?.ID) && (t.Status === 'Received' || t.Status === 'Completed') && (
-            <button
-              onClick={() => {
-                if (t.field_location || t.field_photos || t.field_notes) {
-                  onViewFieldReport()
-                } else {
-                  onOpenFieldReport()
-                }
-              }}
-              className="flex min-h-11 flex-shrink-0 items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 hover:border-green-300 hover:bg-green-100 px-4 py-2.5 text-sm font-bold text-green-800 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
-            >
-              <i className="bi bi-geo-alt-fill text-green-700" aria-hidden="true" />
-              <span>{t.field_location || t.field_photos || t.field_notes ? 'View Report' : 'Add Field Report'}</span>
-            </button>
-          )}
-          
           <button
             onClick={onOpenChat}
             className="relative flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"

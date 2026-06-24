@@ -133,14 +133,22 @@
 
   @media (min-width: 640px) {
     .sidebar-responsive {
-      width: 256px;
+      width: 240px;
       max-width: none;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .sidebar-responsive {
+      width: 220px;
+      min-width: 220px;
     }
   }
 
   @media (min-width: 1024px) {
     .sidebar-responsive {
-      width: 240px;
+      width: 256px;
+      min-width: 256px;
     }
   }
 

@@ -297,8 +297,7 @@ The application cannot function until this is resolved.
   if (googleLoading) {
     return (
       <div 
-        className="min-h-screen flex items-center justify-center relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}
+        className="min-h-screen flex items-center justify-center relative overflow-hidden login-gradient"
         role="status"
         aria-live="polite"
       >
@@ -318,8 +317,7 @@ The application cannot function until this is resolved.
   }
 
   return (
-    <div className="fixed inset-0 w-full h-full"
-      style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
+    <div className="fixed inset-0 w-full h-full login-gradient">
 
       {/* Animated background elements - fixed to viewport */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -334,7 +332,7 @@ The application cannot function until this is resolved.
         <div className="min-h-full flex items-center justify-center p-4 py-8">
 
           {/* Login Card */}
-          <div className="w-full max-w-[280px] sm:max-w-[320px] md:max-w-[360px] lg:max-w-[400px] xl:max-w-[440px]">
+          <div className="w-[clamp(280px,90vw,440px)]">
 
             {/* Header with logos */}
             <div className="text-center mb-8">
@@ -527,8 +525,7 @@ The application cannot function until this is resolved.
 
                       <button
                         type="submit"
-                        className="w-full py-3.5 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 mt-2"
-                        style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
+                        className="btn-primary-gradient w-full py-3.5 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 mt-2"
                         disabled={loading}
                       >
                         {loading ? (
@@ -644,8 +641,7 @@ The application cannot function until this is resolved.
 
                       <button
                         type="submit"
-                        className="w-full py-3.5 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 mt-2"
-                        style={{ background: 'linear-gradient(135deg, #155414, #1e6e1e)' }}
+                        className="btn-primary-gradient w-full py-3.5 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 mt-2"
                         disabled={loading}
                       >
                         {loading ? (

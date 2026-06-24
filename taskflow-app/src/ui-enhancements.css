@@ -311,7 +311,7 @@
   .error-title {
     font-size: 1rem;
     font-weight: 700;
-    color: #dc2626;
+    color: var(--error-600);
     margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
@@ -343,7 +343,7 @@
   .success-title {
     font-size: 1rem;
     font-weight: 700;
-    color: #16a34a;
+    color: var(--success-600);
     margin-bottom: 0.5rem;
     display: flex;
     align-items: center;

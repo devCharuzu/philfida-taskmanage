@@ -77,7 +77,9 @@ Then log in with **Personnel ID** `DIR-001` and that password — **then change 
 
 ### Manual login / self-registration vs. RLS
 
-Personnel ID login and the registration tab use the **`anon`** JWT before Google OAuth establishes **`authenticated`**. **`complete-database-schema-fixed.sql`** already creates **`Anon select Users for login`** and **`Anon insert pending Users`** so you do not run extra SQL for that.
+Personnel ID login and the registration tab use the **`anon`** JWT before Google OAuth establishes **`authenticated`**. **`complete-database-schema-fixed.sql`** now includes anon policies for `Users`, `Tasks`, `Comments`, `Notifications`, and `TaskHistory` so legacy manual mode can run with RLS enabled.
+
+If your database was created before that update, run **`supabase-manual-mode-rls-patch.sql`**.
 
 *Tightening later (e.g. Edge Function + service role only) would be an architecture upgrade.*
 

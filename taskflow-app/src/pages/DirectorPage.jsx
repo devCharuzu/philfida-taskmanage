@@ -16,7 +16,6 @@ import UserManagement from '../components/UserManagement'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
 import DeadlineProgress from '../components/DeadlineProgress'
-import FieldReportViewer from '../components/FieldReportViewer'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -47,7 +46,6 @@ export default function DirectorPage() {
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
   const [globalPrintPreview, setGlobalPrintPreview] = useState(null)
-  const [fieldReportModal, setFieldReportModal] = useState({ isOpen: false, task: null })
 
   // Sync presence state with session status (persists across refreshes)
   useEffect(() => {
@@ -454,13 +452,13 @@ export default function DirectorPage() {
   }
 
   return (
-    <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
+    <div className="h-dvh flex overflow-hidden page-bg">
 
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: 'linear-gradient(180deg, #014d2a 0%, #016837 100%)' }}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* ── Branding + Notification row ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
@@ -539,8 +537,7 @@ export default function DirectorPage() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => { setDrawerOpen(true); setPersonnelModalOpen(false); setSelectedPersonnel(null); }}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg shadow-green-900/30 hover:shadow-green-900/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 whitespace-nowrap group"
-                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}
+                    className="btn-primary-gradient flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg shadow-green-900/30 hover:shadow-green-900/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 whitespace-nowrap group"
                   >
                     <i className="bi bi-plus-circle-fill text-base group-hover:rotate-90 transition-transform duration-300" />
                     <span>Dispatch Task</span>
@@ -646,7 +643,6 @@ export default function DirectorPage() {
                           onArchive={() => handleArchive(t.TaskID, true)}
                           onOpenFile={(url, name) => setLightboxFile({ url, name })}
                           onPrintPreview={() => handleGlobalPrintPreview(t)}
-                          onViewFieldReport={(task) => setFieldReportModal({ isOpen: true, task })}
                         />
                       )
                     })}
@@ -687,7 +683,6 @@ export default function DirectorPage() {
                           onArchive={() => handleArchive(t.TaskID, true)}
                           onOpenFile={(url, name) => setLightboxFile({ url, name })}
                           onPrintPreview={() => handleGlobalPrintPreview(t)}
-                          onViewFieldReport={(task) => setFieldReportModal({ isOpen: true, task })}
                         />
                       )
                     })}
@@ -767,24 +762,14 @@ export default function DirectorPage() {
                       <button
                         onClick={handleBulkRestore}
                         disabled={!!bulkLoading}
-                        className="flex-1 text-xs px-3 py-2 rounded-lg font-semibold text-white border-0"
-                        style={{
-                          background: 'linear-gradient(135deg, #16a34a, #15803d)',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #15803d, #166534)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #16a34a, #15803d)'}
+                        className="btn-primary-gradient flex-1 text-xs px-3 py-2 rounded-lg font-semibold text-white border-0"
                       >
                         {bulkLoading === 'restore' ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> : <><i className="bi bi-arrow-up-circle" /> Restore</>}
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(true)}
                         disabled={!!bulkLoading}
-                        className="flex-1 text-xs px-3 py-2 rounded-lg font-semibold text-white border-0"
-                        style={{
-                          background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #b91c1c, #991b1b)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)'}
+                        className="btn-danger-gradient flex-1 text-xs px-3 py-2 rounded-lg font-semibold text-white border-0"
                       >
                         <i className="bi bi-trash3" /> Delete
                       </button>
@@ -834,7 +819,6 @@ export default function DirectorPage() {
                           onArchive={() => handleArchive(t.TaskID, false)}
                           onDelete={async () => { await deleteTask(t.TaskID); await sync() }}
                           onOpenFile={(url, name) => setLightboxFile({ url, name })}
-                          onViewFieldReport={(task) => setFieldReportModal({ isOpen: true, task })}
                         />
                       )
                     })}
@@ -890,8 +874,7 @@ export default function DirectorPage() {
             style={{ animation: 'slideRight 0.25s ease' }}>
             <style>{`@keyframes slideRight { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#016837,#027a42)' }}>
+            <div className="header-gradient flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
               <div>
                 <p className="text-white font-bold text-sm">Dispatch New Task</p>
                 <p className="text-green-300 text-xs mt-0.5">Assign to unit personnel</p>
@@ -942,17 +925,10 @@ export default function DirectorPage() {
       {chat        && <ChatModal      taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}
       {editTask    && <EditTaskModal  task={editTask}      onClose={() => setEditTask(null)} onSync={sync} />}
       {lightboxFile && <Lightbox      file={lightboxFile}  onClose={() => setLightboxFile(null)} />}
-      {fieldReportModal.isOpen && (
-        <FieldReportViewer 
-          task={fieldReportModal.task} 
-          isOpen={fieldReportModal.isOpen}
-          onClose={() => setFieldReportModal({ isOpen: false, task: null })}
-        />
-      )}
       
       {/* Global Print Preview Modal */}
       {globalPrintPreview && (
-        <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
+        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
               <h3 className="font-bold text-lg text-slate-800">Print Preview - Action/Routing Slip</h3>
@@ -1392,9 +1368,9 @@ export default function DirectorPage() {
 
       {/* ── DISPATCH CONFIRM MODAL ── */}
       {dispatchConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-4"
+        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDispatchConfirm(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative z-[100000]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative z-popover">
             <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                 <i className="bi bi-exclamation-triangle-fill text-white text-lg" />
@@ -1491,7 +1467,7 @@ export default function DirectorPage() {
 }
 
 // ── MobileTaskCard ────────────────────────────────────────────────────────────────
-function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, employee, onEdit, onChat, onArchive, onOpenFile, onPrintPreview, onViewFieldReport }) {
+function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, employee, onEdit, onChat, onArchive, onOpenFile, onPrintPreview }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
 
@@ -1610,22 +1586,6 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
         </div>
       )}
 
-      {/* ── SECTION 7: Field Report (if submitted) ── */}
-      {(t.field_location || t.field_photos || t.field_notes) && (
-        <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-0.5 sm:pt-1 pointer-events-auto">
-          <button
-            type="button"
-            onClick={() => {
-              onViewFieldReport && onViewFieldReport(t);
-            }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl transition-all shadow-md shadow-green-900/20 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer relative z-10"
-          >
-            <i className="bi bi-geo-alt-fill" />
-            <span>View Field Report</span>
-          </button>
-        </div>
-      )}
-
       {/* Action Menu Dropdown */}
       <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
         <button onClick={() => { onEdit(); setMenuOpen(false) }}
@@ -1655,7 +1615,7 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
 }
 
 // ── MobileArchiveCard ────────────────────────────────────────────────────────────────
-function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, session, history, unreadChat, employee, onEdit, onChat, onArchive, onDelete, onOpenFile, onViewFieldReport }) {
+function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, session, history, unreadChat, employee, onEdit, onChat, onArchive, onDelete, onOpenFile }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
 
@@ -1782,22 +1742,6 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
         </div>
       )}
 
-      {/* ── SECTION 7: Field Report (if submitted) ── */}
-      {(t.field_location || t.field_photos || t.field_notes) && (
-        <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-0.5 sm:pt-1 pointer-events-auto">
-          <button
-            type="button"
-            onClick={() => {
-              onViewFieldReport && onViewFieldReport(t);
-            }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl transition-all shadow-md shadow-green-900/20 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer relative z-10"
-          >
-            <i className="bi bi-geo-alt-fill" />
-            <span>View Field Report</span>
-          </button>
-        </div>
-      )}
-
       {/* Action Menu Dropdown */}
       <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
         <button onClick={() => { onEdit(); setMenuOpen(false) }}
@@ -1889,8 +1833,8 @@ function PortalDropdown({ anchorRef, open, onClose, children }) {
   if (!open) return null
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-      <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-2xl text-sm overflow-hidden"
+      <div className="fixed inset-0 z-modal-backdrop" onClick={onClose} />
+      <div className="fixed z-modal bg-white border border-slate-200 rounded-xl shadow-2xl text-sm overflow-hidden"
         style={{ top: pos.top, right: Math.max(8, window.innerWidth - pos.left), minWidth: '160px', maxWidth: 'calc(100vw - 16px)' }}>
         {children}
       </div>

@@ -215,13 +215,13 @@ export default function RecordsPage() {
   }
 
   return (
-    <div className="h-dvh flex overflow-hidden" style={{ background: '#f0f4f0' }}>
+    <div className="h-dvh flex overflow-hidden page-bg">
 
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: 'linear-gradient(180deg, #014d2a 0%, #016837 100%)' }}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
         {/* ── Branding + Notification row ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
@@ -295,8 +295,7 @@ export default function RecordsPage() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => { setDrawerOpen(true); setPersonnelModalOpen(false); setSelectedPersonnel(null); }}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg shadow-green-900/30 hover:shadow-green-900/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 whitespace-nowrap group"
-                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}
+                    className="btn-primary-gradient flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg shadow-green-900/30 hover:shadow-green-900/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 whitespace-nowrap group"
                   >
                     <i className="bi bi-plus-circle-fill text-base group-hover:rotate-90 transition-transform duration-300" />
                     <span>Dispatch Task</span>
@@ -652,7 +651,7 @@ export default function RecordsPage() {
       )}
       {/* ── AUTO-UPDATE TOAST ALERT ── */}
       {autoUpdateAlert && (
-        <div className="fixed top-4 right-4 z-[9999] max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
+        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
           <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
             <i className="bi bi-patch-check-fill text-lg leading-none" />
           </div>
@@ -909,8 +908,8 @@ function PortalDropdown({ anchorRef, open, onClose, children }) {
   if (!open) return null
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-      <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-2xl text-sm overflow-hidden"
+      <div className="fixed inset-0 z-modal-backdrop" onClick={onClose} />
+      <div className="fixed z-modal bg-white border border-slate-200 rounded-xl shadow-2xl text-sm overflow-hidden"
         style={{ top: pos.top, right: Math.max(8, window.innerWidth - pos.left), minWidth: '160px', maxWidth: 'calc(100vw - 16px)' }}>
         {children}
       </div>

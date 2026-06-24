@@ -4,13 +4,11 @@ export default {
   theme: {
     screens: {
       'xs': '320px',
-      'sm': '475px',
-      'md': '640px',
-      'lg': '768px',
-      'xl': '1024px',
-      '2xl': '1280px',
-      '3xl': '1536px',
-      '4xl': '1920px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
     },
     extend: {
       fontFamily: {
@@ -18,6 +16,20 @@ export default {
         display: ['Inter', 'sans-serif'],
       },
       colors: {
+        // Brand aliases — match design-system.css CSS variables
+        brand: {
+          50:  '#f0fdf4',
+          100: '#dcfce7',
+          200: '#bbf7d0',
+          300: '#86efac',
+          400: '#4ade80',
+          500: '#2d8a32',
+          600: '#016837',
+          700: '#016837',
+          800: '#0a2e0a',
+          900: '#062106',
+          950: '#031403',
+        },
         // Primary: Dark forest green — PhilFIDA brand
         green: {
           50:  '#f0faf0',
@@ -54,11 +66,14 @@ export default {
         '9xl': '96rem',
       },
       zIndex: {
-        '60': '60',
-        '70': '70',
-        '80': '80',
-        '90': '90',
-        '100': '100',
+        'dropdown': '1000',
+        'sticky': '1020',
+        'fixed': '1030',
+        'modal-backdrop': '1040',
+        'modal': '1050',
+        'popover': '1060',
+        'tooltip': '1070',
+        'toast': '1080',
       },
     },
   },

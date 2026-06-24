@@ -4,6 +4,33 @@
    ======================================== */
 
 @layer components {
+  /* === BRAND GRADIENT UTILITIES === */
+  /* Use these classes instead of inline style={{ background: '#...' }} */
+  .sidebar-gradient {
+    background: linear-gradient(180deg, var(--gov-primary-800) 0%, var(--gov-primary-600) 100%);
+  }
+  .header-gradient {
+    background: linear-gradient(135deg, var(--gov-primary-900) 0%, var(--gov-primary-800) 50%, var(--gov-primary-700) 100%);
+  }
+  .login-gradient {
+    background: linear-gradient(135deg, var(--gov-primary-900) 0%, var(--gov-primary-800) 50%, var(--gov-primary-700) 100%);
+  }
+  .btn-primary-gradient {
+    background: linear-gradient(135deg, var(--gov-primary-700), var(--gov-primary-600));
+  }
+  .btn-primary-gradient:hover {
+    background: linear-gradient(135deg, var(--gov-primary-800), var(--gov-primary-700));
+  }
+  .page-bg {
+    background-color: var(--neutral-100);
+  }
+  .btn-danger-gradient {
+    background: linear-gradient(135deg, var(--error-600), var(--error-700));
+  }
+  .btn-danger-gradient:hover {
+    background: linear-gradient(135deg, var(--error-700), #991b1b);
+  }
+
   /* === BUTTON COMPONENTS === */
   .btn {
     display: inline-flex;
