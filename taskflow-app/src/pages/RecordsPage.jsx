@@ -34,6 +34,8 @@ export default function RecordsPage() {
   const [editTask,      setEditTask]      = useState(null)
   const [lightboxFile,  setLightboxFile]  = useState(null)
   const [sidebarOpen,   setSidebarOpen]   = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pf_sidebar_collapsed') === '1')
+  const toggleSidebarCollapsed = () => setSidebarCollapsed(v => { localStorage.setItem('pf_sidebar_collapsed', v ? '0' : '1'); return !v })
   const [drawerOpen,    setDrawerOpen]    = useState(false)
   const [selected,      setSelected]      = useState([])
   const [bulkLoading,   setBulkLoading]   = useState(null)
@@ -221,18 +223,17 @@ export default function RecordsPage() {
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
         {/* ── Branding + Notification row ── */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
+        <div className="sb-head flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
               <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:9px;font-weight:900;color:#016837;">PF</span>' }} />
             </div>
-            <div>
-              <span className="text-white font-bold text-xs block leading-none">PhilFIDA TaskFlow</span>
-              {session?.Region && <span className="region-badge mt-1 block w-fit">Region {session.Region.split(' ').pop()}</span>}
+            <div className="sidebar-hide">
+              <span className="text-white font-bold text-xs block leading-none">PhilFIDA Task Management System</span>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -258,6 +259,16 @@ export default function RecordsPage() {
             </button>
           ))}
         </nav>
+
+        {/* ── Collapse toggle ── */}
+        <div className="hidden md:flex justify-center px-3 py-3 border-t border-white/10 flex-shrink-0">
+          <button onClick={toggleSidebarCollapsed}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <i className={`bi ${sidebarCollapsed ? 'bi-chevron-double-right' : 'bi-chevron-double-left'} text-sm`} />
+          </button>
+        </div>
       </aside>
 
 
@@ -273,7 +284,7 @@ export default function RecordsPage() {
             <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
-            <span className="text-green-900 font-bold text-sm">TaskFlow</span>
+            <span className="text-green-900 font-bold text-sm">Task Management System</span>
           </div>
           <NotificationBell />
         </div>
@@ -288,7 +299,7 @@ export default function RecordsPage() {
               <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
                   <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                    Task Monitor <span className="text-green-600 font-medium">— {session?.Region}</span>
+                    Task Monitor
                   </h2>
                   <p className="text-slate-400 text-xs mt-1">{filteredTasks.length} of {activeTasks.length} tasks shown</p>
                 </div>
@@ -306,11 +317,8 @@ export default function RecordsPage() {
               {/* ── PERSONNEL STATUS BAR ── */}
               <div className="px-4 md:px-8 py-2.5 border-b border-slate-200 bg-white flex-shrink-0 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-0.5">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 shadow-sm whitespace-nowrap">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
                     <span className="text-[11px] font-bold uppercase tracking-tight">{personnelGroups['Available'].length} Available</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100 shadow-sm whitespace-nowrap">
@@ -456,7 +464,7 @@ export default function RecordsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
                   <div className="min-w-0">
                     <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                      Archive Repository <span className="text-green-600 font-medium">— {session?.Region}</span>
+                      Archive Repository
                     </h2>
                     <p className="text-slate-400 text-xs mt-1">
                       {archiveSearch ? `${archivedTasks.length} matching tasks` : `${archivedTasks.length} archived tasks`}
@@ -542,16 +550,6 @@ export default function RecordsPage() {
 
         </main>
 
-        {/* FOOTER */}
-        <footer className="bg-white border-t border-slate-100/80 py-2 px-4 md:px-8 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-slate-400">© {new Date().getFullYear()} PhilFIDA</p>
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] text-slate-400">Records Dashboard</span>
-              <span className="w-2 h-2 rounded-full bg-green-600"></span>
-            </div>
-          </div>
-        </footer>
       </div>
 
       {/* ── DISPATCH DRAWER ── */}
@@ -605,7 +603,7 @@ export default function RecordsPage() {
       {lightboxFile && <Lightbox      file={lightboxFile}  onClose={() => setLightboxFile(null)} />}
       
       {/* ── PERSONNEL MODAL ── */}
-      {personnelModalOpen && (
+      {personnelModalOpen && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPersonnelModalOpen(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 bg-green-900 text-white flex items-center justify-between">
@@ -633,10 +631,11 @@ export default function RecordsPage() {
                ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {deleteConfirm && (
+      {deleteConfirm && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center">
             <i className="bi bi-trash3 text-red-500 text-4xl mb-4" />
@@ -647,11 +646,12 @@ export default function RecordsPage() {
               <button onClick={handleBulkDelete} className="flex-1 bg-red-600 text-white rounded-lg font-bold py-2">Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* ── AUTO-UPDATE TOAST ALERT ── */}
       {autoUpdateAlert && (
-        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
+        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-green-900 text-white rounded-xl shadow-lg border border-green-800/60 p-4 animate-in-right flex items-start gap-3">
           <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
             <i className="bi bi-patch-check-fill text-lg leading-none" />
           </div>
@@ -680,8 +680,8 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow animate-in-up">
-      <div className="bg-green-50/70 px-4 py-3 border-b border-green-100">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow">
+      <div className="px-4 py-3 border-b border-slate-100 border-l-[3px] border-l-green-600">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1 flex items-center gap-2">
             <div className="min-w-0 flex-1">
@@ -795,7 +795,7 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className={`bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow animate-in-up ${selected ? 'bg-red-50/60 border-red-200' : ''}`}>
+    <div className={`bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow ${selected ? 'bg-red-50/60 border-red-200' : ''}`}>
       <div className={`px-4 py-3 border-b border-red-100 ${selected ? 'bg-red-50/50' : 'bg-red-50/70'}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">

@@ -45,8 +45,21 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
   // document.querySelector('.chat-wrap') which found nothing.
   const wrapRef   = useRef(null)
 
-  // Mark messages as read on open
+  // Mark messages as read on open — optimistic local update first so the
+  // unread badge on the task card clears the instant the chat opens, instead
+  // of waiting on the network round trip to the DB.
   useEffect(() => {
+    const currentData = useStore.getState().globalData
+    useStore.getState().setGlobalData({
+      ...currentData,
+      comments: currentData.comments.map(c =>
+        String(c.TaskID) === String(taskId) &&
+        c.SenderName !== session.Name &&
+        !String(c.HiddenBy || '').includes(session.Name)
+          ? { ...c, HiddenBy: c.HiddenBy ? `${c.HiddenBy},${session.Name}` : session.Name }
+          : c
+      ),
+    })
     markChatRead(taskId, session.Name).then(() => {
       markChatNotificationsRead(taskId, session.ID).then(() => onSync())
     })

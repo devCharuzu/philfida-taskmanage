@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { loginUser, registerUser, signInWithGoogle, handleGoogleCallback, UNITS, OFFICES, REGIONS } from '../lib/api'
+import { loginUser, registerUser, signInWithGoogle, handleGoogleCallback, checkAccountStatus, getDirectorAvailability, UNITS, OFFICES, REGIONS } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 
 export default function LoginPage() {
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [loginId, setLoginId] = useState('')
   const [loginPass, setLoginPass] = useState('')
   const [loginRegion, setLoginRegion] = useState('Region I')
+  const [googleRegion, setGoogleRegion] = useState('Region I')
   const [rememberMe, setRememberMe] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [regId, setRegId] = useState('')
@@ -18,13 +19,21 @@ export default function LoginPage() {
   const [regUnit, setRegUnit] = useState('')
   const [regRegion, setRegRegion] = useState('Region I')
   const [regRole, setRegRole] = useState('Employee')
+  const [showApprovalInfo, setShowApprovalInfo] = useState(false)
   const [regPass, setRegPass] = useState('')
+  const [regConfirmPass, setRegConfirmPass] = useState('')
   const [showRegPass, setShowRegPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [connectionError, setConnectionError] = useState('')
+  const [showStatusCheck, setShowStatusCheck] = useState(false)
+  const [statusCheckId, setStatusCheckId] = useState('')
+  const [statusChecking, setStatusChecking] = useState(false)
+  const [statusResult, setStatusResult] = useState(null) // 'active' | 'inactive' | null
+  const [approvedToast, setApprovedToast] = useState(false)
+  const approvalWatchRef = useRef(null)
 
   const setSession = useStore(s => s.setSession)
   const navigate = useNavigate()
@@ -153,18 +162,31 @@ The application cannot function until this is resolved.
       }
 
       if (!result) {
-        setError('Google sign-in completed but app could not establish session. Verify redirect URI in Supabase and Google OAuth settings, then try again.')
+        // Lands here for failed Google callbacks AND for approval-email links
+        // opened in a different browser than the one that triggered them
+        // (PKCE verifier lives in the sender's browser, so no session can be
+        // established). Either way the fix for the user is the same: sign in
+        // normally below — so say that instead of a scary config error.
+        setError('Automatic sign-in could not be completed. Please sign in below with your credentials.')
         setGoogleLoading(false)
         return
       }
 
       const { user, isNew } = result
       if (isNew) {
-        setSuccess('Your Google account has been submitted for approval. The Director will review your account before you can log in.')
+        const dir = await getDirectorAvailability(user.Region || savedGoogleRegion)
+        setSuccess('Your Google account has been submitted for approval. The Director will review your account before you can log in.' + directorAvailabilityNote(dir, user.Region || savedGoogleRegion))
+        watchForApproval(user.ID)
         setGoogleLoading(false)
         return
       }
-      if (user.AccountStatus === 'Pending') { setError('Your account is pending approval by the Director.'); setGoogleLoading(false); return }
+      if (user.AccountStatus === 'Pending') {
+        const dir = await getDirectorAvailability(user.Region)
+        setError('Your account is pending approval by the Director.' + directorAvailabilityNote(dir, user.Region))
+        watchForApproval(user.ID)
+        setGoogleLoading(false)
+        return
+      }
       if (user.AccountStatus === 'Deactivated') { setError('Your account has been deactivated. Contact the Director.'); setGoogleLoading(false); return }
 
       const needsSetup = !user.Designation && !user.Unit && !user.Office
@@ -222,7 +244,9 @@ The application cannot function until this is resolved.
         return
       }
       if (result.error === 'pending') {
-        setError('Your account is pending approval by the Director.')
+        const dir = await getDirectorAvailability(targetRegion)
+        setError('Your account is pending approval by the Director.' + directorAvailabilityNote(dir, targetRegion))
+        watchForApproval(loginId.trim())
         return
       }
       if (result.error === 'deactivated') {
@@ -266,7 +290,11 @@ The application cannot function until this is resolved.
   async function handleGoogleSignIn() {
     setGoogleLoading(true); setError('')
     try {
-      localStorage.setItem('philfida_google_region', loginRegion)
+      // Deliberately independent from loginRegion/remembered region — Google
+      // sign-in only needs a region when creating a brand-new account, and it
+      // must be the region the user picks right now, not whatever the manual
+      // login form last remembered.
+      localStorage.setItem('philfida_google_region', googleRegion)
       await signInWithGoogle()
     } catch (e) {
       setError(`Could not connect to Google. ${e?.message || ''} Please try again.`)
@@ -278,13 +306,17 @@ The application cannot function until this is resolved.
   async function handleRegister(e) {
     e.preventDefault()
     if (!regId || !regName || !regPass || !regRegion) { setError('All fields are required.'); return }
+    if (regEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) { setError('Please enter a valid email address.'); return }
+    if (regPass !== regConfirmPass) { setError('Passwords do not match.'); return }
     setLoading(true); setError('')
     try {
       const result = await registerUser({ id: regId.trim(), name: regName, email: regEmail, unit: '', role: 'Employee', pass: regPass, region: regRegion })
       if (result === 'SUCCESS') {
-        setSuccess('Registration submitted! Your account is pending approval by the Director.')
+        const dir = await getDirectorAvailability(regRegion)
+        setSuccess('Registration submitted! Your account is pending Director approval.' + directorAvailabilityNote(dir, regRegion))
+        watchForApproval(regId.trim())
         setTab('login')
-        setRegId(''); setRegName(''); setRegEmail(''); setRegUnit(''); setRegRole('Employee'); setRegPass('')
+        setRegId(''); setRegName(''); setRegEmail(''); setRegUnit(''); setRegRole('Employee'); setRegPass(''); setRegConfirmPass('')
       } else if (result === 'EXISTS') {
         setError('This Employee ID No. or Email is already registered.')
       }
@@ -294,23 +326,72 @@ The application cannot function until this is resolved.
 
   function switchTab(t) { setTab(t); setError(''); setSuccess('') }
 
+  // Live approval watch: after registering (or hitting a "pending" login),
+  // subscribe to this user's row — when the Director flips AccountStatus to
+  // Active while this page is open, pop the approval toast immediately.
+  function watchForApproval(userId) {
+    if (!userId) return
+    try {
+      if (approvalWatchRef.current) supabase.removeChannel(approvalWatchRef.current)
+      const ch = supabase
+        .channel(`approval-watch-${userId}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'Users', filter: `ID=eq.${userId}` },
+          (payload) => {
+            if (payload.new?.AccountStatus === 'Active') {
+              setApprovedToast(true)
+              setSuccess('Your account has been approved! You can now sign in.')
+              try { supabase.removeChannel(ch) } catch {}
+              approvalWatchRef.current = null
+            }
+          }
+        )
+        .subscribe()
+      approvalWatchRef.current = ch
+    } catch (e) { console.warn('Approval watch failed:', e) }
+  }
+
+  useEffect(() => () => {
+    if (approvalWatchRef.current) {
+      try { supabase.removeChannel(approvalWatchRef.current) } catch {}
+    }
+  }, [])
+
+  function directorAvailabilityNote(dir, region) {
+    if (!dir) return ''
+    return dir.status === 'Available'
+      ? ` The ${region} Director is currently Available — your account may be approved shortly. Keep this page open and you'll be notified here the moment it's approved.`
+      : ` Please note: the ${region} Director is currently ${dir.status}, so approval may take longer than usual. You can check back anytime using "Check your account status".`
+  }
+
+  // Self-serve status check — no password required. Response is deliberately
+  // coarse (active vs not) so this can't be used to enumerate account state.
+  async function handleCheckStatus(e) {
+    e.preventDefault()
+    if (!statusCheckId.trim() || statusChecking) return
+    setStatusChecking(true)
+    setStatusResult(null)
+    try {
+      setStatusResult(await checkAccountStatus(statusCheckId))
+    } catch {
+      setStatusResult('inactive')
+    } finally {
+      setStatusChecking(false)
+    }
+  }
+
   if (googleLoading) {
     return (
-      <div 
-        className="min-h-screen flex items-center justify-center relative overflow-hidden login-gradient"
+      <div
+        className="min-h-screen flex items-center justify-center login-gradient"
         role="status"
         aria-live="polite"
       >
-        {/* Animated background elements */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-green-400/10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-yellow-400/10 rounded-full blur-3xl animate-pulse delay-1000" />
-        </div>
-
-        <div className="relative z-10 text-center px-4">
-          <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-6" />
-          <h2 className="text-white font-bold text-xl">Signing in with Google</h2>
-          <p className="text-green-200 text-sm mt-2">Please wait while we verify your account...</p>
+        <div className="text-center px-4">
+          <div className="w-12 h-12 border-3 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-5" style={{ borderWidth: 3 }} />
+          <h2 className="text-white font-semibold text-lg">Signing in with Google</h2>
+          <p className="text-green-200 text-sm mt-1.5">Verifying your account...</p>
         </div>
       </div>
     )
@@ -319,50 +400,51 @@ The application cannot function until this is resolved.
   return (
     <div className="fixed inset-0 w-full h-full login-gradient">
 
-      {/* Animated background elements - fixed to viewport */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[10%] left-[10%] w-72 h-72 bg-green-400/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-[15%] right-[10%] w-80 h-80 bg-yellow-400/10 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl animate-pulse delay-500" />
-        <div className="absolute top-[20%] right-[20%] w-48 h-48 bg-emerald-400/8 rounded-full blur-2xl animate-pulse delay-700" />
-      </div>
+      {/* ── ACCOUNT APPROVED TOAST (live, via realtime watch) ── */}
+      {approvedToast && (
+        <div role="status" className="fixed top-4 right-4 z-toast max-w-sm w-full bg-green-900 text-white rounded-xl shadow-lg border border-green-800/60 p-4 animate-in-right flex items-start gap-3">
+          <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
+            <i className="bi bi-patch-check-fill text-lg leading-none" aria-hidden="true" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-xs leading-tight uppercase tracking-wider text-green-400">Account Approved</p>
+            <p className="text-[11px] text-green-100 font-medium mt-1 leading-relaxed">
+              Your account has been approved by the Director. You can now sign in with your credentials.
+            </p>
+          </div>
+          <button onClick={() => setApprovedToast(false)} className="text-green-300 hover:text-white flex-shrink-0" aria-label="Dismiss">
+            <i className="bi bi-x-lg text-sm" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
-      {/* Main content - scrollable container */}
-      <div className="relative z-10 w-full h-full overflow-y-auto">
-        <div className="min-h-full flex items-center justify-center p-4 py-8">
+      {/* Scrollable container */}
+      <div className="w-full h-full overflow-y-auto">
+        <div className="min-h-full flex items-center justify-center p-4 py-10">
 
           {/* Login Card */}
-          <div className="w-[clamp(280px,90vw,440px)]">
+          <div className="w-[clamp(300px,90vw,420px)]">
 
             {/* Header with logos */}
-            <div className="text-center mb-8">
-              <div className="flex justify-center items-center gap-4 mb-6">
-                {/* DA Logo */}
-                <div className="w-10 h-10 lg:w-12 lg:h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center overflow-hidden shadow-lg">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Bagong_Pilipinas_logo_%28DA%29.svg/200px-Bagong_Pilipinas_logo_%28DA%29.svg.png"
-                    alt="Department of Agriculture" className="w-6 h-6 lg:w-8 lg:h-10 object-contain"
-                    onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div class="w-6 h-6 lg:w-8 lg:h-8 bg-yellow-400 rounded-full flex items-center justify-center"><span class="text-xs font-bold text-green-800">DA</span></div>' }} />
-                </div>
-
+            <div className="text-center mb-7">
+              <div className="flex justify-center items-center mb-5">
                 {/* PhilFIDA Logo */}
-                <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-2xl bg-white shadow-xl flex items-center justify-center overflow-hidden p-2">
+                <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center overflow-hidden p-1.5 shadow-md shadow-black/20">
                   <img src="/philfida-logo.png" alt="PhilFIDA Logo" className="w-full h-full object-contain"
-                    onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div class="text-center"><span class="text-lg lg:text-xl font-bold text-green-800">PhilFIDA</span></div>' }} />
+                    onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<span class="text-sm font-bold text-green-800">PhilFIDA</span>' }} />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-green-200 text-xs font-semibold uppercase tracking-widest">Republic of the Philippines</p>
-                <h1 className="text-white font-bold text-lg lg:text-xl xl:text-2xl leading-tight">
-                  Philippine Fiber Industry<br />
-                  <span className="text-yellow-400">Development Authority</span>
-                </h1>
-                <p className="text-green-200 text-xs lg:text-sm font-medium mt-2">TaskFlow Management System</p>
-              </div>
+              <p className="text-green-300 text-[10px] font-semibold uppercase tracking-widest mb-2">Republic of the Philippines</p>
+              <h1 className="text-white font-bold text-lg leading-snug">
+                Philippine Fiber Industry<br />
+                <span className="text-yellow-300">Development Authority</span>
+              </h1>
+              <p className="text-green-300/80 text-xs mt-2 font-medium">Task Management System</p>
             </div>
 
             {/* Main Card */}
-            <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-xl shadow-black/25 overflow-hidden">
 
               {/* Tab switcher */}
               <div className="flex p-1.5 bg-slate-50 border-b border-slate-100" role="tablist">
@@ -430,6 +512,23 @@ The application cannot function until this is resolved.
                     </div>
 
                     {/* Google Sign In */}
+                    <div>
+                      <label htmlFor="google-region" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Region for Google sign-in</label>
+                      <div className="relative mb-2.5">
+                        <select
+                          id="google-region"
+                          className="w-full pl-3.5 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition-all text-xs font-semibold text-slate-700 appearance-none"
+                          value={googleRegion}
+                          onChange={e => setGoogleRegion(e.target.value)}
+                        >
+                          {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                          <i className="bi bi-chevron-down text-xs" aria-hidden="true" />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mb-2.5 -mt-1">Only used if this Google account creates a new registration.</p>
+                    </div>
                     <button
                       onClick={handleGoogleSignIn}
                       disabled={googleLoading}
@@ -474,9 +573,9 @@ The application cannot function until this is resolved.
                           />
                         </div>
                         {loginRegion && loginId.trim() && (
-                          <div id="login-region-desc" className="flex items-center gap-2 px-3.5 py-2.5 bg-green-50/50 border border-green-200/40 rounded-xl text-green-800 text-xs font-bold mt-2.5 animate-fade-in shadow-sm">
-                            <i className="bi bi-geo-alt-fill text-green-600 text-sm" aria-hidden="true" />
-                            <span>Registered Region: <strong className="font-bold text-green-900">{loginRegion}</strong></span>
+                          <div id="login-region-desc" className="flex items-center gap-1.5 px-2 py-1 text-slate-400 text-[10px] font-medium mt-1.5 animate-fade-in">
+                            <i className="bi bi-geo-alt text-[10px]" aria-hidden="true" />
+                            <span>Registered region: {loginRegion}</span>
                           </div>
                         )}
                       </div>
@@ -525,7 +624,7 @@ The application cannot function until this is resolved.
 
                       <button
                         type="submit"
-                        className="btn-primary-gradient w-full py-3.5 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 mt-2"
+                        className="btn-primary-gradient w-full py-3 px-6 text-white font-bold text-sm rounded-xl transition-all duration-200 shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 disabled:opacity-60 mt-2"
                         disabled={loading}
                       >
                         {loading ? (
@@ -538,6 +637,49 @@ The application cannot function until this is resolved.
                         )}
                       </button>
                     </form>
+
+                    {/* Self-serve approval status check */}
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => { setShowStatusCheck(v => !v); setStatusResult(null) }}
+                        className="text-xs font-semibold text-slate-500 hover:text-green-700 transition-colors"
+                      >
+                        Waiting for approval? Check your account status
+                      </button>
+                    </div>
+
+                    {showStatusCheck && (
+                      <form onSubmit={handleCheckStatus} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                        <div className="flex gap-2">
+                          <input
+                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition-all text-sm font-semibold text-slate-800 placeholder-slate-400"
+                            placeholder="Employee ID No. or Google email"
+                            value={statusCheckId}
+                            onChange={e => { setStatusCheckId(e.target.value); setStatusResult(null) }}
+                          />
+                          <button
+                            type="submit"
+                            disabled={statusChecking || !statusCheckId.trim()}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                          >
+                            {statusChecking ? '...' : 'Check'}
+                          </button>
+                        </div>
+                        {statusResult === 'active' && (
+                          <p className="flex items-center gap-2 text-xs font-semibold text-green-800">
+                            <i className="bi bi-check-circle-fill text-green-600" aria-hidden="true" />
+                            Your account is active — you can sign in above.
+                          </p>
+                        )}
+                        {statusResult === 'inactive' && (
+                          <p className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                            <i className="bi bi-hourglass-split text-amber-600" aria-hidden="true" />
+                            Not active yet. Check back later or contact your Director.
+                          </p>
+                        )}
+                      </form>
+                    )}
                   </div>
                 )}
 
@@ -549,14 +691,22 @@ The application cannot function until this is resolved.
                       <p className="text-slate-500 text-xs sm:text-sm font-semibold">Submit your registration for approval</p>
                     </div>
 
-                    <div className="bg-amber-50/60 border border-amber-200/50 rounded-2xl p-4">
-                      <div className="flex items-start gap-3">
-                        <i className="bi bi-info-circle-fill text-amber-600 flex-shrink-0 mt-0.5 text-lg" aria-hidden="true" />
-                        <div className="text-xs sm:text-sm text-amber-900 leading-relaxed font-medium">
-                          <p className="font-bold mb-1 text-amber-950">Account Approval Required</p>
-                          <p>Your account will be reviewed and assigned the appropriate Unit and Role by the Director before you can log in. You can also register with Google to skip entering a password.</p>
-                        </div>
-                      </div>
+                    <div className="bg-amber-50/60 border border-amber-200/50 rounded-2xl overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setShowApprovalInfo(v => !v)}
+                        aria-expanded={showApprovalInfo}
+                        className="w-full flex items-center gap-3 p-4 text-left"
+                      >
+                        <i className="bi bi-info-circle-fill text-amber-600 flex-shrink-0 text-lg" aria-hidden="true" />
+                        <p className="flex-1 font-bold text-xs sm:text-sm text-amber-950">Account Approval Required</p>
+                        <i className={`bi bi-chevron-down text-amber-600 text-xs flex-shrink-0 transition-transform duration-200 ${showApprovalInfo ? 'rotate-180' : ''}`} aria-hidden="true" />
+                      </button>
+                      {showApprovalInfo && (
+                        <p className="text-xs sm:text-sm text-amber-900 leading-relaxed font-medium px-4 pb-4 -mt-1 pl-11">
+                          Your account will be reviewed and approved by your Region's Director before you can sign in. After submitting, you'll see the Director's current availability — and if you keep this page open, you'll be notified here the moment your account is approved. You can also check anytime via "Check your account status" on the Sign In tab.
+                        </p>
+                      )}
                     </div>
 
                     <form onSubmit={handleRegister} className="space-y-4">
@@ -592,10 +742,11 @@ The application cannot function until this is resolved.
                           id="reg-email"
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition-all text-sm font-semibold text-slate-800 placeholder-slate-400"
                           type="email"
-                          placeholder="juan@philfida.gov.ph"
+                          placeholder="juan@gmail.com"
                           value={regEmail}
                           onChange={e => setRegEmail(e.target.value)}
                         />
+                        <p className="text-[11px] text-slate-400 mt-1.5">Optional — for account records and the Director's reference.</p>
                       </div>
 
                       <div>
@@ -639,9 +790,29 @@ The application cannot function until this is resolved.
                         </div>
                       </div>
 
+                      <div>
+                        <label htmlFor="reg-confirm-pass" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Confirm Password</label>
+                        <input
+                          id="reg-confirm-pass"
+                          className={`w-full px-4 py-3 bg-slate-50 border rounded-xl focus:outline-none focus:bg-white focus:ring-2 transition-all text-sm font-semibold text-slate-800 placeholder-slate-400 ${
+                            regConfirmPass && regConfirmPass !== regPass
+                              ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
+                              : 'border-slate-200 focus:ring-green-600/20 focus:border-green-600'
+                          }`}
+                          type={showRegPass ? 'text' : 'password'}
+                          placeholder="Re-enter your password"
+                          value={regConfirmPass}
+                          onChange={e => setRegConfirmPass(e.target.value)}
+                          required
+                        />
+                        {regConfirmPass && regConfirmPass !== regPass && (
+                          <p className="text-[11px] text-red-600 font-semibold mt-1.5">Passwords do not match.</p>
+                        )}
+                      </div>
+
                       <button
                         type="submit"
-                        className="btn-primary-gradient w-full py-3.5 px-6 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 mt-2"
+                        className="btn-primary-gradient w-full py-3 px-6 text-white font-bold text-sm rounded-xl transition-all duration-200 shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 disabled:opacity-60 mt-2"
                         disabled={loading}
                       >
                         {loading ? (
@@ -663,11 +834,10 @@ The application cannot function until this is resolved.
             </div>
 
             {/* Footer */}
-            <div className="text-center mt-6">
-              <p className="text-green-200 text-xs">
-                {new Date().getFullYear()} Philippine Fiber Industry Development Authority
+            <div className="text-center mt-5">
+              <p className="text-green-300/70 text-[11px]">
+                © {new Date().getFullYear()} Philippine Fiber Industry Development Authority
               </p>
-              <p className="text-green-300 text-xs mt-1">Secure Government Task Management System</p>
             </div>
           </div>
         </div>

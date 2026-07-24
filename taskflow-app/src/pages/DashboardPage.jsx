@@ -27,6 +27,8 @@ export default function DashboardPage() {
   const [loadingTask,  setLoadingTask]  = useState(null)
   const [tab,          setTab]          = useState('my-tasks')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pf_sidebar_collapsed') === '1')
+  const toggleSidebarCollapsed = () => setSidebarCollapsed(v => { localStorage.setItem('pf_sidebar_collapsed', v ? '0' : '1'); return !v })
   const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
   // Sync presence state with session status (H11 fix for refresh persistence)
   useEffect(() => {
@@ -101,26 +103,21 @@ export default function DashboardPage() {
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
         {/* ── Branding + Notification row ── */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
+        <div className="sb-head flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 shadow-inner">
+            <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0 border border-white/20">
               <img src="/philfida-logo.png" alt="PhilFIDA Logo" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:white;">PF</span>' }} />
             </div>
-            <div className="flex flex-col min-w-0">
+            <div className="sidebar-hide flex flex-col min-w-0">
               <span className="text-white font-black text-[11px] tracking-wider uppercase leading-none">PhilFIDA</span>
-              <span className="text-green-300 font-bold text-[10px] mt-0.5 leading-none">TaskFlow</span>
+              <span className="text-green-300 font-bold text-[10px] mt-0.5 leading-none">Task Management System</span>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            {session?.Region && (
-              <span className="region-badge px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter bg-white/10 text-white border border-white/20 mr-1">
-                {session.Region}
-              </span>
-            )}
             <NotificationBell />
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 rounded">
               <i className="bi bi-x-lg text-base" aria-hidden="true" />
@@ -170,6 +167,16 @@ export default function DashboardPage() {
             <span className="flex-1 text-sm">My Profile</span>
           </button>
         </nav>
+
+        {/* ── Collapse toggle ── */}
+        <div className="hidden md:flex justify-center px-3 py-3 border-t border-white/10 flex-shrink-0">
+          <button onClick={toggleSidebarCollapsed}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <i className={`bi ${sidebarCollapsed ? 'bi-chevron-double-right' : 'bi-chevron-double-left'} text-sm`} aria-hidden="true" />
+          </button>
+        </div>
       </aside>
 
 
@@ -189,8 +196,7 @@ export default function DashboardPage() {
             <div className="w-7 h-7 bg-green-900 rounded-lg flex items-center justify-center overflow-hidden shadow-md">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
-            <span className="text-green-900 font-black text-sm tracking-tight uppercase">TaskFlow</span>
-            <span className="text-[10px] font-bold text-green-600/70 border-l border-slate-300 pl-2">{session?.Region}</span>
+            <span className="text-green-900 font-black text-sm tracking-tight uppercase">Task Management System</span>
           </div>
           <NotificationBell />
         </div>
@@ -212,7 +218,7 @@ export default function DashboardPage() {
                       My Assignments
                     </h1>
                     <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">
-                      {session?.Office || session?.Unit || 'PhilFIDA TaskFlow'}
+                      {session?.Office || session?.Unit || 'PhilFIDA Task Management System'}
                     </p>
                   </div>
                   {myTasks.length > 0 && (
@@ -334,16 +340,6 @@ export default function DashboardPage() {
           )}
         </main>
 
-        {/* FOOTER */}
-        <footer className="bg-white border-t border-slate-100/80 py-1.5 sm:py-2 px-3 sm:px-4 md:px-6 lg:px-8 flex-shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] sm:text-[10px] text-slate-400 truncate">© {new Date().getFullYear()} PhilFIDA</p>
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <span className="text-[9px] sm:text-[10px] text-slate-400 hidden sm:inline">User Dashboard</span>
-              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gradient-to-r from-[#016837] to-[#027a42]" aria-hidden="true" />
-            </div>
-          </div>
-        </footer>
       </div>
 
       {/* ── MOBILE BOTTOM NAV ── */}
@@ -393,7 +389,7 @@ export default function DashboardPage() {
 
       {/* ── AUTO-UPDATE TOAST ALERT ── */}
       {autoUpdateAlert && (
-        <div className="fixed top-4 right-4 z-[9999] max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
+        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-green-900 text-white rounded-xl shadow-lg border border-green-800/60 p-4 animate-in-right flex items-start gap-3">
           <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
             <i className="bi bi-patch-check-fill text-lg leading-none" />
           </div>
@@ -546,7 +542,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
   const files = t.FileLink?.split('|').filter(Boolean) || []
 
   return (
-    <article className={`bg-white border border-l-4 ${statusTone.accent} border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col h-full overflow-hidden animate-in-up`}>
+    <article className={`bg-white border border-l-4 ${statusTone.accent} border-slate-100 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col h-full overflow-hidden`}>
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">

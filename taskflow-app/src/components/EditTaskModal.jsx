@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { editTask, logHistory } from '../lib/api'
 
@@ -27,12 +28,11 @@ export default function EditTaskModal({ task, onClose, onSync }) {
     finally { setLoading(false) }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 sm:p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
 
-        <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
+        <div className="header-gradient flex items-center justify-between px-4 py-3 flex-shrink-0">
           <p className="text-white font-bold text-sm">Edit Assignment</p>
           <button onClick={onClose} className="text-green-300 hover:text-white text-xl leading-none">&times;</button>
         </div>
@@ -83,6 +83,7 @@ export default function EditTaskModal({ task, onClose, onSync }) {
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

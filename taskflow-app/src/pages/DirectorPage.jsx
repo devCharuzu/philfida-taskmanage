@@ -34,6 +34,8 @@ export default function DirectorPage() {
   const [editTask,      setEditTask]      = useState(null)
   const [lightboxFile,  setLightboxFile]  = useState(null)
   const [sidebarOpen,   setSidebarOpen]   = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pf_sidebar_collapsed') === '1')
+  const toggleSidebarCollapsed = () => setSidebarCollapsed(v => { localStorage.setItem('pf_sidebar_collapsed', v ? '0' : '1'); return !v })
   const [drawerOpen,    setDrawerOpen]    = useState(false)
   const [selected,      setSelected]      = useState([])
   const [bulkLoading,   setBulkLoading]   = useState(null)
@@ -318,8 +320,8 @@ export default function DirectorPage() {
 
           <div class="signature-section">
             <div class="signature-line"></div>
-            <div class="signature-label">SAMUEL M. NACINO JR.</div>
-            <div class="signature-label">OIC-Regional Director</div>
+            <div class="signature-label">${session?.SignatoryName || session?.Name || ''}</div>
+            <div class="signature-label">${session?.SignatoryDesignation || session?.Designation || 'OIC-Regional Director'}</div>
           </div>
 
         </div>
@@ -458,18 +460,17 @@ export default function DirectorPage() {
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
         {/* ── Branding + Notification row ── */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
+        <div className="sb-head flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
               <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:9px;font-weight:900;color:#016837;">PF</span>' }} />
             </div>
-            <div>
-              <span className="text-white font-bold text-xs block leading-none">PhilFIDA TaskFlow</span>
-              {session?.Region && <span className="region-badge mt-1 block w-fit">Region {session.Region.split(' ').pop()}</span>}
+            <div className="sidebar-hide">
+              <span className="text-white font-bold text-xs block leading-none">PhilFIDA Task Management System</span>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -500,6 +501,16 @@ export default function DirectorPage() {
             </button>
           ))}
         </nav>
+
+        {/* ── Collapse toggle ── */}
+        <div className="hidden md:flex justify-center px-3 py-3 border-t border-white/10 flex-shrink-0">
+          <button onClick={toggleSidebarCollapsed}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <i className={`bi ${sidebarCollapsed ? 'bi-chevron-double-right' : 'bi-chevron-double-left'} text-sm`} />
+          </button>
+        </div>
       </aside>
 
 
@@ -515,7 +526,7 @@ export default function DirectorPage() {
             <div className="w-6 h-6 bg-green-800 rounded-full flex items-center justify-center overflow-hidden">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
-            <span className="text-green-900 font-bold text-sm">TaskFlow</span>
+            <span className="text-green-900 font-bold text-sm">Task Management System</span>
           </div>
           <NotificationBell />
         </div>
@@ -530,7 +541,7 @@ export default function DirectorPage() {
               <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
                   <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                    Task Monitor <span className="text-green-600 font-medium">— {session?.Region}</span>
+                    Task Monitor
                   </h2>
                   <p className="text-slate-400 text-xs mt-1">{filteredTasks.length} of {activeTasks.length} tasks shown</p>
                 </div>
@@ -548,11 +559,8 @@ export default function DirectorPage() {
               {/* ── PERSONNEL STATUS BAR ── */}
               <div className="px-4 md:px-8 py-2.5 border-b border-slate-200 bg-white flex-shrink-0 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-0.5">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 shadow-sm whitespace-nowrap">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
                     <span className="text-[11px] font-bold uppercase tracking-tight">{personnelGroups['Available'].length} Available</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100 shadow-sm whitespace-nowrap">
@@ -611,11 +619,11 @@ export default function DirectorPage() {
               <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-4 pb-0 space-y-4">
                 {/* My Dispatched Tasks Section */}
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                  <div className="bg-gradient-to-r from-green-50 to-green-100 px-4 py-2 border-b border-green-200">
+                  <div className="px-4 py-3 border-b border-slate-100 bg-white">
                     <div className="flex items-center gap-2">
-                      <i className="bi bi-person-badge-fill text-green-700" />
-                      <h3 className="font-semibold text-green-900 text-sm">My Dispatched Tasks</h3>
-                      <span className="ml-auto text-xs font-bold text-green-700 bg-green-200 px-2 py-0.5 rounded-full">{finalDirectorDispatchedTasks.length}</span>
+                      <i className="bi bi-person-badge-fill text-green-700 text-sm" />
+                      <h3 className="font-semibold text-slate-800 text-sm">My Dispatched Tasks</h3>
+                      <span className="ml-auto text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{finalDirectorDispatchedTasks.length}</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
@@ -651,11 +659,11 @@ export default function DirectorPage() {
 
                 {/* Unit Head Assigned Tasks Section */}
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                  <div className="bg-gradient-to-r from-purple-50 to-purple-100 px-4 py-2 border-b border-purple-200">
+                  <div className="px-4 py-3 border-b border-slate-100 bg-white">
                     <div className="flex items-center gap-2">
-                      <i className="bi bi-person-check-fill text-purple-700" />
-                      <h3 className="font-semibold text-purple-900 text-sm">Unit Head Assigned Tasks</h3>
-                      <span className="ml-auto text-xs font-bold text-purple-700 bg-purple-200 px-2 py-0.5 rounded-full">{unitHeadDispatchedTasks.length}</span>
+                      <i className="bi bi-person-check-fill text-slate-500 text-sm" />
+                      <h3 className="font-semibold text-slate-800 text-sm">Unit Head Assigned Tasks</h3>
+                      <span className="ml-auto text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{unitHeadDispatchedTasks.length}</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
@@ -711,7 +719,7 @@ export default function DirectorPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
                   <div className="min-w-0">
                     <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                      Archive Repository <span className="text-green-600 font-medium">— {session?.Region}</span>
+                      Archive Repository
                     </h2>
                     <p className="text-slate-400 text-xs mt-1">
                       {archiveSearch ? `${archivedTasks.length} matching tasks` : `${archivedTasks.length} archived tasks`}
@@ -855,15 +863,6 @@ export default function DirectorPage() {
         </main>
 
         {/* FOOTER */}
-        <footer className="bg-white border-t border-slate-100/80 py-1.5 sm:py-2 px-3 sm:px-4 md:px-6 lg:px-8 flex-shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] sm:text-[10px] text-slate-400 truncate">© {new Date().getFullYear()} PhilFIDA</p>
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <span className="text-[9px] sm:text-[10px] text-slate-400 hidden sm:inline">Director Dashboard</span>
-              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gradient-to-r from-[#016837] to-[#027a42]"></span>
-            </div>
-          </div>
-        </footer>
       </div>{/* end flex-1 flex flex-col */}
 
       {/* ── DISPATCH DRAWER (slide-in from right) ── */}
@@ -927,7 +926,7 @@ export default function DirectorPage() {
       {lightboxFile && <Lightbox      file={lightboxFile}  onClose={() => setLightboxFile(null)} />}
       
       {/* Global Print Preview Modal */}
-      {globalPrintPreview && (
+      {globalPrintPreview && createPortal(
         <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
@@ -1060,8 +1059,8 @@ export default function DirectorPage() {
 
                     <div style={{ marginTop: '40px', textAlign: 'center' }}>
                       <div style={{ borderBottom: '2px solid #000', width: '300px', margin: '40px auto 10px auto' }}></div>
-                      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>SAMUEL M. NACINO JR.</div>
-                      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>OIC-Regional Director</div>
+                      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>{session?.SignatoryName || session?.Name || ''}</div>
+                      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>{session?.SignatoryDesignation || session?.Designation || 'OIC-Regional Director'}</div>
                     </div>
                   </div>
                 </div>
@@ -1077,10 +1076,11 @@ export default function DirectorPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* ── PERSONNEL MODAL ── */}
-      {personnelModalOpen && (
+      {personnelModalOpen && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setPersonnelModalOpen(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
@@ -1194,11 +1194,12 @@ export default function DirectorPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── PERSONNEL DETAIL MODAL ── */}
-      {selectedPersonnel && (
+      {selectedPersonnel && createPortal(
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setSelectedPersonnel(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
@@ -1363,11 +1364,12 @@ export default function DirectorPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── DISPATCH CONFIRM MODAL ── */}
-      {dispatchConfirm && (
+      {dispatchConfirm && createPortal(
         <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDispatchConfirm(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative z-popover">
@@ -1426,10 +1428,11 @@ export default function DirectorPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {deleteConfirm && (
+      {deleteConfirm && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="bg-red-600 px-5 py-4 flex items-center gap-3">
@@ -1460,7 +1463,8 @@ export default function DirectorPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -1477,9 +1481,9 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover-lift animate-in-up">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden transition-shadow hover:shadow-md">
       {/* ── SECTION 1: Personnel & Actions Header ── */}
-      <div className="bg-green-50/70 px-3 sm:px-4 py-2 sm:py-3 border-b border-green-100">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-100 border-l-[3px] border-l-green-600">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
           {/* Personnel Name - Emphasized with green bg for active tasks */}
           <div className="min-w-0 flex-1 flex items-center gap-1.5 sm:gap-2">
@@ -1521,7 +1525,7 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
         {/* Document Number Badge - Modern Stacked Layout */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
           <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5">
               <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
               <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
@@ -1625,7 +1629,7 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className={`bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover-lift animate-in-up ${selected ? 'bg-red-50/60 border-red-200' : ''}`}>
+    <div className={`bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow ${selected ? 'bg-red-50/60 border-red-200' : ''}`}>
       {/* ── SECTION 1: Checkbox, Personnel & Actions ── */}
       <div className={`px-3 sm:px-4 py-2 sm:py-3 border-b border-red-100 ${selected ? 'bg-red-50/50' : 'bg-red-50/70'}`}>
         <div className="flex items-center justify-between gap-2 sm:gap-3">
@@ -1677,7 +1681,7 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
         {/* Document Number Badge - Modern Stacked Layout */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
           <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-[#016837] to-[#027a42] text-white rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 shadow-sm">
+            <span className="inline-flex items-center gap-1 sm:gap-1.5 bg-green-800 text-white rounded-md px-2 sm:px-3 py-1 sm:py-1.5">
               <i className="bi bi-file-earmark-text text-white/90 text-[10px] sm:text-xs" />
               <span className="text-[10px] sm:text-xs font-bold tracking-wide">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
@@ -1871,7 +1875,7 @@ function TaskRow({ task: t, unit, idx, isArchived, comments, session, history = 
           {/* Document Number Badge */}
           {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
             <div className="mb-1.5">
-              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-[#104711] to-[#1a5c1c] text-white rounded px-2 py-0.5 shadow-sm">
+              <span className="inline-flex items-center gap-1 bg-green-900 text-white rounded px-2 py-0.5">
                 <i className="bi bi-file-earmark-text text-white/90 text-[10px]" />
                 <span className="text-[10px] font-bold tracking-wide">
                   {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}

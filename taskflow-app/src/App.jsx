@@ -131,7 +131,7 @@ function ProtectedRoute({ children, role, hydrated, error }) {
   if (!hydrated) return (
     <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
       <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4" />
-      <p className="text-white text-sm font-medium">Loading TaskFlow...</p>
+      <p className="text-white text-sm font-medium">Loading Task Management System...</p>
       <p className="text-green-200 text-xs mt-2">Please wait</p>
       {error && (
         <div className="mt-4 bg-yellow-500/20 border border-yellow-400/50 rounded-lg p-3 max-w-md">
@@ -165,7 +165,7 @@ function LoginRoute({ hydrated, error }) {
   if (!hydrated) return (
     <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
       <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4" />
-      <p className="text-white text-sm font-medium">Loading TaskFlow...</p>
+      <p className="text-white text-sm font-medium">Loading Task Management System...</p>
       <p className="text-green-200 text-xs mt-2">Please wait</p>
       {error && (
         <div className="mt-4 bg-yellow-500/20 border border-yellow-400/50 rounded-lg p-3 max-w-md">

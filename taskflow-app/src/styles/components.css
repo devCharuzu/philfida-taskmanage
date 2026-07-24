@@ -461,8 +461,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -575,18 +574,36 @@
 
   .nav-item:focus-visible {
     outline: none;
-    border-color: #f9921f;
-    box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.2);
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
   }
 
   .nav-item.active {
-    background: #f9921f;
-    color: #016837;
+    background: rgba(255, 255, 255, 0.16);
+    color: white;
     font-weight: 600;
   }
 
   .nav-item.active:hover {
-    background: #ffb84d;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  /* ── Sidebar collapse (desktop only — mobile keeps the slide-over) ── */
+  @media (min-width: 768px) {
+    .sidebar-collapsed .sidebar-hide { display: none !important; }
+    .sidebar-collapsed .nav-item {
+      justify-content: center;
+      padding-left: 0;
+      padding-right: 0;
+      gap: 0;
+    }
+    .sidebar-collapsed .nav-item > span { display: none; }
+    .sidebar-collapsed .sb-head {
+      flex-direction: column;
+      gap: 10px;
+      padding-left: 0;
+      padding-right: 0;
+    }
   }
 
   /* === TABLE COMPONENTS === */

@@ -12,6 +12,7 @@ import {
 } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
 import UserStatusPopover from './UserStatusPopover'
+import DirectorPasswordModal from './DirectorPasswordModal'
 
 const ROLE_COLORS = {
   Director:    'bg-purple-100 text-purple-700 border-purple-200',
@@ -43,71 +44,50 @@ export default function UserManagement({ users, onSync }) {
   const [deleteLoading,setDeleteLoading]= useState(false)
   const [oauthForDelete,setOauthForDelete]= useState(false) // Supabase Auth session → delete RPC uses JWT email
 
+  // Approve / Deactivate / Reactivate flow — same password-confirm modal as
+  // Delete, themed per action instead of a bare window.prompt().
+  const [pendingAction, setPendingAction] = useState(null) // { type, userId }
+  const [actionLoading, setActionLoading] = useState(false)
+
   const filteredUsers = filter === 'All' ? users : users.filter(u => u.AccountStatus === filter)
   const pendingCount   = users.filter(u => u.AccountStatus === 'Pending').length
 
-  /** OAuth directors rely on JWT email in RPC; manual directors must type their password once per action. */
-  async function directorRpcSecretOrAbort() {
-    if (await hasSupabaseAuthSession()) return { secret: '', ok: true }
-    const pw = window.prompt('Enter your director password to confirm:')
-    if (pw === null) return { ok: false }
-    if (!pw.trim()) {
-      alert('Password is required.')
-      return { ok: false }
-    }
-    return { secret: pw.trim(), ok: true }
+  const ACTION_CONFIG = {
+    approve:    { status: 'Active',      icon: 'bi-check-circle-fill', title: 'Approve Account',    subtitle: 'Grant this user access', theme: 'success', confirmLabel: 'Approve',    confirmIcon: 'bi-check-lg' },
+    deactivate: { status: 'Deactivated', icon: 'bi-person-dash-fill',  title: 'Deactivate Account',  subtitle: 'This user will lose access', theme: 'warning', confirmLabel: 'Deactivate', confirmIcon: 'bi-slash-circle' },
+    reactivate: { status: 'Active',      icon: 'bi-arrow-clockwise',   title: 'Reactivate Account',  subtitle: "Restore this user's access", theme: 'success', confirmLabel: 'Reactivate', confirmIcon: 'bi-check-lg' },
   }
 
-  async function handleApprove(userId) {
-    setLoading(userId + '_approve')
-    try {
-      const auth = await directorRpcSecretOrAbort()
-      if (!auth.ok) return
-      await withErrorHandling(async () => {
-        await updateUserAccountStatus(userId, 'Active', session.ID, auth.secret)
-      }, ERROR_MESSAGES.DATABASE)
-      await onSync()
-    } catch (error) {
-      console.error('Failed to approve user:', error)
-      alert(`Failed to approve user: ${error.message}`)
-    } finally {
-      setLoading(null)
+  async function requestAction(type, userId) {
+    // Google-auth directors verify via JWT email inside the RPC — no password step needed.
+    if (await hasSupabaseAuthSession()) {
+      await runAction(type, userId, '')
+      return
     }
+    setPendingAction({ type, userId })
   }
 
-  async function handleDeactivate(userId) {
-    setLoading(userId + '_deactivate')
+  async function runAction(type, userId, password) {
+    setLoading(userId + '_' + type)
+    setActionLoading(true)
     try {
-      const auth = await directorRpcSecretOrAbort()
-      if (!auth.ok) return
       await withErrorHandling(async () => {
-        await updateUserAccountStatus(userId, 'Deactivated', session.ID, auth.secret)
+        await updateUserAccountStatus(userId, ACTION_CONFIG[type].status, session.ID, password)
       }, ERROR_MESSAGES.DATABASE)
       await onSync()
+      setPendingAction(null)
     } catch (error) {
-      console.error('Failed to deactivate user:', error)
-      alert(`Failed to deactivate user: ${error.message}`)
+      console.error(`Failed to ${type} user:`, error)
+      alert(`Failed to ${type} user: ${error.message}`)
     } finally {
       setLoading(null)
+      setActionLoading(false)
     }
   }
 
-  async function handleReactivate(userId) {
-    setLoading(userId + '_reactivate')
-    try {
-      const auth = await directorRpcSecretOrAbort()
-      if (!auth.ok) return
-      await withErrorHandling(async () => {
-        await updateUserAccountStatus(userId, 'Active', session.ID, auth.secret)
-      }, ERROR_MESSAGES.DATABASE)
-      await onSync()
-    } catch (error) {
-      console.error('Failed to reactivate user:', error)
-      alert(`Failed to reactivate user: ${error.message}`)
-    } finally {
-      setLoading(null)
-    }
-  }
+  const handleApprove    = (userId) => requestAction('approve', userId)
+  const handleDeactivate = (userId) => requestAction('deactivate', userId)
+  const handleReactivate = (userId) => requestAction('reactivate', userId)
 
   async function handleSaveEdit() {
     if (!editRole || !editUnit) return
@@ -186,7 +166,6 @@ export default function UserManagement({ users, onSync }) {
     const [menuOpen, setMenuOpen] = useState(false)
     const btnRef = useRef()
 
-    // Blue/purple variation style for User Management (different from task cards)
     const getStatusStyle = (status) => {
       switch (status) {
         case 'Active': return 'bg-emerald-50 border-emerald-100 text-emerald-800'
@@ -205,24 +184,21 @@ export default function UserManagement({ users, onSync }) {
     }
 
     return (
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow">
-        {/* ── SECTION 1: User Header with Badge Style (Blue variation) ── */}
-        <div className="bg-gradient-to-r from-slate-50 to-blue-50/50 px-3 sm:px-4 py-4 border-b border-slate-100">
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col h-full overflow-hidden hover:shadow-md transition-shadow">
+        {/* ── SECTION 1: User Header ── */}
+        <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-100 border-l-[3px] border-l-blue-600">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1 overflow-hidden">
-              {/* Name Badge - Blue variation style */}
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="inline-flex items-center gap-1.5 bg-white border border-blue-100 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-sm min-w-0 max-w-full">
-                  <i className={`bi ${getRoleIcon(u.Role)} text-blue-600 text-sm flex-shrink-0`} />
-                <UserStatusPopover 
-                  name={u.Name} 
-                  status={u.Status} 
+              <div className="flex items-center gap-1.5 min-w-0">
+                <i className={`bi ${getRoleIcon(u.Role)} text-blue-600 text-sm flex-shrink-0`} />
+                <UserStatusPopover
+                  name={u.Name}
+                  status={u.Status}
                   popoverMaxW={280}
                   chipClassName="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate cursor-pointer hover:text-blue-700 transition-colors"
                 />
-                </span>
               </div>
-              <div className="flex items-center gap-1.5 sm:gap-2 mt-2 ml-0.5 min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-2 min-w-0">
                 <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 bg-slate-100 px-1.5 sm:px-2 py-0.5 rounded flex-shrink-0">ID: {u.ID}</span>
                 <span className="text-[10px] sm:text-[11px] text-slate-400 truncate min-w-0">{u.Unit || u.Office || 'Unassigned Unit'}</span>
               </div>
@@ -408,7 +384,7 @@ export default function UserManagement({ users, onSync }) {
       </div>
 
       {/* ── EDIT MODAL ── */}
-      {editUser && (
+      {editUser && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setEditUser(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -439,11 +415,22 @@ export default function UserManagement({ users, onSync }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── APPROVE / DEACTIVATE / REACTIVATE CONFIRM MODAL ── */}
+      {pendingAction && (
+        <DirectorPasswordModal
+          {...ACTION_CONFIG[pendingAction.type]}
+          loading={actionLoading}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={(password) => runAction(pendingAction.type, pendingAction.userId, password)}
+        />
       )}
 
       {/* ── DELETE CONFIRM MODAL ── */}
-      {deleteTarget && (
+      {deleteTarget && createPortal(
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -516,7 +503,8 @@ export default function UserManagement({ users, onSync }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

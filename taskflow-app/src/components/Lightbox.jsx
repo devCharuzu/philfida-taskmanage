@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { getSignedFileUrl } from '../lib/api'
 
 const ICON_MAP = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', ppt:'📑', pptx:'📑', zip:'🗜️', txt:'📃', mp4:'🎬', mp3:'🎵', mov:'🎬', avi:'🎬', csv:'📊' }
@@ -41,7 +42,7 @@ export default function Lightbox({ file, onClose }) {
     } catch (error) { window.open(signedUrl, '_blank') }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/90 z-[9999] flex flex-col items-center justify-center p-4 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && onClose()}>
       <button onClick={onClose} className="absolute top-4 right-5 text-white/70 hover:text-white text-3xl leading-none font-light">&times;</button>
 
@@ -60,6 +61,7 @@ export default function Lightbox({ file, onClose }) {
           <i className="bi bi-download" /> Download
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

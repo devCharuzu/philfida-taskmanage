@@ -38,7 +38,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #0a2e0a 0%, #155414 50%, #1a6e1a 100%)' }}>
           <div className="text-center max-w-md">
-            <h1 className="text-white text-xl font-bold mb-4">TaskFlow Error</h1>
+            <h1 className="text-white text-xl font-bold mb-4">Task Management System Error</h1>
             <p className="text-green-200 text-sm mb-4">Something went wrong. Please refresh the page.</p>
             
             {isMobile && (

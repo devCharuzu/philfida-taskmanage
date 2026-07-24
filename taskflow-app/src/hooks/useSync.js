@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../store/useStore'
 import { getData } from '../lib/api'
 import { supabase } from '../lib/supabase'
+import { unlockAudio, playNotifSound } from '../lib/notifSound'
+import { showNotification } from '../lib/pushNotifications'
 
 // H1/H2 FIX: Sync only notifications using getState() so we never rely on a
 // stale setGlobalData reference captured by a closure, and never use a
@@ -23,6 +25,17 @@ async function syncNotificationsOnly(sessionId) {
   } catch (e) {
     console.error('Notification sync failed', e)
   }
+}
+
+// Realtime INSERT already carries the full row — apply it straight to the
+// store instead of round-tripping to the DB again. UPDATE/DELETE (e.g. a
+// notification marked read from another tab) still fall back to a refetch.
+function applyNotificationInsert(row) {
+  if (!row) return
+  const current = useStore.getState().globalData
+  if (current.notifications.some(n => String(n.ID) === String(row.ID))) return
+  const notifications = [row, ...current.notifications].slice(0, 20)
+  useStore.getState().setGlobalData({ ...current, notifications })
 }
 
 // Check if a comment change affects the current user and trigger a full sync if so
@@ -58,7 +71,9 @@ export function useSync() {
   // H5 FIX: depend only on the ID primitive — not the whole session object —
   // so presence-status changes don't trigger a full re-sync.
   const sessionId = useStore(s => s.session?.ID)
+  const notifications = useStore(s => s.globalData.notifications)
   const channelsRef = useRef([])
+  const seenUnreadIdsRef = useRef(null)
 
   // H1 FIX: Read store values inside the async body via getState() rather than
   // capturing them in the useCallback closure — eliminates the unstable
@@ -75,10 +90,53 @@ export function useSync() {
     }
   }, []) // intentionally no deps — always reads fresh from store
 
+  // Single owner of "new unread notification -> sound + OS push + bell ring".
+  // This hook mounts exactly once per page. NotificationBell renders twice
+  // per page (desktop sidebar + mobile header, both always mounted) — letting
+  // each instance independently detect "new" and play a sound doubled every
+  // chime. Detecting it here instead means it only ever fires once.
+  useEffect(() => {
+    const unread = notifications.filter(n => n.IsRead === 'FALSE')
+    const unreadIds = new Set(unread.map(n => String(n.ID)))
+
+    if (seenUnreadIdsRef.current === null) {
+      // First load — just baseline, no sound.
+      seenUnreadIdsRef.current = unreadIds
+      return
+    }
+
+    let newest = null
+    unreadIds.forEach(id => {
+      if (!seenUnreadIdsRef.current.has(id)) {
+        newest = unread.find(n => String(n.ID) === id) || newest
+      }
+    })
+
+    if (newest) {
+      unlockAudio()
+      playNotifSound()
+      useStore.getState().bumpNotifyPulse()
+      if (
+        typeof document !== 'undefined' && document.hidden &&
+        typeof Notification !== 'undefined' && Notification.permission === 'granted'
+      ) {
+        showNotification('PhilFIDA Task Management System', newest.Message)
+      }
+    }
+
+    seenUnreadIdsRef.current = unreadIds
+  }, [notifications])
+
   useEffect(() => {
     if (!sessionId) return
 
     const role = useStore.getState().session?.Role
+
+    // Ask once per session — harmless no-op if already granted/denied, and
+    // lets backgrounded-tab notifications (above) actually show something.
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
 
     // Initial fetch
     sync()
@@ -94,13 +152,24 @@ export function useSync() {
     const useRealtime = (isSecureConnection || isLocal) && (!isMobile || isTablet)
 
     if (useRealtime) {
-      // Notification channel — user-scoped filter
+      // Notification channel — user-scoped filter. INSERT applies the row
+      // directly (no extra round-trip); UPDATE/DELETE still refetch.
       try {
         const notifCh = supabase
           .channel(`notifications-${sessionId}`)
           .on(
             'postgres_changes',
-            { event: '*', schema: 'public', table: 'Notifications', filter: `UserID=eq.${sessionId}` },
+            { event: 'INSERT', schema: 'public', table: 'Notifications', filter: `UserID=eq.${sessionId}` },
+            (payload) => applyNotificationInsert(payload.new)
+          )
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'Notifications', filter: `UserID=eq.${sessionId}` },
+            () => syncNotificationsOnly(sessionId)
+          )
+          .on(
+            'postgres_changes',
+            { event: 'DELETE', schema: 'public', table: 'Notifications', filter: `UserID=eq.${sessionId}` },
             () => syncNotificationsOnly(sessionId)
           )
           .subscribe()
@@ -154,8 +223,12 @@ export function useSync() {
     }
 
     // M6 FIX: When realtime is active, poll every 2 min as a heartbeat only.
-    // Without realtime (mobile/insecure), poll every 60 s.
-    const pollingInterval = useRealtime ? 120000 : 60000
+    // Without realtime (mobile phones — see isMobile above), poll every 15s;
+    // that path was deliberately excluded from websockets (mobile browsers
+    // suspend/kill sockets on backgrounding without signaling the app), so a
+    // tighter poll is the safe way to close the "not real-time on phones" gap
+    // without risking silent missed updates. Revisit if verified safe on-device.
+    const pollingInterval = useRealtime ? 120000 : 15000
     const fallback = setInterval(sync, pollingInterval)
 
     return () => {

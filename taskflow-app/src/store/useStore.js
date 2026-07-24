@@ -49,6 +49,11 @@ export const useStore = create(
     (set) => ({
       session: null,
       globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] },
+      // Bumped once, in one place (useSync), whenever a genuinely new unread
+      // notification arrives — NotificationBell watches this to trigger its
+      // ring animation instead of re-detecting "new" itself.
+      notifyPulse: 0,
+      bumpNotifyPulse: () => set((state) => ({ notifyPulse: state.notifyPulse + 1 })),
       setSession: (session) => set({ session }),
       clearSession: () => set({ session: null }),
       setGlobalData: (data) => set((state) => ({

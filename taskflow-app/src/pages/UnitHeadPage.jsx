@@ -11,6 +11,7 @@ import ChatModal from '../components/ChatModal'
 import FileThumb from '../components/FileThumb'
 import Lightbox from '../components/Lightbox'
 import CreateTaskForm from '../components/CreateTaskForm'
+import EditTaskModal from '../components/EditTaskModal'
 import { normalizeStatus } from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
@@ -46,9 +47,12 @@ export default function UnitHeadPage() {
   const [loadingTask,  setLoadingTask] = useState(null)
   const [drawerOpen,   setDrawerOpen]  = useState(false)
   const [sidebarOpen,  setSidebarOpen]  = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pf_sidebar_collapsed') === '1')
+  const toggleSidebarCollapsed = () => setSidebarCollapsed(v => { localStorage.setItem('pf_sidebar_collapsed', v ? '0' : '1'); return !v })
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
   const [globalPrintPreview, setGlobalPrintPreview] = useState(null)
+  const [editTask,           setEditTask]           = useState(null)
 
 
 
@@ -182,7 +186,13 @@ export default function UnitHeadPage() {
 
   function handleConfirmGlobalPrint() {
     if (!globalPrintPreview) return
-    
+
+    // Signatory is the region's Director, not the Unit Head printing —
+    // routing slips are signed off by the Director regardless of who dispatches.
+    const regionDirector = globalData.users.find(u => u.Role === 'Director' && u.AccountStatus === 'Active' && u.Region === session?.Region)
+    const signatoryName = regionDirector?.SignatoryName || regionDirector?.Name || ''
+    const signatoryDesignation = regionDirector?.SignatoryDesignation || regionDirector?.Designation || 'OIC-Regional Director'
+
     const { hasUrgent, hasPriority, hasConfidential, checkboxStates, approvalStates, allPurposes } = parseCheckboxesFromTask(globalPrintPreview)
     
     // Clean remarks - remove Purpose and Action lines as they're shown in checkboxes
@@ -342,8 +352,8 @@ export default function UnitHeadPage() {
 
           <div class="signature-section">
             <div class="signature-line"></div>
-            <div class="signature-label">SAMUEL M. NACINO JR.</div>
-            <div class="signature-label">OIC-Regional Director</div>
+            <div class="signature-label">${signatoryName}</div>
+            <div class="signature-label">${signatoryDesignation}</div>
           </div>
 
         </div>
@@ -452,7 +462,7 @@ export default function UnitHeadPage() {
     <div className="h-dvh flex overflow-hidden page-bg">
 
       {/* Global Print Preview Modal - Above all divs */}
-      {globalPrintPreview && (
+      {globalPrintPreview && createPortal(
         <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
@@ -478,32 +488,28 @@ export default function UnitHeadPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
         {/* ── Branding + Notification row ── */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
+        <div className="sb-head flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 shadow-inner">
+            <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0 border border-white/20">
               <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:white;">PF</span>' }} />
             </div>
-            <div className="flex flex-col min-w-0">
+            <div className="sidebar-hide flex flex-col min-w-0">
               <span className="text-white font-black text-[11px] tracking-wider uppercase leading-none">PhilFIDA</span>
-              <span className="text-green-300 font-bold text-[10px] mt-0.5 leading-none">TaskFlow</span>
+              <span className="text-green-300 font-bold text-[10px] mt-0.5 leading-none">Task Management System</span>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            {session?.Region && (
-              <span className="region-badge px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter bg-white/10 text-white border border-white/20 mr-1">
-                {session.Region}
-              </span>
-            )}
             <NotificationBell />
             <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
               <i className="bi bi-x-lg text-base" />
@@ -533,7 +539,7 @@ export default function UnitHeadPage() {
             )}
           </button>
           {tab === 'monitor' && (
-            <div className="ml-4 mt-1 space-y-0.5">
+            <div className="sidebar-hide ml-4 mt-1 space-y-0.5">
               {[
                 { key: 'director-assigned', label: 'Director Assigned', badge: directorAssignedTasks.length },
                 { key: 'my-assigned',       label: 'My Assigned',       badge: finalUnitHeadAssignedTasks.length },
@@ -567,6 +573,16 @@ export default function UnitHeadPage() {
             <span className="flex-1 text-sm">My Profile</span>
           </button>
         </nav>
+
+        {/* ── Collapse toggle ── */}
+        <div className="hidden md:flex justify-center px-3 py-3 border-t border-white/10 flex-shrink-0">
+          <button onClick={toggleSidebarCollapsed}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <i className={`bi ${sidebarCollapsed ? 'bi-chevron-double-right' : 'bi-chevron-double-left'} text-sm`} />
+          </button>
+        </div>
       </aside>
 
       {/* ── MAIN ── */}
@@ -581,8 +597,7 @@ export default function UnitHeadPage() {
             <div className="w-7 h-7 bg-green-900 rounded-lg flex items-center justify-center overflow-hidden shadow-md">
               <img src="/philfida-logo.png" alt="" className="w-5 h-5 object-contain" onError={e => e.target.style.display='none'} />
             </div>
-            <span className="text-green-900 font-black text-sm tracking-tight uppercase">TaskFlow</span>
-            <span className="text-[10px] font-bold text-green-600/70 border-l border-slate-300 pl-2">{session?.Region}</span>
+            <span className="text-green-900 font-black text-sm tracking-tight uppercase">Task Management System</span>
           </div>
           <NotificationBell />
         </div>
@@ -596,7 +611,7 @@ export default function UnitHeadPage() {
               <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
                   <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                    My Assignments <span className="text-green-600 font-medium">— {session?.Region}</span>
+                    My Assignments
                   </h2>
                   <p className="text-slate-400 text-[10px] sm:text-xs mt-1.5 font-medium">{myTasks.length} task{myTasks.length !== 1 ? 's' : ''} assigned to you</p>
                 </div>
@@ -648,6 +663,7 @@ export default function UnitHeadPage() {
                         onOpenChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
                         onOpenFile={(url, name) => setLightboxFile({ url, name })}
                         onPrintPreview={handleGlobalPrintPreview}
+                        onEdit={() => setEditTask(t)}
                       />
                     ))}
                   </div>
@@ -663,7 +679,7 @@ export default function UnitHeadPage() {
               <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
                 <div className="min-w-0">
                   <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
-                    {monitorFilter === 'director-assigned' ? 'Director Assigned Tasks' : 'My Assigned Tasks'} <span className="text-green-600 font-medium">— {session?.Region}</span>
+                    {monitorFilter === 'director-assigned' ? 'Director Assigned Tasks' : 'My Assigned Tasks'}
                   </h2>
                   <p className="text-slate-400 text-[10px] sm:text-xs mt-1.5 font-medium">
                     {monitorFilter === 'director-assigned' ? directorAssignedTasks.length : finalUnitHeadAssignedTasks.length} total tasks in monitor
@@ -780,6 +796,7 @@ export default function UnitHeadPage() {
                             onOpenFile={(url, name) => setLightboxFile({ url, name })}
                             isDirectorAssigned={isDirectorAssigned}
                             onPrintPreview={handleGlobalPrintPreview}
+                            onEdit={() => setEditTask(t)}
                           />
                         )
                       })
@@ -810,15 +827,6 @@ export default function UnitHeadPage() {
         </main>
 
         {/* FOOTER */}
-        <footer className="bg-white border-t border-slate-100/80 py-1.5 sm:py-2 px-3 sm:px-4 md:px-6 lg:px-8 flex-shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] sm:text-[10px] text-slate-400 truncate">© {new Date().getFullYear()} PhilFIDA</p>
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <span className="text-[9px] sm:text-[10px] text-slate-400 hidden sm:inline">Unit Head Dashboard</span>
-              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-gradient-to-r from-[#016837] to-[#027a42]"></span>
-            </div>
-          </div>
-        </footer>
       </div>{/* end flex-1 flex flex-col */}
 
       {/* ── MOBILE BOTTOM NAV ── */}
@@ -877,9 +885,10 @@ export default function UnitHeadPage() {
 
       {chat         && <ChatModal taskId={chat.taskId} taskTitle={chat.taskTitle} onClose={() => setChat(null)} onSync={sync} />}
       {lightboxFile && <Lightbox file={lightboxFile} onClose={() => setLightboxFile(null)} />}
+      {editTask     && <EditTaskModal task={editTask} onClose={() => setEditTask(null)} onSync={sync} />}
 
       {/* ── DISPATCH CONFIRM MODAL ── */}
-      {dispatchConfirm && (
+      {dispatchConfirm && createPortal(
         <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDispatchConfirm(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative z-popover">
@@ -938,11 +947,12 @@ export default function UnitHeadPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* ── AUTO-UPDATE TOAST ALERT ── */}
       {autoUpdateAlert && (
-        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-gradient-to-br from-green-900 to-emerald-950 text-white rounded-2xl shadow-2xl border border-green-500/30 p-4 animate-in-right flex items-start gap-3.5 backdrop-blur-lg">
+        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-green-900 text-white rounded-xl shadow-lg border border-green-800/60 p-4 animate-in-right flex items-start gap-3">
           <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
             <i className="bi bi-patch-check-fill text-lg leading-none" />
           </div>
@@ -1011,7 +1021,7 @@ function StatusTimes({ task: t }) {
 }
 
 // ── UnitHeadTaskCard ────────────────────────────────────────────────────────────────
-function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate, onOpenChat, onOpenFile, onPrintPreview }) {
+function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate, onOpenChat, onOpenFile, onPrintPreview, onEdit }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
   const unreadChat = getUnreadCommentCount(comments || [], t.TaskID, session?.Name || '')
@@ -1100,7 +1110,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
 
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full overflow-hidden animate-in-up group">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col h-full overflow-hidden">
 
       {/* ── SECTION 1: Header with Status & Actions ── */}
       <div className="bg-slate-50/50 px-3 sm:px-4 py-3 border-b border-slate-100 group-hover:bg-green-50/30 transition-colors">
@@ -1132,7 +1142,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
         {/* Document Number Badge */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
           <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5">
               <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
               <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
@@ -1208,7 +1218,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
           </button>
         )}
         {t.Status === 'Completed' && (
-          <button disabled className="w-full py-2.5 rounded-lg font-semibold text-sm text-green-700 border-0 bg-gradient-to-r from-green-50 to-emerald-50">
+          <button disabled className="w-full py-2.5 rounded-lg font-semibold text-sm text-green-700 border border-green-100 bg-green-50">
             <i className="bi bi-check-circle-fill" /> Completed
           </button>
         )}
@@ -1216,6 +1226,10 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
 
       {/* Action Menu Dropdown */}
       <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <button onClick={() => { onEdit && onEdit(); setMenuOpen(false) }}
+          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
+          <i className="bi bi-pencil text-blue-600" /> Edit Task
+        </button>
         <button onClick={() => { onPrintPreview && onPrintPreview(t); setMenuOpen(false) }}
           className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
           <i className="bi bi-printer-fill text-slate-600" /> Print Task
@@ -1235,7 +1249,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
 }
 
 // ── UnitHeadMonitorCard ────────────────────────────────────────────────────────────────
-function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, history, unreadChat, onChat, onOpenFile, isDirectorAssigned = false, onPrintPreview }) {
+function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, history, unreadChat, onChat, onOpenFile, isDirectorAssigned = false, onPrintPreview, onEdit }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
 
@@ -1245,7 +1259,7 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
   const statusInitial = normalizedStatus === 'Available' ? 'A' : normalizedStatus === 'Official Travel' ? 'T' : 'L'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full overflow-hidden animate-in-up group">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col h-full overflow-hidden">
       {/* ── SECTION 1: Personnel & Actions Header ── */}
       <div className="bg-slate-50/50 px-3 sm:px-4 py-2.5 border-b border-slate-100 group-hover:bg-green-50/30 transition-colors">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
@@ -1282,7 +1296,7 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
         {/* Document Number Badge - Modern Stacked Layout */}
         {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
           <div className="mb-2">
-            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5 shadow-sm hover:scale-[1.02] transition-transform">
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5">
               <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
               <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
                 {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
@@ -1350,6 +1364,10 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
       {/* Action Menu Dropdown - Only for unit head assigned tasks */}
       {!isDirectorAssigned && (
         <PortalDropdown anchorRef={btnRef} open={menuOpen} onClose={() => setMenuOpen(false)}>
+          <button onClick={() => { onEdit && onEdit(); setMenuOpen(false) }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
+            <i className="bi bi-pencil text-blue-600" /> Edit Task
+          </button>
           <button onClick={() => { onPrintPreview && onPrintPreview(t); setMenuOpen(false) }}
             className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
             <i className="bi bi-printer-fill text-slate-600" /> Print Task

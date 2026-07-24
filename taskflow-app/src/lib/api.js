@@ -98,11 +98,81 @@ export async function loginUser(userId, password, region) {
   return { user }
 }
 
+// Registration is silent otherwise — the Director only finds a pending
+// signup if they happen to open the Pending tab. Best-effort: a failure here
+// must never block registration itself.
+async function notifyDirectorsOfRegion(region, message) {
+  try {
+    const { data: directors } = await supabase
+      .from('Users')
+      .select('ID')
+      .eq('Role', 'Director')
+      .eq('Region', region)
+    if (directors?.length) {
+      await Promise.all(directors.map(d => createNotification(d.ID, message, 'info', '')))
+    }
+  } catch (e) {
+    console.warn('notifyDirectorsOfRegion failed', e)
+  }
+}
+
+/** Enter ID, no password — used by the login page's "check my status" link.
+ *  Deliberately coarse (active vs not) so an unauthenticated caller can't use
+ *  it to enumerate which employee IDs exist or their exact account state. */
+export async function checkAccountStatus(idOrEmail) {
+  const input = (idOrEmail || '').trim()
+  if (!input) return 'inactive'
+  // Google users only know their email — their ID is an auth UUID they never
+  // see. Anything with '@' is treated as an email lookup instead.
+  const query = supabase.from('Users').select('AccountStatus')
+  const { data: user } = input.includes('@')
+    ? await query.ilike('Email', input.toLowerCase()).maybeSingle()
+    : await query.eq('ID', input).maybeSingle()
+  return user?.AccountStatus === 'Active' ? 'active' : 'inactive'
+}
+
+/** Availability of the approving Director for a region — shown to users at
+ *  registration/pending-login so they know whether approval is likely soon.
+ *  Anon-readable by design (Users has an anon SELECT policy); exposes only
+ *  name + coarse status. */
+export async function getDirectorAvailability(region) {
+  try {
+    const { data } = await supabase
+      .from('Users')
+      .select('Name, Status')
+      .eq('Role', 'Director')
+      .eq('Region', region)
+      .eq('AccountStatus', 'Active')
+      .limit(1)
+    if (!data?.length) return null
+    const raw = data[0].Status || 'Available'
+    const status = raw.startsWith('Official Travel') ? 'Official Travel'
+      : raw.startsWith('On Leave') ? 'On Leave'
+      : 'Available'
+    return { name: data[0].Name, status }
+  } catch {
+    return null
+  }
+}
+
 export async function registerUser({ id, name, email = '', unit, role, pass, region }) {
+  const normEmail = (email || '').trim().toLowerCase()
+
+  // Email is optional (no SMTP feature depends on it anymore), but if given
+  // it must still be unique: handleGoogleCallback() looks users up by email
+  // with maybeSingle(), which errors outright if two rows match — a duplicate
+  // here would break Google sign-in for both accounts. Skipped entirely when
+  // no email is provided, since empty values shouldn't collide with each other.
+  if (normEmail) {
+    const { data: emailTaken } = await supabase
+      .from('Users').select('ID').ilike('Email', normEmail).maybeSingle()
+    if (emailTaken) return 'EXISTS'
+  }
+
   const { error } = await supabase.from('Users').insert({
     ID: id,
     Name: name,
-    Email: email?.trim() || null,
+    Email: normEmail || null,
     Office: unit,
     Unit: unit,
     Role: role,
@@ -116,6 +186,7 @@ export async function registerUser({ id, name, email = '', unit, role, pass, reg
     if (error.code === '23505') return 'EXISTS'
     throw error
   }
+  await notifyDirectorsOfRegion(region || 'Region I', `🆕 New account pending approval: ${name} (ID: ${id})`)
   return 'SUCCESS'
 }
 
@@ -133,6 +204,16 @@ export async function updateUserAccountStatus(userId, status, actorDirectorId, d
     p_account_status: status,
   })
   if (error) throw error
+
+  // In-app notice waiting for them next time they log in. Doesn't reach them
+  // before that (no email/push wired — needs an email provider + Edge
+  // Function this project doesn't have yet), but closes the loop the moment
+  // they do check back, instead of a silent status flip.
+  if (status === 'Active') {
+    await createNotification(userId, '✅ Your account has been approved. You can now log in.', 'info', '')
+  } else if (status === 'Deactivated') {
+    await createNotification(userId, '⛔ Your account access has changed. Contact your Director for details.', 'info', '')
+  }
 }
 
 export async function updateUserRole(userId, role, unit, actorDirectorId, directorPassword = '') {
@@ -142,6 +223,19 @@ export async function updateUserRole(userId, role, unit, actorDirectorId, direct
     p_target_user_id: userId,
     p_role: role,
     p_unit: unit || '',
+  })
+  if (error) throw error
+}
+
+/** Routing-slip signatory for the Director's own account. Pass null/empty
+ *  name+designation to clear the override (falls back to the Director's own
+ *  Name/Designation wherever the print template reads it). */
+export async function updateDirectorSignatory(directorId, signatoryName, signatoryDesignation, directorPassword = '') {
+  const { error } = await supabase.rpc('director_update_signatory', {
+    p_director_id: directorId,
+    p_director_password: directorPassword || null,
+    p_signatory_name: signatoryName || null,
+    p_signatory_designation: signatoryDesignation || null,
   })
   if (error) throw error
 }
@@ -371,10 +465,15 @@ export async function addComment({ taskId, sender, message, files }) {
 
 // ── NOTIFICATIONS ──────────────────────────────────────────
 export async function createNotification(userId, message, type = 'info', taskId = '') {
-  await supabase.from('Notifications').insert({
+  // TaskID has a foreign key to Tasks — '' is a real non-null value that
+  // matches no row and fails the constraint, unlike NULL. Every non-task
+  // notification (director-registration alert, approval notice) was silently
+  // failing this insert until now; the caller only saw a swallowed error.
+  const { error } = await supabase.from('Notifications').insert({
     UserID: String(userId), Message: message, Type: type,
-    IsRead: 'FALSE', CreatedAt: new Date().toISOString(), TaskID: String(taskId),
+    IsRead: 'FALSE', CreatedAt: new Date().toISOString(), TaskID: taskId ? String(taskId) : null,
   })
+  if (error) console.error('createNotification failed:', error.message)
 }
 
 export async function markNotificationsRead(userId) {
@@ -504,24 +603,12 @@ export async function clearNotifications(userId) {
 }
 
 export async function markChatRead(taskId, sessionName) {
-  // Append sessionName to HiddenBy on all messages they haven't sent in this task
-  const { data: comments } = await supabase
-    .from('Comments')
-    .select('ID, HiddenBy, SenderName')
-    .eq('TaskID', taskId)
-
-  if (!comments?.length) return
-
-  const toUpdate = comments.filter(c =>
-    c.SenderName !== sessionName &&
-    !String(c.HiddenBy || '').includes(sessionName)
-  )
-
-  await Promise.all(toUpdate.map(c =>
-    supabase.from('Comments').update({
-      HiddenBy: c.HiddenBy ? `${c.HiddenBy},${sessionName}` : sessionName
-    }).eq('ID', c.ID)
-  ))
+  // Single atomic write via RPC (see mark-chat-read-rpc.sql) — avoids the
+  // N-individual-UPDATE race that let a stale resync clobber the store.
+  // Non-throwing: if the RPC hasn't been applied yet, chat still works,
+  // it just won't clear the unread badge server-side until it is.
+  const { error } = await supabase.rpc('mark_chat_read', { p_task_id: String(taskId), p_session_name: sessionName })
+  if (error) console.error('markChatRead failed:', error.message)
 }
 // ── GOOGLE AUTH ────────────────────────────────────────────────
 export async function signInWithGoogle() {
@@ -625,6 +712,8 @@ export async function handleGoogleCallback(selectedRegion = 'Region I') {
   })
 
   if (insertError) { console.error('Insert error:', insertError); return null }
+
+  await notifyDirectorsOfRegion(selectedRegion, `🆕 New Google sign-up pending approval: ${name} (${email})`)
 
   const { data: newUser } = await supabase.from('Users').select('*').eq('ID', newId).single()
   return { user: newUser, isNew: true }

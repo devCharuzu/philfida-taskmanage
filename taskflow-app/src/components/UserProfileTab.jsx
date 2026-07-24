@@ -290,6 +290,8 @@ export default function UserProfileTab({ presence, setPresence }) {
         ...(password?.trim() ? { Password: password.trim() } : {}),
       })
 
+      setPassword('')
+      setConfirmPassword('')
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
@@ -338,10 +340,10 @@ export default function UserProfileTab({ presence, setPresence }) {
   return (
     <div className="flex flex-col h-full bg-slate-50/30">
       {/* Header */}
-      <div className="px-6 md:px-8 py-5 border-b border-slate-150/80 bg-white flex-shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="font-extrabold text-slate-900 text-xl tracking-tight leading-none">My Profile</h2>
-          <p className="text-slate-400 text-xs mt-1.5 font-medium">Manage your personal details and active availability schedule</p>
+      <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
+        <div className="min-w-0">
+          <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">My Profile</h2>
+          <p className="text-slate-400 text-xs mt-1">Manage your personal details and active availability schedule</p>
         </div>
       </div>
 
@@ -525,9 +527,9 @@ export default function UserProfileTab({ presence, setPresence }) {
                   className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 hover:border-slate-350 transition-all group"
                 >
                   <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:text-emerald-700 transition-colors">
-                    <i className="bi bi-bell text-base" />
+                    <i className="bi bi-gear text-base" />
                   </div>
-                  <span className="text-sm font-semibold text-slate-700 flex-1 text-left">Notifications Settings</span>
+                  <span className="text-sm font-semibold text-slate-700 flex-1 text-left">Settings</span>
                   <i className="bi bi-chevron-right text-slate-300 group-hover:text-slate-500 transition-colors text-xs" />
                 </button>
 
@@ -644,33 +646,42 @@ export default function UserProfileTab({ presence, setPresence }) {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">New Password</span>
+                          <label className="label">New Password</label>
                           <div className="relative">
                             <input
                               type={showPassword ? 'text' : 'password'}
                               placeholder="Min. 8 characters"
-                              className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm pr-12 font-medium"
+                              className="input pr-10"
                               value={password}
                               onChange={e => setPassword(e.target.value)}
                             />
                             <button
                               type="button"
                               onClick={() => setShowPassword(prev => !prev)}
-                              className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-emerald-700 transition-colors"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                             >
-                              <i className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`} />
+                              <i className={`bi bi-${showPassword ? 'eye-slash' : 'eye'}`} />
                             </button>
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Confirm Password</span>
-                          <input
-                            type={showPassword ? 'text' : 'password'}
-                            placeholder="Re-type new password"
-                            className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm font-medium"
-                            value={confirmPassword}
-                            onChange={e => setConfirmPassword(e.target.value)}
-                          />
+                          <label className="label">Confirm Password</label>
+                          <div className="relative">
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              placeholder="Re-type new password"
+                              className="input pr-10"
+                              value={confirmPassword}
+                              onChange={e => setConfirmPassword(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(prev => !prev)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              <i className={`bi bi-${showPassword ? 'eye-slash' : 'eye'}`} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

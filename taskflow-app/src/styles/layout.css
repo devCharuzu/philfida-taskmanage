@@ -158,6 +158,14 @@
     }
   }
 
+  /* Collapsed (icon-only) sidebar — desktop only */
+  @media (min-width: 768px) {
+    .sidebar-responsive.sidebar-collapsed {
+      width: 64px;
+      min-width: 64px;
+    }
+  }
+
   /* === HEADER LAYOUT === */
   .header {
     background: white;
@@ -632,9 +640,12 @@
   .spacer-2xl { height: var(--space-16); }
 
   /* === VISIBILITY UTILITIES === */
+  /* Must match Tailwind's semantics — these were swapped, which made
+     `.hidden` apply visibility:hidden that `md:block` etc. never lift,
+     silently blanking every `hidden md:*` responsive element. */
   .visible { visibility: visible; }
-  .hidden { visibility: hidden; }
-  .invisible { display: none; }
+  .hidden { display: none; }
+  .invisible { visibility: hidden; }
 
   /* === SCREEN READER ONLY === */
   .screen-reader-only {

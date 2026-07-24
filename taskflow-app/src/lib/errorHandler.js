@@ -1,4 +1,4 @@
-// Standardized error handling utility for PhilFIDA TaskFlow
+// Standardized error handling utility for PhilFIDA Task Management System
 
 export class AppError extends Error {
   constructor(message, type = 'general', code = null) {
