@@ -487,12 +487,12 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
     <div className="flex flex-col h-full bg-slate-50/50">
       
       {/* ── HEADER ── */}
-      <div className="px-4 md:px-6 lg:px-8 py-5 border-b border-slate-200 bg-white flex-shrink-0">
+      <div className="px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0">
         <div>
-          <h2 className="font-bold text-green-900 text-xl leading-none">
+          <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">
             Personal Calendar &amp; Reminders
-          </h2>
-          <p className="text-slate-500 text-xs sm:text-sm mt-1.5 font-medium">Track your assigned task deadlines and organize personal reminders</p>
+          </h1>
+          <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">Track your assigned task deadlines and organize personal reminders</p>
         </div>
 
         {/* Stats strip */}
@@ -509,7 +509,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
       </div>
 
       {/* ── MAIN CONTENT GRID ── */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 py-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 pt-5 pb-6 custom-scrollbar">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 max-w-7xl mx-auto">
 
           {/* Left Column: Interactive Calendar (7 Cols) */}
@@ -705,8 +705,8 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                           key={t.TaskID} 
                           className={`border rounded-xl p-3 transition-all flex flex-col gap-2 relative group cursor-pointer hover:shadow-sm
                             ${isArchived 
-                              ? 'bg-slate-50/40 border-slate-200 border-dashed opacity-75 hover:opacity-100 hover:border-slate-350' 
-                              : 'bg-slate-50 border-slate-200 hover:border-emerald-250'}`}
+                              ? 'bg-slate-50/40 border-slate-200 border-dashed opacity-75 hover:opacity-100 hover:300' 
+                              : 'bg-slate-50 border-slate-200 hover:200'}`}
                           onClick={() => setSelectedDetailTask(t)}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -1235,7 +1235,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                 </span>
 
                 {String(selectedDetailTask.Archived).toUpperCase() === 'TRUE' && (
-                  <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-100 border-slate-350 text-slate-600 flex items-center gap-1.5 leading-none">
+                  <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-100 300 text-slate-600 flex items-center gap-1.5 leading-none">
                     <i className="bi bi-archive-fill text-slate-500" /> Archived Task
                   </span>
                 )}

@@ -223,10 +223,10 @@ export default function DashboardPage() {
                   </div>
                   {myTasks.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 xl:min-w-[520px]">
-                      <SummaryStat label="Active" value={activeCount} tone="green" icon="bi-activity" />
-                      <SummaryStat label="To Accept" value={assignedCount} tone="amber" icon="bi-inbox-fill" />
-                      <SummaryStat label="In Progress" value={receivedCount} tone="blue" icon="bi-arrow-repeat" />
-                      <SummaryStat label="Completed" value={completedCount} tone="slate" icon="bi-check2-circle" />
+                      <SummaryStat label="Active" value={activeCount} tone="green" icon="bi-activity" active={filterStatus === 'All'} onClick={() => setFilterStatus('All')} />
+                      <SummaryStat label="To Accept" value={assignedCount} tone="amber" icon="bi-inbox-fill" active={filterStatus === 'Assigned'} onClick={() => setFilterStatus('Assigned')} />
+                      <SummaryStat label="In Progress" value={receivedCount} tone="blue" icon="bi-arrow-repeat" active={filterStatus === 'Received'} onClick={() => setFilterStatus('Received')} />
+                      <SummaryStat label="Completed" value={completedCount} tone="slate" icon="bi-check2-circle" active={filterStatus === 'Completed'} onClick={() => setFilterStatus('Completed')} />
                     </div>
                   )}
                 </div>
@@ -426,21 +426,21 @@ const STATUS_TONES = {
     label:  'To accept',
     icon:   'bi-inbox-fill',
     accent: 'border-l-amber-400',
-    chip:   'bg-amber-50 text-amber-850 ring-amber-200',
+    chip:   'bg-amber-50 800 ring-amber-200',
     dot:    'bg-amber-500',
   },
   Received: {
     label:  'In progress',
     icon:   'bi-arrow-repeat',
     accent: 'border-l-blue-500',
-    chip:   'bg-blue-50 text-blue-850 ring-blue-200',
+    chip:   'bg-blue-50 800 ring-blue-200',
     dot:    'bg-blue-500',
   },
   Completed: {
     label:  'Completed',
     icon:   'bi-check2-circle',
     accent: 'border-l-green-600',
-    chip:   'bg-green-50 text-green-850 ring-green-200',
+    chip:   'bg-green-50 800 ring-green-200',
     dot:    'bg-green-600',
   },
 }
@@ -453,9 +453,14 @@ const PRIORITY_TONES = {
   Normal: 'bg-green-50 text-green-700 ring-green-200',
 }
 
-function SummaryStat({ label, value, tone, icon }) {
+function SummaryStat({ label, value, tone, icon, active, onClick }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-white px-3.5 py-3 shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`text-left rounded-xl border bg-white px-3.5 py-3 shadow-sm transition-all hover:shadow-md hover:border-slate-300 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-1 ${active ? 'border-green-600 ring-1 ring-green-600/30' : 'border-slate-100'}`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="mb-0 text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">{label}</p>
@@ -465,7 +470,7 @@ function SummaryStat({ label, value, tone, icon }) {
           <i className={`bi ${icon} text-sm`} />
         </span>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -521,20 +526,21 @@ function formatDate(iso) {
 
 function getDeadlineMeta(deadline, status) {
   if (!deadline) return { label: 'No deadline', className: 'text-slate-500', icon: 'bi-calendar' }
-  if (status === 'Completed') return { label: formatDate(deadline), className: 'text-slate-650 font-semibold', icon: 'bi-calendar-check' }
+  if (status === 'Completed') return { label: formatDate(deadline), className: '600 font-semibold', icon: 'bi-calendar-check' }
 
   const now = new Date()
   const due = new Date(deadline)
   const days = Math.ceil((due - now) / 86400000)
 
   if (Number.isNaN(due.getTime())) return { label: 'Invalid date', className: 'text-slate-500', icon: 'bi-calendar' }
-  if (days < 0) return { label: `${formatDate(deadline)} · Overdue`, className: 'text-red-750 font-bold', icon: 'bi-exclamation-triangle-fill' }
-  if (days === 0) return { label: `${formatDate(deadline)} · Due today`, className: 'text-red-750 font-bold', icon: 'bi-exclamation-circle-fill' }
+  if (days < 0) return { label: `${formatDate(deadline)} · Overdue`, className: '700 font-bold', icon: 'bi-exclamation-triangle-fill' }
+  if (days === 0) return { label: `${formatDate(deadline)} · Due today`, className: '700 font-bold', icon: 'bi-exclamation-circle-fill' }
   if (days <= 3) return { label: `${formatDate(deadline)} · ${days}d left`, className: 'text-amber-800 font-bold', icon: 'bi-clock-fill' }
-  return { label: formatDate(deadline), className: 'text-slate-750 font-semibold', icon: 'bi-calendar-event' }
+  return { label: formatDate(deadline), className: '700 font-semibold', icon: 'bi-calendar-event' }
 }
 
 function TaskCard({ task: t, session, comments, history = [], loading, onStatusUpdate, onOpenChat, onOpenFile }) {
+  const [showAll, setShowAll] = useState(false)
   const unreadChat = getUnreadCommentCount(comments, t.TaskID, session?.Name || '')
   const statusTone = STATUS_TONES[t.Status] || STATUS_TONES.Assigned
   const deadline = getDeadlineMeta(t.Deadline, t.Status)
@@ -584,10 +590,18 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
             <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Instructions</span>
             <p
               className="mb-0 text-sm text-slate-700 leading-relaxed font-medium"
-              style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+              style={showAll ? undefined : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
             >
               {t.Instructions}
             </p>
+            {t.Instructions.length > 160 && (
+              <button
+                onClick={() => setShowAll(v => !v)}
+                className="mt-2 text-xs font-bold text-green-700 hover:text-green-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 rounded"
+              >
+                {showAll ? 'Show less' : 'Show more'}
+              </button>
+            )}
           </div>
         )}
 

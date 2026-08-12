@@ -314,7 +314,7 @@ export default function UserProfileTab({ presence, setPresence }) {
         badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
         avatarClass: 'from-emerald-50 to-emerald-100/40 border-emerald-200/50 text-emerald-800 shadow-emerald-100/50',
         dotClass: 'bg-emerald-500',
-        roleText: 'text-emerald-750'
+        roleText: '700'
       }
     : session?.Role === 'Unit Head'
     ? {
@@ -328,26 +328,26 @@ export default function UserProfileTab({ presence, setPresence }) {
         badgeBg: 'bg-teal-50 text-teal-700 border-teal-100',
         avatarClass: 'from-teal-50 to-teal-100/40 border-teal-200/50 text-teal-800 shadow-teal-100/50',
         dotClass: 'bg-teal-500',
-        roleText: 'text-teal-750'
+        roleText: '700'
       }
     : {
         badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
         avatarClass: 'from-emerald-50 to-emerald-100/40 border-emerald-200/50 text-emerald-800 shadow-emerald-100/50',
         dotClass: 'bg-emerald-500',
-        roleText: 'text-emerald-750'
+        roleText: '700'
       }
 
   return (
     <div className="flex flex-col h-full bg-slate-50/30">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
+      <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
         <div className="min-w-0">
-          <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">My Profile</h2>
-          <p className="text-slate-400 text-xs mt-1">Manage your personal details and active availability schedule</p>
+          <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">My Profile</h1>
+          <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">Manage your personal details and active availability schedule</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 py-8 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 pt-5 pb-6 custom-scrollbar">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
 
           {/* Left Column: Status & Actions */}
@@ -382,7 +382,7 @@ export default function UserProfileTab({ presence, setPresence }) {
 
             {/* Availability Section */}
             <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-150/40 bg-slate-50/40">
+              <div className="px-5 py-4 border-b 100/40 bg-slate-50/40">
                 <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
                   <i className="bi bi-clock-history text-slate-600" />
                   My Availability
@@ -458,7 +458,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                           <div className="space-y-4">
                             <div>
                               <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Subject</span>
-                              <span className="text-sm text-slate-850 font-bold leading-tight mt-1 block">{statusData.title}</span>
+                              <span className="text-sm 800 font-bold leading-tight mt-1 block">{statusData.title}</span>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -514,7 +514,7 @@ export default function UserProfileTab({ presence, setPresence }) {
 
             {/* Account Actions Section */}
             <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-150/40 bg-slate-50/40">
+              <div className="px-5 py-4 border-b 100/40 bg-slate-50/40">
                 <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
                   <i className="bi bi-sliders text-emerald-605" />
                   System Controls
@@ -524,7 +524,7 @@ export default function UserProfileTab({ presence, setPresence }) {
               <div className="p-4 space-y-2">
                 <button
                   onClick={() => setSettingsOpen(true)}
-                  className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 hover:border-slate-350 transition-all group"
+                  className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 hover:300 transition-all group"
                 >
                   <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:text-emerald-700 transition-colors">
                     <i className="bi bi-gear text-base" />
@@ -551,7 +551,7 @@ export default function UserProfileTab({ presence, setPresence }) {
           {/* Right Column: Personal Details */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 order-1 lg:order-2">
             <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-150/40 bg-slate-50/40 flex items-center justify-between">
+              <div className="px-6 py-5 border-b 100/40 bg-slate-50/40 flex items-center justify-between">
                 <div>
                   <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
                     <i className="bi bi-person-badge text-emerald-600" />
@@ -568,7 +568,7 @@ export default function UserProfileTab({ presence, setPresence }) {
 
               <div className="p-6 md:p-8">
                 {error && (
-                  <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 text-red-650 text-xs rounded-xl px-4 py-3.5">
+                  <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 600 text-xs rounded-xl px-4 py-3.5">
                     <i className="bi bi-exclamation-circle-fill flex-shrink-0 text-red-500" />
                     <span className="font-semibold">{error}</span>
                   </div>
@@ -585,7 +585,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                     <div className="space-y-2">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Full Name</span>
                       <input
-                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-350 text-slate-800 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:300 text-slate-800 font-medium"
                         placeholder="e.g. Juan Dela Cruz"
                         value={name}
                         onChange={e => setName(e.target.value)}
@@ -597,7 +597,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Email Address</span>
                       <input
                         type="email"
-                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-350 text-slate-800 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:300 text-slate-800 font-medium"
                         placeholder="user@philfida.gov.ph"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
@@ -630,7 +630,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                     <div className="space-y-2">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Designation / Position</span>
                       <input
-                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-350 text-slate-800 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:300 text-slate-800 font-medium"
                         placeholder="e.g. Project Assistant II"
                         value={designation}
                         onChange={e => setDesignation(e.target.value)}
@@ -720,7 +720,7 @@ export default function UserProfileTab({ presence, setPresence }) {
             {/* Director's Availability Section */}
             {session?.Role !== 'Director' && director && (
               <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden mt-6">
-                <div className="px-6 py-5 border-b border-slate-150/40 bg-gradient-to-r from-emerald-50 to-emerald-100/50">
+                <div className="px-6 py-5 border-b 100/40 bg-gradient-to-r from-emerald-50 to-emerald-100/50">
                   <h3 className="font-extrabold text-emerald-900 text-xs uppercase tracking-wider flex items-center gap-2">
                     <i className="bi bi-shield-shaded text-emerald-600" aria-hidden="true" />
                     Director's Availability
@@ -1084,7 +1084,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                 <button
                   type="button"
                   onClick={() => setEditingReminder(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-250 text-slate-700 text-xs font-black uppercase rounded-xl transition-all"
+                  className="px-4 py-2 bg-slate-200 hover:200 text-slate-700 text-xs font-black uppercase rounded-xl transition-all"
                 >
                   Cancel
                 </button>
@@ -1137,7 +1137,7 @@ function SignedAttachmentLink({ path }) {
   }
   if (!url) {
     return (
-      <span className="inline-flex items-center gap-1 bg-red-50 border border-red-150 rounded-lg px-2.5 py-1 text-[9px] font-black text-red-650 uppercase select-none">
+      <span className="inline-flex items-center gap-1 bg-red-50 border 100 rounded-lg px-2.5 py-1 text-[9px] font-black 600 uppercase select-none">
         <i className="bi bi-exclamation-triangle-fill text-red-600" />
         Broken link
       </span>
@@ -1150,7 +1150,7 @@ function SignedAttachmentLink({ path }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 bg-green-50/60 hover:bg-green-50 border border-green-150 rounded-lg px-2.5 py-1 text-[9px] font-black text-green-800 uppercase transition-all hover:border-green-300 active:scale-95"
+      className="inline-flex items-center gap-1.5 bg-green-50/60 hover:bg-green-50 border 100 rounded-lg px-2.5 py-1 text-[9px] font-black text-green-800 uppercase transition-all hover:border-green-300 active:scale-95"
     >
       <i className="bi bi-file-earmark-arrow-down text-green-700 text-xs" />
       <span className="truncate max-w-[120px]">{filename}</span>

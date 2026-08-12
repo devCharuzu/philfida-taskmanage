@@ -187,8 +187,49 @@ function LoginRoute({ hydrated, error }) {
 }
 
 
+const IDLE_LIMIT_MS = 30 * 60 * 1000
+const IDLE_KEY = 'philfida_last_activity'
+
+async function forceLogout() {
+  await supabase.auth.signOut().catch(() => {})
+  useStore.getState().clearSession()
+  localStorage.removeItem('philfida_session')
+  localStorage.removeItem(IDLE_KEY)
+  window.location.href = '/'
+}
+
+/** Logs every role out after 30 min with no interaction. Timestamp lives in localStorage so
+ *  the countdown survives reloads and is shared across tabs. */
+function useIdleLogout() {
+  const session = useStore(s => s.session)
+
+  useEffect(() => {
+    if (!session) return
+
+    const touch = () => localStorage.setItem(IDLE_KEY, String(Date.now()))
+    const last = Number(localStorage.getItem(IDLE_KEY))
+    if (last && Date.now() - last > IDLE_LIMIT_MS) { forceLogout(); return }
+    touch()
+
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
+    events.forEach(e => window.addEventListener(e, touch, { passive: true }))
+
+    // ponytail: 30s poll instead of a rescheduled timer — cheap, and it also catches sleep/wake.
+    const id = setInterval(() => {
+      const t = Number(localStorage.getItem(IDLE_KEY))
+      if (t && Date.now() - t > IDLE_LIMIT_MS) forceLogout()
+    }, 30_000)
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, touch))
+      clearInterval(id)
+    }
+  }, [session])
+}
+
 export default function App() {
   const { hydrated, error } = useHydrated()
+  useIdleLogout()
 
   return (
     <Routes>
