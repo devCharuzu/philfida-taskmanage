@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useStore } from '../store/useStore'
-import { updateProfile, getSignedFileUrl, uploadFiles, UNITS, OFFICES } from '../lib/api'
+import { updateProfile, getSignedFileUrl, uploadFiles, UNITS, OFFICES, stripStatusMarkers, buildTravelStatus} from '../lib/api'
 import PresenceToggle, { normalizeStatus } from './PresenceToggle'
 import { supabase } from '../lib/supabase'
 import SettingsModal from './SettingsModal'
+const LocationPicker = lazy(() => import('./LocationPicker'))
 
 export default function UserProfileTab({ presence, setPresence }) {
   const session = useStore(s => s.session)
@@ -28,6 +29,8 @@ export default function UserProfileTab({ presence, setPresence }) {
   const [editingFields, setEditingFields] = useState({
     travelActivity: '',
     travelLocation: '',
+    travelLat: null,
+    travelLng: null,
     leaveType: 'Sick Leave',
     leaveReason: '',
     time: '08:00',
@@ -84,6 +87,8 @@ export default function UserProfileTab({ presence, setPresence }) {
     setEditingFields({
       travelActivity: isTravel ? statusData.title : '',
       travelLocation: isTravel ? statusData.location : '',
+      travelLat: activeReminder?.travelLat ?? null,
+      travelLng: activeReminder?.travelLng ?? null,
       leaveType: !isTravel ? statusData.title : 'Sick Leave',
       leaveReason: !isTravel ? statusData.reason : '',
       time: activeReminder?.time || '08:00',
@@ -100,9 +105,8 @@ export default function UserProfileTab({ presence, setPresence }) {
     const confirmed = window.confirm(`Note: Modifying your active ${isTravel ? 'Official Travel' : 'Leave'} details here will also update the corresponding calendar reminder on your Personal Calendar. Do you want to proceed?`)
     if (!confirmed) return
 
-    const newTitle = isTravel 
-      ? `Official Travel — ${editingFields.travelActivity} at ${editingFields.travelLocation}`
-      : `On Leave — ${editingFields.leaveType}: ${editingFields.leaveReason}`
+    // Travel goes through buildTravelStatus below; only the leave string is built here.
+    const leaveTitle = `On Leave — ${editingFields.leaveType}: ${editingFields.leaveReason}`
 
     // Format display date range with times
     const startDateObj = new Date(editingReminder.date)
@@ -114,7 +118,16 @@ export default function UserProfileTab({ presence, setPresence }) {
     const dateRangeStr = startStr === endStr ? startStr : `${startStr} to ${endStr}`
     const timeRangeStr = `${editingFields.time} to ${editingFields.returnTime}`
     
-    const presenceStr = `${newTitle} (${dateRangeStr} ${timeRangeStr})${editingFields.attachments ? ` [TO:${editingFields.attachments}]` : ''}`
+    const presenceStr = isTravel
+      ? buildTravelStatus({
+          activity: editingFields.travelActivity,
+          location: editingFields.travelLocation,
+          dateRange: `${dateRangeStr} ${timeRangeStr}`,
+          filePath: editingFields.attachments,
+          lat: editingFields.travelLat,
+          lng: editingFields.travelLng,
+        })
+      : `${leaveTitle} (${dateRangeStr} ${timeRangeStr})${editingFields.attachments ? ` [TO:${editingFields.attachments}]` : ''}`
 
     // Update real scheduled reminder in the reminders list if it exists, or create/update based on active-status
     let updatedReminders = [...reminders]
@@ -136,6 +149,8 @@ export default function UserProfileTab({ presence, setPresence }) {
             timeEnd: editingFields.returnTime,
             travelActivity: isTravel ? editingFields.travelActivity : undefined,
             travelLocation: isTravel ? editingFields.travelLocation : undefined,
+            travelLat: isTravel ? (editingFields.travelLat ?? null) : undefined,
+            travelLng: isTravel ? (editingFields.travelLng ?? null) : undefined,
             leaveType: !isTravel ? editingFields.leaveType : undefined,
             leaveReason: !isTravel ? editingFields.leaveReason : undefined,
             returnDate: editingFields.returnDate,
@@ -164,6 +179,8 @@ export default function UserProfileTab({ presence, setPresence }) {
         type: editingReminder.type,
         travelActivity: isTravel ? editingFields.travelActivity : undefined,
         travelLocation: isTravel ? editingFields.travelLocation : undefined,
+        travelLat: isTravel ? (editingFields.travelLat ?? null) : undefined,
+        travelLng: isTravel ? (editingFields.travelLng ?? null) : undefined,
         leaveType: !isTravel ? editingFields.leaveType : undefined,
         leaveReason: !isTravel ? editingFields.leaveReason : undefined,
         returnDate: editingFields.returnDate,
@@ -309,33 +326,12 @@ export default function UserProfileTab({ presence, setPresence }) {
     window.location.href = '/'
   }
 
-  const roleTheme = session?.Role === 'Director'
-    ? {
-        badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-        avatarClass: 'from-emerald-50 to-emerald-100/40 border-emerald-200/50 text-emerald-800 shadow-emerald-100/50',
-        dotClass: 'bg-emerald-500',
-        roleText: '700'
-      }
-    : session?.Role === 'Unit Head'
-    ? {
-        badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-100',
-        avatarClass: 'from-indigo-50 to-indigo-100/40 border-indigo-200/50 text-indigo-800 shadow-indigo-100/50',
-        dotClass: 'bg-indigo-500',
-        roleText: 'text-indigo-700'
-      }
-    : session?.Role === 'Records'
-    ? {
-        badgeBg: 'bg-teal-50 text-teal-700 border-teal-100',
-        avatarClass: 'from-teal-50 to-teal-100/40 border-teal-200/50 text-teal-800 shadow-teal-100/50',
-        dotClass: 'bg-teal-500',
-        roleText: '700'
-      }
-    : {
-        badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-        avatarClass: 'from-emerald-50 to-emerald-100/40 border-emerald-200/50 text-emerald-800 shadow-emerald-100/50',
-        dotClass: 'bg-emerald-500',
-        roleText: '700'
-      }
+  const ROLE_TEXT = {
+    'Director':  'text-emerald-700',
+    'Unit Head': 'text-indigo-700',
+    'Records':   'text-teal-700',
+  }
+  const roleTheme = { roleText: ROLE_TEXT[session?.Role] || 'text-emerald-700' }
 
   return (
     <div className="flex flex-col h-full bg-slate-50/30">
@@ -343,7 +339,6 @@ export default function UserProfileTab({ presence, setPresence }) {
       <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
         <div className="min-w-0">
           <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">My Profile</h1>
-          <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">Manage your personal details and active availability schedule</p>
         </div>
       </div>
 
@@ -353,40 +348,29 @@ export default function UserProfileTab({ presence, setPresence }) {
           {/* Left Column: Status & Actions */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6 order-2 lg:order-1">
 
-            {/* User Info Overview Badge */}
-            <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-              {/* Ambient accent glows */}
-              <div className="absolute -right-10 -top-10 w-28 h-28 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
-              <div className="absolute -left-10 -bottom-10 w-28 h-28 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
-              
-              <div className="relative flex items-center gap-4">
-                <div className="min-w-0 flex-1">
-                  <h4 className="font-extrabold text-base text-slate-800 tracking-tight leading-tight uppercase">{session?.Name}</h4>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${roleTheme.roleText}`}>{session?.Role || 'User'}</span>
-                  </div>
-                </div>
-              </div>
+            {/* Identity card */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-0 text-base font-bold leading-tight tracking-tight text-slate-900">{session?.Name}</h2>
+              <p className={`mb-0 mt-1 text-[11px] font-semibold uppercase tracking-wide ${roleTheme.roleText}`}>
+                {session?.Role || 'User'}
+              </p>
 
-              <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Region</span>
-                  <span className="font-bold text-xs text-slate-700 mt-1 block">{session?.Region || 'Central Office'}</span>
+              <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Region</dt>
+                  <dd className="m-0 mt-1 truncate text-[13px] font-semibold text-slate-700">{session?.Region || 'Central Office'}</dd>
                 </div>
-                <div>
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Unit / Office</span>
-                  <span className="font-bold text-xs text-slate-700 mt-1 block truncate">{session?.Designation || session?.Unit || session?.Office || 'N/A'}</span>
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Unit / Office</dt>
+                  <dd className="m-0 mt-1 truncate text-[13px] font-semibold text-slate-700">{session?.Unit || session?.Office || '—'}</dd>
                 </div>
-              </div>
+              </dl>
             </div>
 
             {/* Availability Section */}
             <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b 100/40 bg-slate-50/40">
-                <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
-                  <i className="bi bi-clock-history text-slate-600" />
-                  My Availability
-                </h3>
+              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+                <h3 className="mb-0 text-[11px] font-bold uppercase tracking-wider text-slate-500">My Availability</h3>
               </div>
               <div className="p-5 space-y-5">
                 <PresenceToggle value={presence} userId={session?.ID} onChange={setPresence} size="large" />
@@ -397,7 +381,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                     const fileMatch = presence.match(/\[TO:(.*?)\]/)
                     const fileUrl = fileMatch ? fileMatch[1] : null
                     const attachments = fileUrl || ''
-                    const cleanStr = presence.replace(/\[TO:.*?\]/, '').trim()
+                    const cleanStr = stripStatusMarkers(presence)
 
                     if (cleanStr.startsWith('Official Travel — ')) {
                       const content = cleanStr.replace('Official Travel — ', '')
@@ -424,63 +408,44 @@ export default function UserProfileTab({ presence, setPresence }) {
 
                   const statusTheme = statusData.type === 'Official Travel'
                     ? {
-                        bg: 'bg-blue-50/15 border-blue-200/50',
-                        iconBg: 'bg-white border-blue-200/60 text-blue-600',
-                        iconClass: 'bi-airplane',
-                        buttonClass: 'bg-blue-600 hover:bg-blue-700 shadow-blue-100/50',
-                        labelClass: 'text-blue-500'
+                        bg: 'bg-blue-50/50 border-blue-200',
+                        buttonClass: 'bg-blue-600 hover:bg-blue-700',
+                        labelClass: 'text-blue-600'
                       }
                     : statusData.type === 'On Leave'
                     ? {
-                        bg: 'bg-rose-50/15 border-rose-200/50',
-                        iconBg: 'bg-white border-rose-200/60 text-rose-600',
-                        iconClass: 'bi-calendar4-event',
-                        buttonClass: 'bg-rose-600 hover:bg-rose-700 shadow-rose-100/50',
-                        labelClass: 'text-rose-500'
+                        bg: 'bg-rose-50/50 border-rose-200',
+                        buttonClass: 'bg-rose-600 hover:bg-rose-700',
+                        labelClass: 'text-rose-600'
                       }
                     : {
-                        bg: 'bg-slate-50 border-slate-200/60',
-                        iconBg: 'bg-white border-slate-200/80 text-slate-600',
-                        iconClass: 'bi-info-circle',
-                        buttonClass: 'bg-slate-900 hover:bg-slate-800 shadow-slate-100/50',
+                        bg: 'bg-slate-50 border-slate-200',
+                        buttonClass: 'bg-slate-900 hover:bg-slate-800',
                         labelClass: 'text-slate-500'
                       }
 
                   return (
-                    <div className={`border rounded-xl p-5 flex flex-col gap-4 transition-all hover:opacity-95 ${statusTheme.bg}`}>
-                      <div className="flex items-start gap-4">
-                        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center flex-shrink-0 shadow-sm ${statusTheme.iconBg}`}>
-                          <i className={`bi text-xl ${statusTheme.iconClass}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider block mb-2 ${statusTheme.labelClass}`}>Current Status Detail</span>
+                    <div className={`flex flex-col gap-3 rounded-xl border p-3.5 ${statusTheme.bg}`}>
+                      <div>
+                        <p className={`mb-0 text-[10px] font-semibold uppercase tracking-wider ${statusTheme.labelClass}`}>
+                          {statusData.type}
+                        </p>
+                        <p className="mb-0 mt-1 text-sm font-semibold leading-snug text-slate-800">{statusData.title}</p>
 
-                          <div className="space-y-4">
-                            <div>
-                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Subject</span>
-                              <span className="text-sm 800 font-bold leading-tight mt-1 block">{statusData.title}</span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              {statusData.type === 'Official Travel' ? (
-                                <div>
-                                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Location</span>
-                                  <span className="text-xs text-slate-700 font-bold mt-1 block">{statusData.location || '—'}</span>
-                                </div>
-                              ) : (
-                                <div>
-                                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Reason</span>
-                                  <span className="text-xs text-slate-700 font-bold mt-1 block">{statusData.reason || '—'}</span>
-                                </div>
-                              )}
-
-                              <div>
-                                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Effective</span>
-                                <span className="text-xs text-slate-700 font-bold mt-1 block">{statusData.dates || '—'}</span>
-                              </div>
-                            </div>
+                        <dl className="mt-3 grid grid-cols-2 gap-4 border-t border-slate-200/70 pt-3">
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                              {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
+                            </dt>
+                            <dd className="m-0 mt-1 text-[13px] font-semibold leading-snug text-slate-700">
+                              {(statusData.type === 'Official Travel' ? statusData.location : statusData.reason) || '—'}
+                            </dd>
                           </div>
-                        </div>
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Effective</dt>
+                            <dd className="m-0 mt-1 text-[13px] font-semibold leading-snug text-slate-700">{statusData.dates || '—'}</dd>
+                          </div>
+                        </dl>
                       </div>
 
                       {/* Display attached documents with signed links */}
@@ -514,34 +479,31 @@ export default function UserProfileTab({ presence, setPresence }) {
 
             {/* Account Actions Section */}
             <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b 100/40 bg-slate-50/40">
-                <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
-                  <i className="bi bi-sliders text-emerald-605" />
-                  System Controls
-                </h3>
+              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+                <h3 className="mb-0 text-[11px] font-bold uppercase tracking-wider text-slate-500">System Controls</h3>
               </div>
 
-              <div className="p-4 space-y-2">
+              <div className="p-5 space-y-2">
                 <button
                   onClick={() => setSettingsOpen(true)}
-                  className="w-full flex items-center gap-4 px-4 py-3 bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 hover:300 transition-all group"
+                  className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:text-emerald-700 transition-colors">
-                    <i className="bi bi-gear text-base" />
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors group-hover:text-emerald-700">
+                    <i className="bi bi-gear text-base" aria-hidden="true" />
                   </div>
-                  <span className="text-sm font-semibold text-slate-700 flex-1 text-left">Settings</span>
-                  <i className="bi bi-chevron-right text-slate-300 group-hover:text-slate-500 transition-colors text-xs" />
+                  <span className="flex-1 text-left text-sm font-semibold text-slate-700">Settings</span>
+                  <i className="bi bi-chevron-right text-xs text-slate-300 transition-colors group-hover:text-slate-500" aria-hidden="true" />
                 </button>
 
                 <button
                   onClick={logout}
-                  className="w-full flex items-center gap-4 px-4 py-3 bg-red-50/60 hover:bg-red-50 border border-red-200/60 rounded-xl transition-all group"
+                  className="group flex w-full items-center gap-3 rounded-xl border border-red-200 bg-red-50/60 px-4 py-3 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center text-red-600 group-hover:bg-red-500/20 transition-colors">
-                    <i className="bi bi-box-arrow-right text-base" />
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600 transition-colors group-hover:bg-red-500/20">
+                    <i className="bi bi-box-arrow-right text-base" aria-hidden="true" />
                   </div>
-                  <span className="text-sm font-semibold text-red-700 flex-1 text-left">Sign Out Account</span>
-                  <i className="bi bi-arrow-right text-red-400 group-hover:text-red-600 transition-colors text-sm" />
+                  <span className="flex-1 text-left text-sm font-semibold text-red-700">Sign Out Account</span>
+                  <i className="bi bi-chevron-right text-xs text-red-300 transition-colors group-hover:text-red-500" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -551,31 +513,20 @@ export default function UserProfileTab({ presence, setPresence }) {
           {/* Right Column: Personal Details */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 order-1 lg:order-2">
             <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b 100/40 bg-slate-50/40 flex items-center justify-between">
-                <div>
-                  <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
-                    <i className="bi bi-person-badge text-emerald-600" />
-                    Personal Details
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 font-medium">Update your profile parameters and security credentials</p>
-                </div>
-                <div className="hidden sm:block">
-                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase rounded-lg border border-emerald-100">
-                    Profile Settings
-                  </span>
-                </div>
+              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+                <h3 className="mb-0 text-[11px] font-bold uppercase tracking-wider text-slate-500">Personal Details</h3>
               </div>
 
               <div className="p-6 md:p-8">
                 {error && (
-                  <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 600 text-xs rounded-xl px-4 py-3.5">
+                  <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3.5">
                     <i className="bi bi-exclamation-circle-fill flex-shrink-0 text-red-500" />
                     <span className="font-semibold">{error}</span>
                   </div>
                 )}
                 {success && (
                   <div className="mb-6 flex items-center gap-3 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs rounded-xl px-4 py-3.5">
-                    <i className="bi bi-check-circle-fill flex-shrink-0 text-emerald-605" />
+                    <i className="bi bi-check-circle-fill flex-shrink-0 text-emerald-600" />
                     <span className="font-semibold">Profile details updated successfully.</span>
                   </div>
                 )}
@@ -583,9 +534,10 @@ export default function UserProfileTab({ presence, setPresence }) {
                 <form onSubmit={handleSubmit} className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Full Name</span>
+                      <label htmlFor="pf-name" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Full Name</label>
                       <input
-                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:300 text-slate-800 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-300 text-slate-800 font-medium"
+                        id="pf-name"
                         placeholder="e.g. Juan Dela Cruz"
                         value={name}
                         onChange={e => setName(e.target.value)}
@@ -594,10 +546,11 @@ export default function UserProfileTab({ presence, setPresence }) {
                     </div>
 
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Email Address</span>
+                      <label htmlFor="pf-email" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
                       <input
                         type="email"
-                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:300 text-slate-800 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-300 text-slate-800 font-medium"
+                        id="pf-email"
                         placeholder="user@philfida.gov.ph"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
@@ -605,15 +558,16 @@ export default function UserProfileTab({ presence, setPresence }) {
                     </div>
 
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Unit / Office</span>
+                      <label htmlFor="pf-unit" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Unit / Office</label>
                       <div className="relative">
                         <select
                            className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm text-slate-800 font-medium appearance-none disabled:opacity-60 disabled:bg-slate-100/50"
+                          id="pf-unit"
                           value={unit}
                           onChange={e => setUnit(e.target.value)}
                           disabled={session?.Role !== 'Director'}
                         >
-                          <option value="">-- Select Unit/Office --</option>
+                          <option value="">Select Unit/Office</option>
                           {(session?.Role === 'Director' || session?.Role === 'Records' ? OFFICES : UNITS).map(u => (
                             <option key={u} value={u}>{u}</option>
                           ))}
@@ -628,9 +582,10 @@ export default function UserProfileTab({ presence, setPresence }) {
                     </div>
 
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-1">Designation / Position</span>
+                      <label htmlFor="pf-designation" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Designation / Position</label>
                       <input
-                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:300 text-slate-800 font-medium"
+                        className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-300 text-slate-800 font-medium"
+                        id="pf-designation"
                         placeholder="e.g. Project Assistant II"
                         value={designation}
                         onChange={e => setDesignation(e.target.value)}
@@ -641,17 +596,18 @@ export default function UserProfileTab({ presence, setPresence }) {
                   {!isGoogleUser ? (
                     <div className="pt-8 border-t border-slate-100">
                       <div className="mb-6">
-                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Security Credentials</h4>
-                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Leave blank to keep your current password</p>
+                        <h4 className="mb-0 text-[11px] font-bold uppercase tracking-wider text-slate-500">Security Credentials</h4>
+                        <p className="mb-0 mt-1 text-[11px] text-slate-400">Leave blank to keep your current password</p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="label">New Password</label>
+                          <label htmlFor="pf-password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">New Password</label>
                           <div className="relative">
                             <input
                               type={showPassword ? 'text' : 'password'}
+                              id="pf-password"
                               placeholder="Min. 8 characters"
-                              className="input pr-10"
+                              className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-300 text-slate-800 font-medium pr-11"
                               value={password}
                               onChange={e => setPassword(e.target.value)}
                             />
@@ -665,12 +621,13 @@ export default function UserProfileTab({ presence, setPresence }) {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className="label">Confirm Password</label>
+                          <label htmlFor="pf-confirm" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Confirm Password</label>
                           <div className="relative">
                             <input
                               type={showPassword ? 'text' : 'password'}
+                              id="pf-confirm"
                               placeholder="Re-type new password"
-                              className="input pr-10"
+                              className="w-full bg-slate-50/30 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-600 outline-none transition-all shadow-sm placeholder:text-slate-300 text-slate-800 font-medium pr-11"
                               value={confirmPassword}
                               onChange={e => setConfirmPassword(e.target.value)}
                             />
@@ -720,61 +677,40 @@ export default function UserProfileTab({ presence, setPresence }) {
             {/* Director's Availability Section */}
             {session?.Role !== 'Director' && director && (
               <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden mt-6">
-                <div className="px-6 py-5 border-b 100/40 bg-gradient-to-r from-emerald-50 to-emerald-100/50">
-                  <h3 className="font-extrabold text-emerald-900 text-xs uppercase tracking-wider flex items-center gap-2">
-                    <i className="bi bi-shield-shaded text-emerald-600" aria-hidden="true" />
-                    Director's Availability
-                  </h3>
+                <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+                  <h3 className="mb-0 text-[11px] font-bold uppercase tracking-wider text-slate-500">Director&apos;s Availability</h3>
                 </div>
 
-                <div className="p-6">
-                  {/* Director Status Card */}
-                  <div className="mb-6 p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl border border-slate-200/60 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="font-extrabold text-slate-800 text-sm leading-tight uppercase tracking-tight">{director.Name}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span 
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm
-                              ${normalizeStatus(director.Status) === 'Available' 
-                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-emerald-100/50' 
-                                : normalizeStatus(director.Status) === 'Official Travel' 
-                                  ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-blue-100/50' 
-                                  : 'bg-rose-100 text-rose-700 border border-rose-200 shadow-rose-100/50'
-                              }`}
-                            aria-label={`Director status: ${normalizeStatus(director.Status)}`}
-                          >
-                            {normalizeStatus(director.Status)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="ml-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md
-                          ${normalizeStatus(director.Status) === 'Available' 
-                            ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-emerald-500/30' 
-                            : normalizeStatus(director.Status) === 'Official Travel' 
-                              ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/30' 
-                              : 'bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-rose-500/30'
-                          }`}
-                          aria-hidden="true"
-                        >
-                          <i className={`bi text-xl
-                            ${normalizeStatus(director.Status) === 'Available' 
-                              ? 'bi-check-circle' 
-                              : normalizeStatus(director.Status) === 'Official Travel' 
-                                ? 'bi-airplane' 
-                                : 'bi-calendar-x'
-                            }`} />
-                        </div>
-                      </div>
+                <div className="p-5">
+                  {/* Director status summary */}
+                  <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3.5">
+                    <div className="min-w-0">
+                      <p className="mb-0 truncate text-sm font-bold leading-tight tracking-tight text-slate-900">{director.Name}</p>
+                      <p className="mb-0 mt-1 text-[11px] text-slate-500 leading-tight">Approving Director</p>
                     </div>
+                    <span
+                      className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1
+                        ${normalizeStatus(director.Status) === 'Available'
+                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                          : normalizeStatus(director.Status) === 'Official Travel'
+                            ? 'bg-blue-50 text-blue-700 ring-blue-200'
+                            : 'bg-rose-50 text-rose-700 ring-rose-200'
+                        }`}
+                      aria-label={`Director status: ${normalizeStatus(director.Status)}`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full
+                        ${normalizeStatus(director.Status) === 'Available' ? 'bg-emerald-500'
+                          : normalizeStatus(director.Status) === 'Official Travel' ? 'bg-blue-500' : 'bg-rose-500'}`}
+                        aria-hidden="true" />
+                      {normalizeStatus(director.Status)}
+                    </span>
                   </div>
 
                   {director.Status && director.Status !== 'Available' ? (() => {
                     const statusData = (() => {
                       const fileMatch = director.Status.match(/\[TO:(.*?)\]/)
                       const fileUrl = fileMatch ? fileMatch[1] : null
-                      const cleanStr = director.Status.replace(/\[TO:.*?\]/, '').trim()
+                      const cleanStr = stripStatusMarkers(director.Status)
 
                       if (cleanStr.startsWith('Official Travel — ')) {
                         const content = cleanStr.replace('Official Travel — ', '')
@@ -799,57 +735,39 @@ export default function UserProfileTab({ presence, setPresence }) {
 
                     const dirTheme = statusData.type === 'Official Travel'
                       ? {
-                          blockBg: 'bg-blue-50/30 border-blue-200/60',
-                          iconBg: 'bg-blue-100 text-blue-600 border-blue-200',
-                          iconClass: 'bi-airplane',
-                          labelColor: 'text-blue-600',
-                          headerBg: 'from-blue-500 to-blue-600'
+                          blockBg: 'bg-blue-50/50 border-blue-200',
+                          labelColor: 'text-blue-600'
                         }
                       : statusData.type === 'On Leave'
                       ? {
-                          blockBg: 'bg-rose-50/30 border-rose-200/60',
-                          iconBg: 'bg-rose-100 text-rose-600 border-rose-200',
-                          iconClass: 'bi-calendar4-event',
-                          labelColor: 'text-rose-600',
-                          headerBg: 'from-rose-500 to-rose-600'
+                          blockBg: 'bg-rose-50/50 border-rose-200',
+                          labelColor: 'text-rose-600'
                         }
                       : {
-                          blockBg: 'bg-slate-50/50 border-slate-200/60',
-                          iconBg: 'bg-slate-100 text-slate-600 border-slate-200',
-                          iconClass: 'bi-info-circle',
-                          labelColor: 'text-slate-500',
-                          headerBg: 'from-slate-500 to-slate-600'
+                          blockBg: 'bg-slate-50 border-slate-200',
+                          labelColor: 'text-slate-500'
                         }
 
                     return (
                       <div className="space-y-4" role="region" aria-label={`Director ${statusData.type} details`}>
-                        <div className={`p-5 rounded-2xl border ${dirTheme.blockBg} bg-gradient-to-br ${dirTheme.blockBg}`}>
-                          <div className="flex items-start gap-4 mb-4">
-                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center flex-shrink-0 shadow-sm ${dirTheme.iconBg}`}>
-                              <i className={`bi text-lg ${dirTheme.iconClass}`} aria-hidden="true" />
-                            </div>
-                            <div className="flex-1">
-                              <span className={`text-[10px] font-bold uppercase tracking-wider block mb-2 ${dirTheme.labelColor}`}>
-                                {statusData.type} Details
-                              </span>
-                              <p className="text-sm text-slate-800 font-bold leading-tight">{statusData.title}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-200/50">
-                            <div>
-                              <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1 ${dirTheme.labelColor}`}>
+                        <div className={`rounded-xl border p-3.5 ${dirTheme.blockBg}`}>
+                          <p className={`mb-0 text-[10px] font-semibold uppercase tracking-wider ${dirTheme.labelColor}`}>
+                            {statusData.type}
+                          </p>
+                          <p className="mb-0 mt-1 text-sm font-semibold leading-snug text-slate-800">{statusData.title}</p>
+
+                          <dl className="mt-3 grid grid-cols-2 gap-4 border-t border-slate-200/70 pt-3">
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                                 {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
-                              </span>
-                              <p className="text-sm text-slate-700 font-medium leading-tight">{statusData.location || statusData.reason || '—'}</p>
+                              </dt>
+                              <dd className="m-0 mt-1 text-[13px] font-semibold leading-snug text-slate-700">{statusData.location || statusData.reason || '—'}</dd>
                             </div>
-                            <div>
-                              <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1 ${dirTheme.labelColor}`}>
-                                Duration
-                              </span>
-                              <p className="text-sm text-slate-700 font-medium leading-tight">{statusData.dates || '—'}</p>
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Duration</dt>
+                              <dd className="m-0 mt-1 text-[13px] font-semibold leading-snug text-slate-700">{statusData.dates || '—'}</dd>
                             </div>
-                          </div>
+                          </dl>
                         </div>
 
                         {statusData.fileUrl && (
@@ -878,16 +796,13 @@ export default function UserProfileTab({ presence, setPresence }) {
                       </div>
                     )
                   })() : (
-                    <div 
-                      className="py-10 text-center bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 rounded-2xl border border-dashed border-emerald-200/60"
+                    <div
+                      className="rounded-xl border border-dashed border-slate-200 py-6 text-center"
                       role="status"
                       aria-label="Director is currently available with no scheduled events"
                     >
-                      <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-emerald-100 flex items-center justify-center">
-                        <i className="bi bi-check-circle text-emerald-500 text-2xl" aria-hidden="true" />
-                      </div>
-                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-1">Director Available</p>
-                      <p className="text-[10px] text-emerald-600/70 font-medium">No scheduled events at this time</p>
+                      <p className="mb-0 text-[13px] font-semibold text-slate-700">Director available</p>
+                      <p className="mb-0 mt-1 text-[11px] text-slate-500">No scheduled events at this time</p>
                     </div>
                   )}
                 </div>
@@ -904,11 +819,7 @@ export default function UserProfileTab({ presence, setPresence }) {
         const isTravel = editingReminder.type === 'travel'
         
         // Setup context-aware color themes
-        const headerGradient = isTravel 
-          ? 'from-blue-600 to-indigo-600' 
-          : 'from-red-600 to-rose-600'
-        
-        const subtitleText = isTravel ? 'text-blue-100' : 'text-red-100'
+        const subtitleText = isTravel ? 'text-blue-100/80' : 'text-red-100/80'
         const borderFocus = isTravel 
           ? 'focus:border-blue-400 focus:ring-blue-400/20' 
           : 'focus:border-red-400 focus:ring-red-400/20'
@@ -927,30 +838,24 @@ export default function UserProfileTab({ presence, setPresence }) {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
             <div className="bg-white border border-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in-up">
               
-              {/* Modal Header */}
-              <div className={`bg-gradient-to-r ${headerGradient} px-6 py-4 flex items-center justify-between text-white`}>
-                <div>
-                  <h3 className="text-sm sm:text-base font-black leading-tight uppercase tracking-wide">
-                    Edit Availability Presence
-                  </h3>
-                  <p className={`text-[10px] ${subtitleText} font-black mt-1 uppercase flex items-center gap-1.5`}>
-                    {isTravel ? (
-                      <>
-                        <i className="bi bi-airplane-fill" /> Official Travel
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-calendar-event-fill" /> On Leave
-                      </>
-                    )}
+              {/* Modal Header — same pattern as the Travel/Leave/Settings modals */}
+              <div className={`flex items-center gap-3 px-6 py-4 rounded-t-2xl ${isTravel ? 'bg-blue-700' : 'bg-red-700'}`}>
+                <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <i className={`bi ${isTravel ? 'bi-airplane-fill' : 'bi-calendar-event-fill'} text-white text-base`} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Edit availability</p>
+                  <p className={`mb-0 mt-0.5 text-[11px] font-medium leading-tight ${subtitleText}`}>
+                    {isTravel ? 'Official Travel' : 'On Leave'}
                   </p>
                 </div>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setEditingReminder(null)}
-                  className="text-white/85 hover:text-white text-2xl font-bold p-1 leading-none select-none transition-colors"
+                  aria-label="Close"
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                 >
-                  &times;
+                  <i className="bi bi-x-lg text-sm" />
                 </button>
               </div>
 
@@ -970,16 +875,21 @@ export default function UserProfileTab({ presence, setPresence }) {
                         onChange={e => setEditingFields(prev => ({ ...prev, travelActivity: e.target.value }))}
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Travel Location</label>
-                      <input
-                        type="text"
-                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold ${borderFocus} outline-none`}
-                        placeholder="e.g. Region I Office, Quezon City"
+                    <Suspense fallback={
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Location / Venue</label>
+                        <div className="h-[60px] rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
+                      </div>
+                    }>
+                      <LocationPicker
                         value={editingFields.travelLocation}
-                        onChange={e => setEditingFields(prev => ({ ...prev, travelLocation: e.target.value }))}
+                        initialCoords={editingFields.travelLat != null && editingFields.travelLng != null
+                          ? { lat: editingFields.travelLat, lng: editingFields.travelLng } : null}
+                        onChange={({ address, lat, lng }) => setEditingFields(prev => ({
+                          ...prev, travelLocation: address, travelLat: lat, travelLng: lng,
+                        }))}
                       />
-                    </div>
+                    </Suspense>
                   </>
                 ) : (
                   <>
@@ -1084,7 +994,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                 <button
                   type="button"
                   onClick={() => setEditingReminder(null)}
-                  className="px-4 py-2 bg-slate-200 hover:200 text-slate-700 text-xs font-black uppercase rounded-xl transition-all"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-black uppercase rounded-xl transition-all"
                 >
                   Cancel
                 </button>
@@ -1137,7 +1047,7 @@ function SignedAttachmentLink({ path }) {
   }
   if (!url) {
     return (
-      <span className="inline-flex items-center gap-1 bg-red-50 border 100 rounded-lg px-2.5 py-1 text-[9px] font-black 600 uppercase select-none">
+      <span className="inline-flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1 text-[9px] font-black text-red-600 uppercase select-none">
         <i className="bi bi-exclamation-triangle-fill text-red-600" />
         Broken link
       </span>
@@ -1150,7 +1060,7 @@ function SignedAttachmentLink({ path }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 bg-green-50/60 hover:bg-green-50 border 100 rounded-lg px-2.5 py-1 text-[9px] font-black text-green-800 uppercase transition-all hover:border-green-300 active:scale-95"
+      className="inline-flex items-center gap-1.5 bg-green-50/60 hover:bg-green-50 border border-green-100 rounded-lg px-2.5 py-1 text-[9px] font-black text-green-800 uppercase transition-all hover:border-green-300 active:scale-95"
     >
       <i className="bi bi-file-earmark-arrow-down text-green-700 text-xs" />
       <span className="truncate max-w-[120px]">{filename}</span>

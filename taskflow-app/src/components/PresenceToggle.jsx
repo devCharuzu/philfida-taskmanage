@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, lazy, Suspense} from 'react'
 import { createPortal } from 'react-dom'
-import { updatePresence, uploadFiles } from '../lib/api'
+const LocationPicker = lazy(() => import('./LocationPicker'))
+import { updatePresence, uploadFiles, buildTravelStatus } from '../lib/api'
 
 // ── Exported helper: normalizes stored status string to base key ──
 export function normalizeStatus(raw) {
@@ -89,6 +90,7 @@ function ChangeConfirmModal({ current, target, onConfirm, onCancel }) {
 function TravelModal({ onConfirm, onCancel }) {
   const [eventName, setEventName] = useState('')
   const [location,  setLocation]  = useState('')
+  const [geo,       setGeo]       = useState(null)   // { lat, lng } once pinned
   const [dateStart, setDateStart] = useState('')
   const [timeStart, setTimeStart] = useState('08:00')
   const [dateEnd,   setDateEnd]   = useState('')
@@ -104,7 +106,7 @@ function TravelModal({ onConfirm, onCancel }) {
     if (files.length === 0) { setError('Travel Order file is required.'); return }
     if (dateEnd < dateStart) { setError('End date must be after start date.'); return }
     if (dateEnd === dateStart && timeEnd <= timeStart) { setError('End time must be after start time on same day.'); return }
-    onConfirm({ eventName, location, dateStart, timeStart, dateEnd, timeEnd, files })
+    onConfirm({ eventName, location, lat: geo?.lat ?? null, lng: geo?.lng ?? null, dateStart, timeStart, dateEnd, timeEnd, files })
   }
 
   return createPortal(
@@ -113,15 +115,22 @@ function TravelModal({ onConfirm, onCancel }) {
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
         onClick={e => e.target === e.currentTarget && onCancel()}>
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
-          <div className="flex items-center gap-4 px-6 py-5 rounded-t-2xl"
-            style={{ background: 'linear-gradient(135deg, #1e40af, #2563eb)' }}>
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
-              <i className="bi bi-airplane-fill text-white text-lg" />
+          <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-blue-700">
+            <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+              <i className="bi bi-airplane-fill text-white text-base" aria-hidden="true" />
             </div>
-            <div>
-              <p className="text-white font-black text-sm uppercase tracking-tight leading-none">Official Travel</p>
-              <p className="text-blue-200/80 text-[10px] mt-1 font-bold uppercase tracking-widest">Travel Order Required</p>
+            <div className="min-w-0 flex-1">
+              <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Official Travel</p>
+              <p className="mb-0 mt-0.5 text-blue-100/80 text-[11px] font-medium leading-tight">Travel order required</p>
             </div>
+            <button
+              type="button"
+              onClick={onCancel}
+              aria-label="Close"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <i className="bi bi-x-lg text-sm" />
+            </button>
           </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
@@ -131,12 +140,20 @@ function TravelModal({ onConfirm, onCancel }) {
               placeholder="e.g. Regional Fiber Industry Summit"
               value={eventName} onChange={e => setEventName(e.target.value)} autoFocus />
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location / Venue</label>
-            <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
-              placeholder="e.g. Manila Hotel, Manila"
-              value={location} onChange={e => setLocation(e.target.value)} />
-          </div>
+          <Suspense fallback={
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location / Venue</label>
+              <div className="h-[60px] rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
+            </div>
+          }>
+            <LocationPicker
+              value={location}
+              onChange={({ address, lat, lng }) => {
+                setLocation(address)
+                setGeo(lat != null && lng != null ? { lat, lng } : null)
+              }}
+            />
+          </Suspense>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Start</label>
@@ -223,15 +240,22 @@ function LeaveModal({ onConfirm, onCancel }) {
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
         onClick={e => e.target === e.currentTarget && onCancel()}>
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
-          <div className="flex items-center gap-4 px-6 py-5"
-            style={{ background: 'linear-gradient(135deg, #991b1b, #dc2626)' }}>
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
-              <i className="bi bi-calendar-x-fill text-white text-lg" />
+          <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-red-700">
+            <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+              <i className="bi bi-calendar-x-fill text-white text-base" aria-hidden="true" />
             </div>
-            <div>
-              <p className="text-white font-black text-sm uppercase tracking-tight leading-none">On Leave</p>
-              <p className="text-red-200/80 text-[10px] mt-1 font-bold uppercase tracking-widest">Leave Details Required</p>
+            <div className="min-w-0 flex-1">
+              <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">On Leave</p>
+              <p className="mb-0 mt-0.5 text-red-100/80 text-[11px] font-medium leading-tight">Leave details required</p>
             </div>
+            <button
+              type="button"
+              onClick={onCancel}
+              aria-label="Close"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <i className="bi bi-x-lg text-sm" />
+            </button>
           </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
@@ -400,20 +424,22 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
     setModal(null)
     setLoading(true)
     try {
-      let fileInfo = ''
       let firstPath = ''
       if (details.files?.length > 0) {
-        // C1/C2/C3: Ensure file is uploaded first
         // uploadFiles() returns a pipe-delimited STRING of paths (e.g. "uploads/abc.pdf")
         // NOT an array — use .split('|')[0] to get the first path, not [0] (first character).
         const urlStr = await uploadFiles(details.files)
         firstPath = urlStr ? urlStr.split('|')[0] : null
-        if (firstPath) {
-          fileInfo = ` [TO:${firstPath}]`
-        }
       }
 
-      const fullStatus = `Official Travel — ${details.eventName} at ${details.location} (${details.dateStart} ${details.timeStart} to ${details.dateEnd} ${details.timeEnd})${fileInfo}`
+      const fullStatus = buildTravelStatus({
+        activity: details.eventName,
+        location: details.location,
+        dateRange: `${details.dateStart} ${details.timeStart} to ${details.dateEnd} ${details.timeEnd}`,
+        filePath: firstPath,
+        lat: details.lat,
+        lng: details.lng,
+      })
       await commitStatus('travel', fullStatus)
 
       // Write reminder to local storage
@@ -437,6 +463,8 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
         type: 'travel',
         travelActivity: details.eventName,
         travelLocation: details.location,
+        travelLat: details.lat ?? null,
+        travelLng: details.lng ?? null,
         returnDate: details.dateEnd,
         attachments: firstPath || '',
         applied: true
@@ -526,18 +554,18 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
             onClick={() => handleClick(opt.value)}
             title={isActive ? `Currently: ${value}` : `Switch to ${opt.value}`}
             disabled={isActive || loading}
-            className={`flex items-center justify-center gap-2 font-bold transition-all duration-200
-              ${size === 'large' ? 'px-4 py-4 text-[13px] rounded-2xl border-2' : 'px-3 py-2 text-[11px] sm:text-xs rounded-lg border'}
+            className={`flex items-center justify-center gap-2 font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1
+              ${size === 'large' ? 'px-4 py-3 text-[13px] rounded-xl border' : 'px-3 py-2 text-[11px] sm:text-xs rounded-lg border'}
               ${isActive
-                ? `${opt.active} cursor-default scale-[1.02] ${size === 'large' ? 'border-transparent' : ''}`
-                : `${opt.inactive} ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:border-slate-300 hover:bg-slate-50'}`
+                ? `${opt.active} cursor-default`
+                : `${opt.inactive} ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`
               }`}>
             {loading && isActive ? (
               <span className={`${size === 'large' ? 'w-4 h-4 border-[3px]' : 'w-2 h-2 border-2'} border-white/30 border-t-white rounded-full animate-spin flex-shrink-0`} />
             ) : (
               <span className={`${size === 'large' ? 'w-2.5 h-2.5' : 'w-2 h-2'} rounded-full flex-shrink-0 ${isActive ? 'bg-white' : opt.dot}`} />
             )}
-            <span className={size === 'large' ? 'uppercase tracking-tighter' : ''}>{opt.label}</span>
+            <span className={size === 'large' ? 'uppercase tracking-wide' : ''}>{opt.label}</span>
             {isActive && !loading && <i className={`bi bi-check2 ml-0.5 ${size === 'large' ? 'text-base' : 'text-[10px]'}`} />}
           </button>
         )

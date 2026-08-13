@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { markNotificationRead, markNotificationsRead, clearNotifications } from '../lib/api'
+import { markNotificationRead, markNotificationsRead, clearNotifications, markChatRead } from '../lib/api'
 import { useStore } from '../store/useStore'
 
 export default function NotificationBell() {
@@ -35,21 +35,18 @@ export default function NotificationBell() {
     return matchesFilter && matchesSearch
   })
 
-  const getNotificationIcon = (type) => {
+  // Type reads as a small colored dot, not an icon — the message text already
+  // carries its own leading emoji (stripped below), so an icon avatar too was a double-icon row.
+  const getNotificationDot = (type) => {
     switch (type) {
-      case 'task': return 'bi-clipboard-check'
-      case 'chat': return 'bi-chat-dots'
-      default:     return 'bi-info-circle'
+      case 'task': return 'bg-blue-500'
+      case 'chat': return 'bg-green-500'
+      default:     return 'bg-slate-400'
     }
   }
 
-  const getNotificationColor = (type) => {
-    switch (type) {
-      case 'task': return 'text-blue-600 bg-blue-50'
-      case 'chat': return 'text-green-600 bg-green-50'
-      default:     return 'text-slate-500 bg-slate-100'
-    }
-  }
+  const EMOJI_PREFIX = /^\p{Emoji_Presentation}\s*/u
+  const stripEmoji = (text) => text.replace(EMOJI_PREFIX, '')
 
   function formatDate(dateString) {
     const diffMs = Date.now() - new Date(dateString)
@@ -63,7 +60,30 @@ export default function NotificationBell() {
     return new Date(dateString).toLocaleDateString()
   }
 
+  // A chat notification and the underlying chat's unread badge are two separate
+  // "read" flags (Notifications.IsRead vs Comments.HiddenBy) tracking the same event.
+  // ChatModal already clears the notification when the chat is opened; this is the
+  // other direction — reading the notification clears the chat's unread badge too.
+  function markChatReadForTaskIds(taskIds) {
+    if (!taskIds.length) return
+    const currentData = useStore.getState().globalData
+    setGlobalData({
+      ...currentData,
+      comments: currentData.comments.map(c =>
+        taskIds.includes(String(c.TaskID)) &&
+        c.SenderName !== session.Name &&
+        !String(c.HiddenBy || '').includes(session.Name)
+          ? { ...c, HiddenBy: c.HiddenBy ? `${c.HiddenBy},${session.Name}` : session.Name }
+          : c
+      ),
+    })
+    taskIds.forEach(id => markChatRead(id, session.Name))
+  }
+
   function handleNotificationClick(notification) {
+    if (notification.Type === 'chat' && notification.TaskID) {
+      markChatReadForTaskIds([String(notification.TaskID)])
+    }
     if (notification.IsRead === 'FALSE') {
       markNotificationRead(notification.ID).then(() => {
         const currentData = useStore.getState().globalData
@@ -86,6 +106,19 @@ export default function NotificationBell() {
     const t = setTimeout(() => setRinging(false), 1000)
     return () => clearTimeout(t)
   }, [notifyPulse])
+
+  // Viewing the list counts as reading it — clears the red-dot badge as soon as
+  // the dropdown is open, without requiring a click on every single item. Any
+  // unread chat notifications cascade into clearing their chat's unread badge too.
+  useEffect(() => {
+    if (!open || unread.length === 0) return
+    const chatTaskIds = [...new Set(
+      unread.filter(n => n.Type === 'chat' && n.TaskID).map(n => String(n.TaskID))
+    )]
+    markChatReadForTaskIds(chatTaskIds)
+    markAllRead()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // ── Close on outside click ───────────────────────────────────
   useEffect(() => {
@@ -116,10 +149,15 @@ export default function NotificationBell() {
     setOpen(true)
   }
 
+  async function markAllRead() {
+    await markNotificationsRead(session.ID)
+    const current = useStore.getState().globalData
+    setGlobalData({ ...current, notifications: current.notifications.map(n => ({ ...n, IsRead: 'TRUE' })) })
+  }
+
   async function handleMarkAllRead() {
     setBusy(true)
-    await markNotificationsRead(session.ID)
-    setGlobalData({ ...globalData, notifications: notifications.map(n => ({ ...n, IsRead: 'TRUE' })) })
+    await markAllRead()
     setBusy(false)
   }
 
@@ -166,22 +204,22 @@ export default function NotificationBell() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm text-slate-800">Notifications</span>
+              <span className="font-bold text-sm text-slate-900">Notifications</span>
               {unread.length > 0 && (
                 <span className="text-[11px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">{unread.length}</span>
               )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-3">
               {unread.length > 0 && (
-                <button onClick={handleMarkAllRead} disabled={busy} title="Mark all as read"
-                  className="p-1.5 text-slate-400 hover:text-green-700 hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-50">
-                  <i className="bi bi-check2-all" />
+                <button onClick={handleMarkAllRead} disabled={busy}
+                  className="text-xs font-medium text-slate-500 hover:text-green-700 transition-colors disabled:opacity-50">
+                  Mark all read
                 </button>
               )}
               {notifications.length > 0 && (
-                <button onClick={handleClear} disabled={busy} title="Clear all"
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-50">
-                  <i className="bi bi-trash3" />
+                <button onClick={handleClear} disabled={busy}
+                  className="text-xs font-medium text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50">
+                  Clear
                 </button>
               )}
             </div>
@@ -204,7 +242,7 @@ export default function NotificationBell() {
 
           {/* Filter Tabs */}
           {notifications.length > 0 && (
-            <div className="grid grid-cols-4 border-b border-slate-100 flex-shrink-0">
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 flex-shrink-0">
               {[
                 { key: 'all',    label: 'All',    count: notifications.length },
                 { key: 'unread', label: 'Unread', count: unread.length },
@@ -214,14 +252,13 @@ export default function NotificationBell() {
                 <button
                   key={key}
                   onClick={() => setFilter(key)}
-                  className={`px-1 py-2 text-[11px] font-medium transition-colors border-b-2 flex items-center justify-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
                     filter === key
-                      ? 'text-green-700 border-green-600'
-                      : 'text-slate-400 border-transparent hover:text-slate-600'
+                      ? 'bg-green-50 text-green-700'
+                      : 'text-slate-500 hover:bg-slate-50'
                   }`}
                 >
-                  {label}
-                  {count > 0 && <span className="text-slate-400">{count > 99 ? '99+' : count}</span>}
+                  {label}{count > 0 ? ` · ${count > 99 ? '99+' : count}` : ''}
                 </button>
               ))}
             </div>
@@ -246,15 +283,13 @@ export default function NotificationBell() {
                       : 'border-l-transparent hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getNotificationColor(n.Type)}`}>
-                      <i className={`bi ${getNotificationIcon(n.Type)} text-sm`} />
-                    </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className={`mt-2 w-1.5 h-1.5 rounded-full flex-shrink-0 ${getNotificationDot(n.Type)}`} aria-hidden="true" />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-slate-700 leading-snug ${n.IsRead === 'FALSE' ? 'font-semibold' : ''}`}>
-                        {n.Message}
+                      <p className={`leading-snug ${n.IsRead === 'FALSE' ? 'font-medium text-slate-800' : 'font-normal text-slate-600'}`}>
+                        {stripEmoji(n.Message)}
                       </p>
-                      <p className="text-slate-400 text-xs mt-1">{formatDate(n.CreatedAt)}</p>
+                      <p className="text-slate-400 text-[11px] mt-1">{formatDate(n.CreatedAt)}</p>
                     </div>
                   </div>
                 </div>

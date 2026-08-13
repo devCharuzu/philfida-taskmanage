@@ -58,8 +58,10 @@ export default function DashboardPage() {
   // Listener for auto-applied status toasts
   useEffect(() => {
     const handleAutoUpdate = (e) => {
-      setAutoUpdateAlert(e.detail.status)
-      setPresence(e.detail.status)
+      const status = e.detail?.status
+      if (!status) { sync(); return }
+      setAutoUpdateAlert(status)
+      setPresence(status)
       sync()
       // Auto-dismiss the float toast after 10 seconds
       const alertTimer = setTimeout(() => setAutoUpdateAlert(null), 10000)
@@ -217,16 +219,13 @@ export default function DashboardPage() {
                     <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">
                       My Assignments
                     </h1>
-                    <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">
-                      {session?.Office || session?.Unit || 'PhilFIDA Task Management System'}
-                    </p>
                   </div>
                   {myTasks.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 xl:min-w-[520px]">
-                      <SummaryStat label="Active" value={activeCount} tone="green" icon="bi-activity" active={filterStatus === 'All'} onClick={() => setFilterStatus('All')} />
-                      <SummaryStat label="To Accept" value={assignedCount} tone="amber" icon="bi-inbox-fill" active={filterStatus === 'Assigned'} onClick={() => setFilterStatus('Assigned')} />
-                      <SummaryStat label="In Progress" value={receivedCount} tone="blue" icon="bi-arrow-repeat" active={filterStatus === 'Received'} onClick={() => setFilterStatus('Received')} />
-                      <SummaryStat label="Completed" value={completedCount} tone="slate" icon="bi-check2-circle" active={filterStatus === 'Completed'} onClick={() => setFilterStatus('Completed')} />
+                      <SummaryStat label="Active" value={activeCount} tone="green" active={filterStatus === 'All'} onClick={() => setFilterStatus('All')} />
+                      <SummaryStat label="To Accept" value={assignedCount} tone="amber" active={filterStatus === 'Assigned'} onClick={() => setFilterStatus('Assigned')} />
+                      <SummaryStat label="In Progress" value={receivedCount} tone="blue" active={filterStatus === 'Received'} onClick={() => setFilterStatus('Received')} />
+                      <SummaryStat label="Completed" value={completedCount} tone="slate" active={filterStatus === 'Completed'} onClick={() => setFilterStatus('Completed')} />
                     </div>
                   )}
                 </div>
@@ -282,9 +281,9 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="max-w-full mb-4">
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {filteredMyTasks.length === 0 ? (
-                        <div className="xl:col-span-2 text-center py-14 text-slate-500 bg-white border border-dashed border-slate-300 rounded-xl">
+                        <div className="col-span-full text-center py-14 text-slate-500 bg-white border border-dashed border-slate-300 rounded-xl">
                           <i className="bi bi-search text-3xl block mb-3 opacity-40" aria-hidden="true" />
                           <p className="mb-0 text-sm font-semibold">No matching tasks found.</p>
                         </div>
@@ -414,11 +413,13 @@ export default function DashboardPage() {
   )
 }
 
-const SUMMARY_TONES = {
-  green: 'text-green-800 bg-green-50 ring-green-100',
-  amber: 'text-amber-800 bg-amber-50 ring-amber-100',
-  blue:  'text-blue-800 bg-blue-50 ring-blue-100',
-  slate: 'text-slate-700 bg-slate-50 ring-slate-200',
+// Left accent bar carries the tone instead of a per-tile icon square — four
+// decorative icons added noise without adding information the label didn't.
+const SUMMARY_ACCENTS = {
+  green: 'border-l-green-500',
+  amber: 'border-l-amber-400',
+  blue:  'border-l-blue-500',
+  slate: 'border-l-slate-300',
 }
 
 const STATUS_TONES = {
@@ -426,21 +427,21 @@ const STATUS_TONES = {
     label:  'To accept',
     icon:   'bi-inbox-fill',
     accent: 'border-l-amber-400',
-    chip:   'bg-amber-50 800 ring-amber-200',
+    chip:   'bg-amber-50 text-amber-800 ring-amber-200',
     dot:    'bg-amber-500',
   },
   Received: {
     label:  'In progress',
     icon:   'bi-arrow-repeat',
     accent: 'border-l-blue-500',
-    chip:   'bg-blue-50 800 ring-blue-200',
+    chip:   'bg-blue-50 text-blue-800 ring-blue-200',
     dot:    'bg-blue-500',
   },
   Completed: {
     label:  'Completed',
     icon:   'bi-check2-circle',
     accent: 'border-l-green-600',
-    chip:   'bg-green-50 800 ring-green-200',
+    chip:   'bg-green-50 text-green-800 ring-green-200',
     dot:    'bg-green-600',
   },
 }
@@ -453,23 +454,16 @@ const PRIORITY_TONES = {
   Normal: 'bg-green-50 text-green-700 ring-green-200',
 }
 
-function SummaryStat({ label, value, tone, icon, active, onClick }) {
+function SummaryStat({ label, value, tone, active, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`text-left rounded-xl border bg-white px-3.5 py-3 shadow-sm transition-all hover:shadow-md hover:border-slate-300 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-1 ${active ? 'border-green-600 ring-1 ring-green-600/30' : 'border-slate-100'}`}
+      className={`text-left rounded-xl border border-l-4 ${SUMMARY_ACCENTS[tone] || SUMMARY_ACCENTS.slate} border-slate-100 bg-white px-3.5 py-2.5 shadow-sm transition-all hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-1 ${active ? 'ring-2 ring-green-600/40 bg-green-50/30' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="mb-0 text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">{label}</p>
-          <p className="mb-0 mt-2 text-xl font-black tracking-normal text-slate-900 leading-none">{value}</p>
-        </div>
-        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ring-1 ${SUMMARY_TONES[tone] || SUMMARY_TONES.slate}`} aria-hidden="true">
-          <i className={`bi ${icon} text-sm`} />
-        </span>
-      </div>
+      <p className="mb-0 text-[11px] font-bold text-slate-500 uppercase tracking-wider leading-none">{label}</p>
+      <p className="mb-0 mt-1.5 text-xl font-black tracking-normal text-slate-900 leading-none">{value}</p>
     </button>
   )
 }
@@ -490,18 +484,6 @@ function PriorityPill({ priority }) {
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${PRIORITY_TONES[priority] || PRIORITY_TONES.Normal}`}>
       {priority}
     </span>
-  )
-}
-
-function InfoTile({ label, icon, children }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 flex flex-col justify-between">
-      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-2">
-        <i className={`bi ${icon} text-[11px]`} aria-hidden="true" />
-        {label}
-      </span>
-      {children}
-    </div>
   )
 }
 
@@ -526,17 +508,39 @@ function formatDate(iso) {
 
 function getDeadlineMeta(deadline, status) {
   if (!deadline) return { label: 'No deadline', className: 'text-slate-500', icon: 'bi-calendar' }
-  if (status === 'Completed') return { label: formatDate(deadline), className: '600 font-semibold', icon: 'bi-calendar-check' }
+  if (status === 'Completed') return { label: formatDate(deadline), className: 'text-green-600 font-semibold', icon: 'bi-calendar-check' }
 
   const now = new Date()
   const due = new Date(deadline)
   const days = Math.ceil((due - now) / 86400000)
 
   if (Number.isNaN(due.getTime())) return { label: 'Invalid date', className: 'text-slate-500', icon: 'bi-calendar' }
-  if (days < 0) return { label: `${formatDate(deadline)} · Overdue`, className: '700 font-bold', icon: 'bi-exclamation-triangle-fill' }
-  if (days === 0) return { label: `${formatDate(deadline)} · Due today`, className: '700 font-bold', icon: 'bi-exclamation-circle-fill' }
+  if (days < 0) return { label: `${formatDate(deadline)} · Overdue`, className: 'text-red-700 font-bold', icon: 'bi-exclamation-triangle-fill' }
+  if (days === 0) return { label: `${formatDate(deadline)} · Due today`, className: 'text-red-700 font-bold', icon: 'bi-exclamation-circle-fill' }
   if (days <= 3) return { label: `${formatDate(deadline)} · ${days}d left`, className: 'text-amber-800 font-bold', icon: 'bi-clock-fill' }
-  return { label: formatDate(deadline), className: '700 font-semibold', icon: 'bi-calendar-event' }
+  return { label: formatDate(deadline), className: 'text-slate-700 font-semibold', icon: 'bi-calendar-event' }
+}
+
+
+/** Instructions are written by CreateTaskForm as "Label: value" lines (Purpose / Action / Remarks / From).
+ *  Split them back into fields so the card can render them as rows instead of one wall of text.
+ *  The "From" line is dropped here — it is shown once in the card header instead. */
+function parseInstructions(raw) {
+  if (!raw) return { fields: [], from: '', free: '' }
+  const fields = []
+  const free = []
+  let from = ''
+  for (const line of raw.split('\n')) {
+    const text = line.trim()
+    if (!text) continue
+    const m = text.match(/^(Purpose|Action|Remarks|From)\s*:\s*(.*)$/i)
+    if (!m) { free.push(text); continue }
+    const [, label, value] = m
+    if (!value) continue
+    if (label.toLowerCase() === 'from') from = value
+    else fields.push({ label, value })
+  }
+  return { fields, from, free: free.join('\n') }
 }
 
 function TaskCard({ task: t, session, comments, history = [], loading, onStatusUpdate, onOpenChat, onOpenFile }) {
@@ -546,58 +550,75 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
   const deadline = getDeadlineMeta(t.Deadline, t.Status)
   const docNumber = getDocNumber(t)
   const files = t.FileLink?.split('|').filter(Boolean) || []
+  const instructions = parseInstructions(t.Instructions)
+  // Assigner: the "From:" line the dispatcher typed, else whoever logged the Dispatched entry.
+  const assignedBy = instructions.from || history.find(h => h.Action === 'Dispatched')?.Actor || ''
+  const purposeTags = (instructions.fields.find(f => f.label.toLowerCase() === 'purpose')?.value || '')
+    .split(',').map(v => v.trim()).filter(Boolean)
+  const textLines = [
+    ...instructions.fields.filter(f => f.label.toLowerCase() !== 'purpose'),
+    ...(instructions.free ? [{ label: '', value: instructions.free }] : []),
+  ]
 
   return (
     <article className={`bg-white border border-l-4 ${statusTone.accent} border-slate-100 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col h-full overflow-hidden`}>
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-1 flex-col gap-2.5 p-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-500">
-              <span className={`h-2 w-2 rounded-full ${statusTone.dot}`} aria-hidden="true" />
-              Assigned to you
-            </p>
-            {docNumber && (
-              <span className="mb-2 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700 ring-1 ring-slate-200">
-                <i className="bi bi-hash text-green-700" aria-hidden="true" />
-                {docNumber}
-              </span>
-            )}
-            <h2 className="mb-0 text-[15px] sm:text-base font-semibold tracking-tight leading-snug text-slate-900">
+            <h2 className="mb-1 text-[14px] font-semibold leading-snug tracking-tight text-slate-900">
               {getCleanTitle(t)}
             </h2>
-            {t.Category && (
-              <span className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
-                {t.Category}
+            {/* One meta line instead of a stack of separate badges — keeps the header short. */}
+            <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500">
+              <span className="inline-flex items-center gap-1.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${statusTone.dot}`} aria-hidden="true" />
+                {assignedBy ? <>From <span className="font-semibold text-slate-700">{assignedBy}</span></> : 'New assignment'}
               </span>
-            )}
+              {docNumber && <><span aria-hidden="true">·</span><span className="font-semibold text-slate-600">#{docNumber}</span></>}
+              {t.Category && <><span aria-hidden="true">·</span><span>{t.Category}</span></>}
+            </p>
           </div>
-          <div className="flex flex-shrink-0 flex-col items-end gap-2">
+          <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
             <StatusPill status={t.Status} />
             {unreadChat > 0 && (
               <button
                 onClick={onOpenChat}
-                className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
               >
-                <i className="bi bi-chat-dots-fill text-[10px]" aria-hidden="true" />
+                <i className="bi bi-chat-dots-fill text-[9px]" aria-hidden="true" />
                 {unreadChat > 9 ? '9+' : unreadChat} new
               </button>
             )}
           </div>
         </div>
 
-        {t.Instructions && (
-          <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4">
-            <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Instructions</span>
-            <p
-              className="mb-0 text-sm text-slate-700 leading-relaxed font-medium"
+        {(instructions.fields.length > 0 || instructions.free) && (
+          <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+            {/* Purpose reads as tags; everything else as a short labelled line. */}
+            {purposeTags.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {purposeTags.map((v, i) => (
+                  <span key={i} className="inline-flex items-center rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                    {v}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div
+              className="space-y-1"
               style={showAll ? undefined : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
             >
-              {t.Instructions}
-            </p>
-            {t.Instructions.length > 160 && (
+              {textLines.map(({ label, value }, i) => (
+                <p key={i} className="m-0 text-[12.5px] leading-relaxed text-slate-700">
+                  {label && <span className="font-semibold text-slate-900">{label}: </span>}
+                  {value}
+                </p>
+              ))}
+            </div>
+            {textLines.some(l => l.value.length > 120) && (
               <button
                 onClick={() => setShowAll(v => !v)}
-                className="mt-2 text-xs font-bold text-green-700 hover:text-green-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 rounded"
+                className="mt-1.5 rounded text-[11px] font-bold text-green-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
               >
                 {showAll ? 'Show less' : 'Show more'}
               </button>
@@ -611,7 +632,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
               const name = decodeURIComponent(url.split('?')[0].split('/').pop())
               return (
                 <button key={idx} onClick={() => onOpenFile(url, name)}
-                  className="inline-flex max-w-full items-center gap-1.5 truncate rounded-xl border border-green-100/50 bg-green-50/50 px-3 py-2 text-xs font-semibold text-green-800 hover:border-green-200 hover:bg-green-100/60 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+                  className="inline-flex max-w-full items-center gap-1.5 truncate rounded-lg border border-green-100/50 bg-green-50/50 px-2.5 py-1.5 text-[11px] font-semibold text-green-800 hover:border-green-200 hover:bg-green-100/60 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
                   <i className="bi bi-paperclip flex-shrink-0 text-green-700" aria-hidden="true" />
                   <span className="truncate">{name}</span>
                 </button>
@@ -620,37 +641,32 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          <InfoTile label="Priority" icon="bi-flag-fill">
-            <PriorityPill priority={t.Priority} />
-          </InfoTile>
-          <InfoTile label="Deadline" icon={deadline.icon}>
-            <span className={`text-sm font-bold ${deadline.className}`}>{deadline.label}</span>
-          </InfoTile>
-          <InfoTile label="Task ID" icon="bi-upc-scan">
-            <span className="truncate text-sm font-bold text-slate-700" title={t.TaskID}>{t.TaskID}</span>
-          </InfoTile>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <PriorityPill priority={t.Priority} />
+          <span className={`inline-flex items-center gap-1.5 text-[13px] font-semibold ${deadline.className}`}>
+            <i className={`bi ${deadline.icon} text-[11px]`} aria-hidden="true" />
+            {deadline.label}
+          </span>
         </div>
 
-        <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4 overflow-x-auto">
-          <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-3">Task timeline</span>
+        <div className="overflow-x-auto rounded-lg bg-slate-50 px-2.5 py-2">
           <TaskTimeline task={t} history={history} />
         </div>
 
         {t.Deadline && t.Status !== 'Completed' && (
-          <div className="rounded-xl border border-slate-100 bg-slate-50/30 p-4">
+          <div className="rounded-lg bg-slate-50 px-2.5 py-2">
             <DeadlineProgress task={t} />
           </div>
         )}
       </div>
 
-      <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-5">
+      <div className="border-t border-slate-200 bg-slate-50/80 px-3 py-2.5">
         <div className="flex flex-wrap gap-2">
           {t.Status === 'Assigned' && (
             <button 
               disabled={loading} 
               onClick={() => onStatusUpdate(t.TaskID, 'Received')} 
-              className="flex-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-green-700 hover:bg-green-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:shadow transition-all disabled:cursor-wait disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
+              className="flex-1 flex min-h-10 items-center justify-center gap-2 rounded-xl bg-green-700 hover:bg-green-800 px-3 py-2 text-[13px] font-bold text-white shadow-sm hover:shadow transition-all disabled:cursor-wait disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
             >
               {loading ? (
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" aria-hidden="true" />
@@ -663,7 +679,7 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
             <button 
               disabled={loading} 
               onClick={() => onStatusUpdate(t.TaskID, 'Completed')} 
-              className="flex-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-green-700 hover:bg-green-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:shadow transition-all disabled:cursor-wait disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
+              className="flex-1 flex min-h-10 items-center justify-center gap-2 rounded-xl bg-green-700 hover:bg-green-800 px-3 py-2 text-[13px] font-bold text-white shadow-sm hover:shadow transition-all disabled:cursor-wait disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
             >
               {loading ? (
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" aria-hidden="true" />
@@ -673,13 +689,13 @@ function TaskCard({ task: t, session, comments, history = [], loading, onStatusU
             </button>
           )}
           {t.Status === 'Completed' && (
-            <button disabled className="flex-1 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-500 cursor-not-allowed">
+            <button disabled className="flex-1 flex min-h-10 items-center justify-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[13px] font-bold text-slate-500 cursor-not-allowed">
               <i className="bi bi-check-circle-fill text-slate-400" aria-hidden="true" /> Completed
             </button>
           )}
           <button
             onClick={onOpenChat}
-            className="relative flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
+            className="relative flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 px-3 py-2 text-[13px] font-bold text-slate-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 transform active:scale-[0.98]"
           >
             <i className="bi bi-chat-text-fill text-green-700" aria-hidden="true" />
             <span>Chat</span>

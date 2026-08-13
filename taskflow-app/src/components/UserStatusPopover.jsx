@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { getSignedFileUrl } from '../lib/api'
+import { getSignedFileUrl, stripStatusMarkers} from '../lib/api'
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n))
@@ -126,7 +126,7 @@ export default function UserStatusPopover({
   // Detect attached file pattern [TO:path]
   const fileMatch = status.match(/\[TO:(.*?)\]/)
   const rawFileUrl = fileMatch ? fileMatch[1] : null
-  const cleanStatus = status.replace(/\[TO:.*?\]/, '').trim()
+  const cleanStatus = stripStatusMarkers(status)
   const detail = cleanStatus.split(' — ')?.[1] || cleanStatus
 
   const [signedUrl, setSignedUrl] = useState('')
@@ -177,7 +177,7 @@ export default function UserStatusPopover({
             </p>
             
             {(() => {
-              const cleanStr = status.replace(/\[TO:.*?\]/, '').trim()
+              const cleanStr = stripStatusMarkers(status)
               let structured = null
 
               if (cleanStr.startsWith('Official Travel — ')) {

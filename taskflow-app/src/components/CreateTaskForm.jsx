@@ -63,8 +63,8 @@ function StatusDot({ status }) {
 
 function SectionLabel({ num, title }) {
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white flex-shrink-0"
+    <div className="flex items-center gap-2 mb-2">
+      <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
         style={{ background: '#155414' }}>{num}</span>
       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</span>
       <div className="flex-1 h-px bg-slate-100" />
@@ -236,7 +236,7 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
       {/* ── 1. AVAILABILITY PREVIEW + ASSIGN ── */}
       <div>
@@ -285,7 +285,7 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
         )}
         {/* Fallback dropdown */}
         <select className="input mt-2 text-xs input-enhanced focus-ring" value={empId} onChange={e => setEmpId(e.target.value)} required>
-          <option value="">-- Select Unit Personnel --</option>
+          <option value="">Select Unit Personnel</option>
           {employees.map(u => {
             const s = getStatusLabel(u.Status)
             return <option key={u.ID} value={u.ID}>{u.Name} — {u.Unit || u.Office} {s}</option>
@@ -293,14 +293,14 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
         </select>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
 
         {/* ── 2. TASK NO. + DATE ── */}
         <div>
           <SectionLabel num="2" title="Reference &amp; Date" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="label">Task / Document No. <span className="text-slate-400 normal-case font-normal">(Optional)</span></label>
+              <label className="label whitespace-nowrap">Task / Doc. No. <span className="text-slate-400 normal-case font-normal">(optional)</span></label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold dispatch-input-hash">#</span>
                 <input className="input pl-8 pr-3 dispatch-input input-enhanced focus-ring" placeholder="e.g. 001 or PHILFIDA-2025-001"
@@ -308,7 +308,7 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
               </div>
             </div>
             <div>
-              <label className="label">Deadline / Date <span className="text-slate-400 normal-case font-normal">(Optional)</span></label>
+              <label className="label whitespace-nowrap">Deadline <span className="text-slate-400 normal-case font-normal">(optional)</span></label>
               {/* Modern date input -- using native browser picker */}
               <div className="relative">
                 <input

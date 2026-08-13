@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
-import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTask, getSignedFileUrl } from '../lib/api'
+import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTask, getSignedFileUrl, stripStatusMarkers} from '../lib/api'
 import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
 import NotificationBell from '../components/NotificationBell'
 import UserProfileTab from '../components/UserProfileTab'
@@ -16,6 +16,7 @@ import UserManagement from '../components/UserManagement'
 import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
 import DeadlineProgress from '../components/DeadlineProgress'
+import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -48,11 +49,50 @@ export default function DirectorPage() {
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
   const [globalPrintPreview, setGlobalPrintPreview] = useState(null)
+  const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
 
   // Sync presence state with session status (persists across refreshes)
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
+
+  // Background automated presence checker (Travel/Leave Scheduler) via calendar reminders
+  useEffect(() => {
+    if (!session?.ID) return
+
+    const runSchedulerCheck = async () => {
+      try {
+        await checkAndApplyScheduledPresence(session.ID, sync)
+      } catch (err) {
+        console.error('[PRESENCE-SCHEDULER] error:', err)
+      }
+    }
+
+    runSchedulerCheck()
+    const checkTimer = setInterval(runSchedulerCheck, 30000)
+    return () => clearInterval(checkTimer)
+  }, [session?.ID, sync])
+
+  // Listener for auto-applied status toasts
+  useEffect(() => {
+    const handleAutoUpdate = (e) => {
+      const status = e.detail?.status
+      if (!status) { sync(); return }
+      setAutoUpdateAlert(status)
+      setPresence(status)
+      sync()
+      const alertTimer = setTimeout(() => setAutoUpdateAlert(null), 10000)
+      return () => clearTimeout(alertTimer)
+    }
+    window.addEventListener('presence-auto-updated', handleAutoUpdate)
+    return () => window.removeEventListener('presence-auto-updated', handleAutoUpdate)
+  }, [])
+
+  // Tasks assigned to the Director themselves — archived included, so past
+  // deadlines still show on the calendar.
+  const myCalendarTasks = globalData.tasks
+    .filter(t => String(t.EmployeeID) === String(session?.ID))
+    .slice().reverse()
 
   // Resolve travel order file path → signed URL when the personnel detail modal opens
   useEffect(() => {
@@ -100,49 +140,50 @@ export default function DirectorPage() {
   })
 
   // Separate tasks by assignment source using history
+  // Task classification keys off the "Dispatched" history row. That row stores
+  // the actor's *display name* as it was at dispatch time, so renaming a user
+  // used to orphan every task they had dispatched: it matched neither the
+  // director bucket nor the unit-head one and rendered nowhere, while still
+  // being counted in the totals. Match on the stable ActorID first and fall
+  // back to the name only for legacy rows written before ActorID existed.
+  const dispatchEntryFor = (t) =>
+    globalData.history.find(h => String(h.TaskID) === String(t.TaskID) && h.Action === 'Dispatched')
+
+  const actorUserFor = (entry) => {
+    if (!entry) return null
+    if (entry.ActorID) {
+      const byId = globalData.users.find(u => String(u.ID) === String(entry.ActorID))
+      if (byId) return byId
+    }
+    return globalData.users.find(u => u.Name === entry.Actor || String(u.ID) === String(entry.Actor)) || null
+  }
+
   const directorDispatchedTasks = filteredTasks.filter(t => {
-    const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
-    const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
-    if (!dispatchedEntry) return false
-
-    // Check if actor matches current user (director)
-    const isCurrentDirector = dispatchedEntry.Actor === session?.Name ||
-      dispatchedEntry.Actor === session?.ID ||
-      (session?.Name && dispatchedEntry.Actor?.toLowerCase() === session?.Name?.toLowerCase())
-
-    // Also check if the actor is a user with Director role
-    const actorUser = globalData.users.find(u => u.Name === dispatchedEntry.Actor || u.ID === dispatchedEntry.Actor)
-    const actorHasDirectorRole = actorUser?.Role === 'Director'
-
-    return isCurrentDirector || actorHasDirectorRole
+    const entry = dispatchEntryFor(t)
+    if (!entry) return false
+    if (entry.ActorID && String(entry.ActorID) === String(session?.ID)) return true
+    const actorUser = actorUserFor(entry)
+    if (actorUser) return actorUser.Role === 'Director'
+    // Legacy row with no resolvable user — fall back to the recorded name.
+    return entry.Actor === session?.Name ||
+      (session?.Name && entry.Actor?.toLowerCase() === session?.Name?.toLowerCase())
   })
 
   const unitHeadDispatchedTasks = filteredTasks.filter(t => {
-    const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
-    const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
-    if (!dispatchedEntry) return false
-
-    // Check if actor is Unit Head or contains 'Unit Head'
-    const actorIsUnitHead = dispatchedEntry.Actor?.toLowerCase().includes('unit head')
-
-    // Also check if the actor is a user with Unit Head role
-    const actorUser = globalData.users.find(u => u.Name === dispatchedEntry.Actor || u.ID === dispatchedEntry.Actor)
-    const actorHasUnitHeadRole = actorUser?.Role === 'Unit Head'
-
-    // Exclude if it's the current director
-    const isCurrentDirector = dispatchedEntry.Actor === session?.Name ||
-      dispatchedEntry.Actor === session?.ID ||
-      (session?.Name && dispatchedEntry.Actor?.toLowerCase() === session?.Name?.toLowerCase())
-
-    return (actorIsUnitHead || actorHasUnitHeadRole) && !isCurrentDirector
+    const entry = dispatchEntryFor(t)
+    if (!entry) return false
+    if (entry.ActorID && String(entry.ActorID) === String(session?.ID)) return false
+    const actorUser = actorUserFor(entry)
+    if (actorUser) return actorUser.Role === 'Unit Head'
+    return !!entry.Actor?.toLowerCase().includes('unit head')
   })
 
-  // Fallback for tasks without Dispatched history - classify as director dispatched by default
-  const unassignedTasks = filteredTasks.filter(t => {
-    const taskHistory = globalData.history.filter(h => String(h.TaskID) === String(t.TaskID))
-    const dispatchedEntry = taskHistory.find(h => h.Action === 'Dispatched')
-    return !dispatchedEntry
-  })
+  // Catch-all: anything the two buckets above did not claim — including tasks
+  // with no Dispatched row at all. Without this a task can be counted yet never
+  // rendered, which is how completed tasks appeared to "vanish".
+  const unassignedTasks = filteredTasks.filter(t =>
+    !directorDispatchedTasks.includes(t) && !unitHeadDispatchedTasks.includes(t)
+  )
 
   // Add unassigned tasks to director dispatched tasks as fallback
   const finalDirectorDispatchedTasks = [...directorDispatchedTasks, ...unassignedTasks]
@@ -486,6 +527,7 @@ export default function DirectorPage() {
           {[
             { key: 'monitor', icon: 'bi-speedometer2',  label: 'Task Monitor' },
             { key: 'archive', icon: 'bi-archive',        label: 'Archive' },
+            { key: 'calendar', icon: 'bi-calendar3',     label: 'Personal Calendar' },
             { key: 'users',   icon: 'bi-people-fill',    label: 'User Management', badge: pendingUsers },
             { key: 'profile', icon: 'bi-person-circle',  label: 'My Profile' },
           ].map(item => (
@@ -538,12 +580,12 @@ export default function DirectorPage() {
             <div className="flex flex-col h-full">
 
               {/* ── TOP BAR: Page title + Dispatch button ── */}
-              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
-                <div className="min-w-0">
-                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
+              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 gap-2 min-w-0">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">
                     Task Monitor
-                  </h2>
-                  <p className="text-slate-400 text-xs mt-1">{filteredTasks.length} of {activeTasks.length} tasks shown</p>
+                  </h1>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{filteredTasks.length} of {activeTasks.length}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
@@ -621,12 +663,11 @@ export default function DirectorPage() {
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                   <div className="px-4 py-3 border-b border-slate-100 bg-white">
                     <div className="flex items-center gap-2">
-                      <i className="bi bi-person-badge-fill text-green-700 text-sm" />
                       <h3 className="font-semibold text-slate-800 text-sm">My Dispatched Tasks</h3>
                       <span className="ml-auto text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{finalDirectorDispatchedTasks.length}</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start p-4 md:p-6 lg:p-8">
                     {finalDirectorDispatchedTasks.length === 0 ? (
                       <div className="col-span-full text-center py-12 text-slate-400">
                         <i className={`bi ${filterSearch || filterStatus !== 'All' || filterUnit !== 'All' ? 'bi-search' : 'bi-person-badge'} text-2xl block mb-2 opacity-30`} />
@@ -661,12 +702,11 @@ export default function DirectorPage() {
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                   <div className="px-4 py-3 border-b border-slate-100 bg-white">
                     <div className="flex items-center gap-2">
-                      <i className="bi bi-person-check-fill text-slate-500 text-sm" />
                       <h3 className="font-semibold text-slate-800 text-sm">Unit Head Assigned Tasks</h3>
                       <span className="ml-auto text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{unitHeadDispatchedTasks.length}</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start p-4 md:p-6 lg:p-8">
                     {unitHeadDispatchedTasks.length === 0 ? (
                       <div className="col-span-full text-center py-12 text-slate-400">
                         <i className={`bi ${filterSearch || filterStatus !== 'All' || filterUnit !== 'All' ? 'bi-search' : 'bi-person-check'} text-2xl block mb-2 opacity-30`} />
@@ -715,15 +755,13 @@ export default function DirectorPage() {
           {tab === 'archive' && (
             <div className="flex flex-col h-full">
               {/* Header */}
-              <div className="flex flex-col gap-3 px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0 min-w-0">
+              <div className="flex flex-col gap-3 px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0 min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
-                  <div className="min-w-0">
-                    <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">
                       Archive Repository
-                    </h2>
-                    <p className="text-slate-400 text-xs mt-1">
-                      {archiveSearch ? `${archivedTasks.length} matching tasks` : `${archivedTasks.length} archived tasks`}
-                    </p>
+                    </h1>
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{archivedTasks.length}</span>
                   </div>
                   
                   {/* Archive Search */}
@@ -800,7 +838,7 @@ export default function DirectorPage() {
               <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-4 pb-0">
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm max-w-full mb-4">
                   {/* Archive Cards View - Consistent responsive grid (900px breakpoint) */}
-                  <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start p-4 md:p-6 lg:p-8">
                     {archivedTasks.length === 0 ? (
                       <div className="col-span-full text-center py-16 text-slate-400">
                         <i className={`bi ${archiveSearch ? 'bi-search' : 'bi-archive'} text-3xl block mb-2 opacity-30`} />
@@ -837,13 +875,27 @@ export default function DirectorPage() {
           )}
 
           {/* ── USERS TAB ── */}
+          {/* ── CALENDAR TAB ── */}
+          {tab === 'calendar' && (
+            <PersonalCalendarTab
+              tasks={myCalendarTasks}
+              userId={session?.ID}
+              /* Directors dispatch tasks rather than receive them, so the
+                 assigned-deadlines list is always empty for this role. */
+              showTaskDeadlines={false}
+              onViewTask={(taskId, titleText) => {
+                setTab('monitor')
+                setFilterSearch(titleText.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim())
+              }}
+            />
+          )}
+
           {tab === 'users' && (
             <div className="flex flex-col h-full">
               {/* Header */}
-              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white flex-shrink-0">
+              <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-4 border-b border-slate-200 bg-white flex-shrink-0">
                 <div className="min-w-0">
-                  <h2 className="font-bold text-green-900 text-base sm:text-lg leading-none">User Management</h2>
-                  <p className="text-slate-400 text-xs mt-1">Approve registrations, manage roles and access</p>
+                  <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">User Management</h1>
                 </div>
               </div>
               {/* Content */}
@@ -873,13 +925,21 @@ export default function DirectorPage() {
             style={{ animation: 'slideRight 0.25s ease' }}>
             <style>{`@keyframes slideRight { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
             {/* Drawer header */}
-            <div className="header-gradient flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
-              <div>
-                <p className="text-white font-bold text-sm">Dispatch New Task</p>
-                <p className="text-green-300 text-xs mt-0.5">Assign to unit personnel</p>
+            <div className="flex items-center gap-3 px-5 py-4 flex-shrink-0 header-gradient">
+              <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i className="bi bi-send-fill text-white text-base" aria-hidden="true" />
               </div>
-              <button onClick={() => setDrawerOpen(false)} className="text-green-300 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">
-                &times;
+              <div className="min-w-0 flex-1">
+                <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Dispatch new task</p>
+                <p className="mb-0 mt-0.5 text-green-100/80 text-[11px] font-medium leading-tight">Assign to unit personnel</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              >
+                <i className="bi bi-x-lg text-sm" />
               </button>
             </div>
             {/* Drawer body — scrollable */}
@@ -905,6 +965,7 @@ export default function DirectorPage() {
         {[
           { key: 'monitor', icon: 'bi-speedometer2', label: 'Monitor' },
           { key: 'archive', icon: 'bi-archive',       label: 'Archive' },
+          { key: 'calendar', icon: 'bi-calendar3',    label: 'Calendar' },
           { key: 'users',   icon: 'bi-people-fill',   label: 'Users', badge: pendingUsers },
         ].map(item => (
           <button key={item.key} onClick={() => setTab(item.key)}
@@ -1242,7 +1303,7 @@ export default function DirectorPage() {
                   const raw = selectedPersonnel.Status
                   const travelOrderMatch = raw.match(/\[TO:(.*?)\]/)
                   const travelOrderUrl = travelOrderMatch ? travelOrderMatch[1] : null
-                  const clean = raw.replace(/\[TO:.*?\]/, '').trim()
+                  const clean = stripStatusMarkers(raw)
                   const detail = clean.split(' — ')?.[1] || ''
                   // Parse: "eventName at location (dateStart to dateEnd)"
                   const parenMatch = detail.match(/^(.*?)\s+\(([^)]+)\)\s*$/)
@@ -1466,6 +1527,24 @@ export default function DirectorPage() {
         </div>,
         document.body
       )}
+
+      {/* ── AUTO-UPDATE TOAST ALERT ── */}
+      {autoUpdateAlert && (
+        <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-green-900 text-white rounded-xl shadow-lg border border-green-800/60 p-4 animate-in-right flex items-start gap-3">
+          <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20 text-green-400">
+            <i className="bi bi-patch-check-fill text-lg leading-none" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-xs leading-tight uppercase tracking-wider text-green-400">Status Activated</p>
+            <p className="text-[11px] text-green-100 font-medium mt-1 leading-relaxed">
+              Your availability status has been automatically updated to <span className="font-bold underline text-white">{autoUpdateAlert}</span> based on your advance personal calendar schedule.
+            </p>
+          </div>
+          <button onClick={() => setAutoUpdateAlert(null)} className="text-white/40 hover:text-white transition-colors p-1 -mt-1 -mr-1">
+            <i className="bi bi-x-lg text-xs" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1522,26 +1601,20 @@ function MobileTaskCard({ task: t, unit, idx, comments, session, unreadChat, emp
 
       {/* ── SECTION 2: Task Details ── */}
       <div className="px-3 sm:px-4 py-3 sm:py-4 border-b border-slate-100 bg-white">
-        {/* Document Number Badge - Modern Stacked Layout */}
-        {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
-          <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-white rounded-md px-2.5 py-1.5">
-              <i className="bi bi-hash text-green-400 text-[12px] sm:text-sm font-bold" />
-              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
-                {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
-              </span>
-            </span>
-          </div>
-        )}
-        {/* Clean Title - Document Number Extracted */}
-        <p className="font-semibold text-slate-800 text-sm sm:text-base leading-snug">
+        <p className="mb-0 font-semibold text-slate-800 text-sm sm:text-base leading-snug">
           {t.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || t.Title}
         </p>
-        {/* Category badge */}
-        {t.Category && (
-          <span className="text-[10px] sm:text-[11px] font-medium bg-slate-100 text-slate-600 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded mt-1.5 sm:mt-2 inline-block">
-            {t.Category}
-          </span>
+        {/* Doc number + category on one meta line — the stacked badge + pill said the same thing in three rows. */}
+        {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title) || t.Category) && (
+          <p className="m-0 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500">
+            {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
+              <span className="font-semibold text-slate-600">
+                #{t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
+              </span>
+            )}
+            {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && t.Category && <span aria-hidden="true">·</span>}
+            {t.Category && <span>{t.Category}</span>}
+          </p>
         )}
       </div>
 
@@ -1678,26 +1751,20 @@ function MobileArchiveCard({ task: t, unit, selected, onSelect, comments, sessio
 
       {/* ── SECTION 2: Task Details ── */}
       <div className="px-3 sm:px-4 py-3 sm:py-4 border-b border-slate-100 bg-white">
-        {/* Document Number Badge - Modern Stacked Layout */}
-        {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
-          <div className="mb-1.5 sm:mb-2">
-            <span className="inline-flex items-center gap-1 sm:gap-1.5 bg-green-800 text-white rounded-md px-2 sm:px-3 py-1 sm:py-1.5">
-              <i className="bi bi-file-earmark-text text-white/90 text-[10px] sm:text-xs" />
-              <span className="text-[10px] sm:text-xs font-bold tracking-wide">
-                {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
-              </span>
-            </span>
-          </div>
-        )}
-        {/* Clean Title - Document Number Extracted */}
-        <p className="font-semibold text-slate-800 text-sm sm:text-base leading-snug">
+        <p className="mb-0 font-semibold text-slate-800 text-sm sm:text-base leading-snug">
           {t.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || t.Title}
         </p>
-        {/* Category badge */}
-        {t.Category && (
-          <span className="text-[10px] sm:text-[11px] font-medium bg-slate-100 text-slate-600 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded mt-1.5 sm:mt-2 inline-block">
-            {t.Category}
-          </span>
+        {/* Doc number + category on one meta line — the stacked badge + pill said the same thing in three rows. */}
+        {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title) || t.Category) && (
+          <p className="m-0 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500">
+            {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
+              <span className="font-semibold text-slate-600">
+                #{t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
+              </span>
+            )}
+            {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && t.Category && <span aria-hidden="true">·</span>}
+            {t.Category && <span>{t.Category}</span>}
+          </p>
         )}
       </div>
 
@@ -1872,25 +1939,18 @@ function TaskRow({ task: t, unit, idx, isArchived, comments, session, history = 
             <i className={`bi bi-person-fill text-xs ${isArchived ? 'text-red-600' : 'text-green-700'}`} />
             <span className={`font-bold text-sm leading-none ${isArchived ? 'text-red-900' : 'text-green-900'}`}>{t.EmployeeName}</span>
           </span>
-          {/* Document Number Badge */}
-          {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
-            <div className="mb-1.5">
-              <span className="inline-flex items-center gap-1 bg-green-900 text-white rounded px-2 py-0.5">
-                <i className="bi bi-file-earmark-text text-white/90 text-[10px]" />
-                <span className="text-[10px] font-bold tracking-wide">
-                  {t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
-                </span>
-              </span>
-            </div>
-          )}
-          {/* Clean Title - Document Number Extracted */}
-          <p className="font-semibold text-slate-800 text-sm truncate max-w-[220px]">
+          <p className="mb-0 font-semibold text-slate-800 text-sm truncate max-w-[220px]">
             {t.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || t.Title}
           </p>
-          {/* Category & File Row */}
-          <div className="flex items-center gap-2">
+          {/* Doc number, category and files share one meta row instead of three stacked ones. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-slate-500">
+            {(t.DocumentNo || /^\[\s*[^\]]+\s*\]/.test(t.Title)) && (
+              <span className="font-semibold text-slate-600">
+                #{t.DocumentNo || t.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || '—'}
+              </span>
+            )}
             {t.Category && (
-              <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+              <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
                 {t.Category}
               </span>
             )}

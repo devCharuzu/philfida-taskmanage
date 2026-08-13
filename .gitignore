@@ -1,0 +1,10 @@
+.DS_Store
+
+# Build output / deps (were previously committed)
+taskflow-app/node_modules/
+taskflow-app/dist/
+
+# Env files — never commit, at any level
+.env
+.env.local
+.env.*.local

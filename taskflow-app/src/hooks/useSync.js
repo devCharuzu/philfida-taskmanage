@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore'
 import { getData } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { unlockAudio, playNotifSound } from '../lib/notifSound'
-import { showNotification } from '../lib/pushNotifications'
+import { showLocalNotification, permissionState } from '../lib/notifications'
 
 // H1/H2 FIX: Sync only notifications using getState() so we never rely on a
 // stale setGlobalData reference captured by a closure, and never use a
@@ -116,11 +116,11 @@ export function useSync() {
       unlockAudio()
       playNotifSound()
       useStore.getState().bumpNotifyPulse()
-      if (
-        typeof document !== 'undefined' && document.hidden &&
-        typeof Notification !== 'undefined' && Notification.permission === 'granted'
-      ) {
-        showNotification('PhilFIDA Task Management System', newest.Message)
+      // Show whenever the tab is not the user's current focus — `hidden` alone
+      // misses the common case of the browser being open behind another app.
+      const unfocused = typeof document === 'undefined' || document.hidden || !document.hasFocus()
+      if (unfocused && permissionState() === 'granted') {
+        showLocalNotification('PHILFIDA TaskFlow', newest.Message)
       }
     }
 
@@ -131,12 +131,6 @@ export function useSync() {
     if (!sessionId) return
 
     const role = useStore.getState().session?.Role
-
-    // Ask once per session — harmless no-op if already granted/denied, and
-    // lets backgrounded-tab notifications (above) actually show something.
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {})
-    }
 
     // Initial fetch
     sync()
@@ -193,6 +187,21 @@ export function useSync() {
                     sync()
                   } else if (table === 'Comments') {
                     checkCommentNotification(payload, sessionId, sync)
+                  }
+                } else if (payload.eventType === 'DELETE') {
+                  // An unsent message has to disappear for the other participant too.
+                  // DELETE payloads only carry the primary key, so drop the row locally
+                  // rather than trying to re-derive who it belonged to.
+                  if (table === 'Comments') {
+                    const goneId = payload.old?.ID ?? payload.old?.id
+                    if (goneId == null) { sync(); return }
+                    const current = useStore.getState().globalData
+                    useStore.getState().setGlobalData({
+                      ...current,
+                      comments: current.comments.filter(c => String(c.ID) !== String(goneId)),
+                    })
+                  } else {
+                    sync()
                   }
                 }
               }

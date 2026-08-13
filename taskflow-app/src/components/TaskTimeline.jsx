@@ -167,16 +167,16 @@ function TableTimeline({ task, history }) {
 // ── Shared history log ────────────────────────────────────────
 function HistoryLog({ history }) {
   return (
-    <div className="mt-1.5 border border-slate-100 rounded-xl overflow-hidden">
-      <div className="bg-slate-50 px-3 py-1 border-b border-slate-100">
+    <div className="mt-2 border border-slate-100 rounded-xl overflow-hidden">
+      <div className="bg-slate-50 px-3 py-2 border-b border-slate-100">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Activity Log</p>
       </div>
       <div className="divide-y divide-slate-50 max-h-44 overflow-y-auto">
         {history.map((h, i) => {
           const t = fmt(h.CreatedAt)
           return (
-            <div key={i} className="flex items-start gap-2 px-3 py-2">
-              <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <div key={i} className="flex items-start gap-2.5 px-3 py-2.5">
+              <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                 <i className={`bi ${getActionIcon(h.Action)} text-green-700 text-[9px]`} />
               </div>
               <div className="min-w-0 flex-1">
@@ -184,12 +184,12 @@ function HistoryLog({ history }) {
                   <span className="font-semibold">{h.Actor}</span>
                   {' '}<span className="text-slate-500">{getActionLabel(h.Action)}</span>
                 </p>
-                {h.Note && <p className="text-[10px] text-slate-400 mt-0.5 italic">{h.Note}</p>}
+                {h.Note && <p className="text-[10px] text-slate-400 mt-1 italic">{h.Note}</p>}
               </div>
               {t && (
                 <div className="flex-shrink-0 text-right">
                   <p className="text-[10px] text-slate-400 font-medium">{t.relative}</p>
-                  <p className="text-[9px] text-slate-300 whitespace-nowrap">{t.exact}</p>
+                  <p className="text-[9px] text-slate-300 whitespace-nowrap mt-0.5">{t.exact}</p>
                 </div>
               )}
             </div>

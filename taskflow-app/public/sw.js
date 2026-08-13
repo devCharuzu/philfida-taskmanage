@@ -1,118 +1,54 @@
-// Service Worker for PhilFIDA TaskFlow Push Notifications
+// Service worker for PHILFIDA TaskFlow — notifications only.
+//
+// Deliberately NOT a caching worker. The previous version pre-cached
+// /static/js/bundle.js and /static/css/main.css (Create-React-App paths that
+// do not exist in this Vite build), and cache.addAll() rejects atomically on a
+// single 404 — so the worker could never finish installing. Its cache-first
+// fetch handler would also have served stale HTML after every deploy. Both are
+// removed; Vercel already handles asset caching.
 
-const CACHE_NAME = 'philfida-taskflow-v1'
-const urlsToCache = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/favicon.ico'
-]
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
 
-// Install event - cache resources
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(urlsToCache)
-      })
-  )
-})
-
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName)
-          }
-        })
-      )
-    })
-  )
-})
-
-// Fetch event - serve from cache when offline
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request)
-      }
-    )
-  )
-})
-
-// Push event - handle push notifications
+// ── Web Push (fires even when the browser is closed) ─────────────────────
 self.addEventListener('push', (event) => {
-  if (!event.data) {
-    return
+  let payload = {}
+  try {
+    payload = event.data ? event.data.json() : {}
+  } catch {
+    payload = { body: event.data ? event.data.text() : '' }
   }
 
-  const data = event.data.json()
+  const title = payload.title || 'PHILFIDA TaskFlow'
   const options = {
-    body: data.body || 'You have a new notification',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
-    tag: 'philfida-notification',
+    body: payload.body || 'You have a new notification',
+    icon: '/philfida-logo.png',
+    badge: '/philfida-logo.png',
+    // Same tag + renotify: a second alert replaces the first rather than
+    // stacking, but still re-alerts the user.
+    tag: payload.tag || 'philfida-notification',
     renotify: true,
-    requireInteraction: false,
-    actions: [
-      {
-        action: 'open',
-        title: 'Open'
-      },
-      {
-        action: 'dismiss',
-        title: 'Dismiss'
-      }
-    ],
-    data: {
-      url: data.url || '/',
-      notificationId: data.id,
-      type: data.type || 'info'
-    }
+    data: { url: payload.url || '/' },
   }
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'PhilFIDA TaskFlow', options)
-  )
+  event.waitUntil(self.registration.showNotification(title, options))
 })
 
-// Notification click event
+// ── Click → focus an existing tab if one is open, else open a new one ────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
+  const target = event.notification.data?.url || '/'
 
-  if (event.action === 'dismiss') {
-    return
-  }
-
-  const urlToOpen = event.notification.data?.url || '/'
-  
   event.waitUntil(
-    clients.matchAll({
-      type: 'window',
-      includeUncontrolled: true
-    }).then((clientList) => {
-      // Focus existing window if available
-      for (const client of clientList) {
-        if (client.url === urlToOpen && 'focus' in client) {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        // Match on origin, not the full URL — the app is a SPA, so any open
+        // tab can be navigated rather than spawning a duplicate.
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          client.navigate?.(target)
           return client.focus()
         }
       }
-      
-      // Open new window
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen)
-      }
+      return self.clients.openWindow ? self.clients.openWindow(target) : undefined
     })
   )
-})
-
-// Notification close event
-self.addEventListener('notificationclose', (event) => {
-  // Optionally track notification dismissal
-  console.log('Notification closed:', event.notification.data)
 })

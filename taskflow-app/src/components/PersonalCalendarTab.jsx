@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { updatePresence, uploadFiles, getSignedFileUrl } from '../lib/api'
+import { useState, useEffect, lazy, Suspense} from 'react'
+import { updatePresence, uploadFiles, getSignedFileUrl, buildTravelStatus} from '../lib/api'
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June", 
@@ -24,7 +24,14 @@ const getManilaDateString = (dateInput) => {
   }
 }
 
-export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
+const LocationPicker = lazy(() => import('./LocationPicker'))
+
+/** Task cards elsewhere show the document number, not the internal TaskID. */
+function getDocNo(task) {
+  return task?.DocumentNo || task?.Title?.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || task?.TaskID || ''
+}
+
+export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTaskDeadlines = true }) {
   // ── States ───────────────────────────────────────────────────
   const todayStr = getManilaDateString(new Date())
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
@@ -46,6 +53,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
   const [remType, setRemType] = useState('normal') // normal, travel, leave
   const [travelActivity, setTravelActivity] = useState('')
   const [travelLocation, setTravelLocation] = useState('')
+  const [travelGeo, setTravelGeo] = useState(null)   // { lat, lng } once pinned
   const [leaveType, setLeaveType] = useState('')
   const [leaveReason, setLeaveReason] = useState('')
   const [returnDate, setReturnDate] = useState('')
@@ -138,7 +146,9 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
         if (!hasActiveTravelLeave) {
           // Automatically set status to Available
           updatePresence(userId, 'Available').catch(err => console.error('Auto-availability fail:', err))
-          window.dispatchEvent(new Event('presence-auto-updated'))
+          window.dispatchEvent(new CustomEvent('presence-auto-updated', {
+            detail: { status: 'Available' }
+          }))
         }
       }
     }
@@ -326,7 +336,12 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
           if ((remType === 'travel' || remType === 'leave') && (r.applied || manilaNowStr >= startDateTime)) {
             let fullStatus = ''
             if (remType === 'travel') {
-              fullStatus = `Official Travel — ${travelActivity.trim()} at ${travelLocation.trim()} (${selectedDateStr} ${remTime} to ${returnDate} ${returnTime})`
+              fullStatus = buildTravelStatus({
+                activity: travelActivity.trim(),
+                location: travelLocation.trim(),
+                dateRange: `${selectedDateStr} ${remTime} to ${returnDate} ${returnTime}`,
+                lat: travelGeo?.lat, lng: travelGeo?.lng,
+              })
             } else {
               fullStatus = `On Leave — ${leaveType}: ${leaveReason.trim()} (${selectedDateStr} ${remTime} to ${returnDate} ${returnTime})`
             }
@@ -346,6 +361,8 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
             type: remType,
             travelActivity: remType === 'travel' ? travelActivity.trim() : undefined,
             travelLocation: remType === 'travel' ? travelLocation.trim() : undefined,
+            travelLat: remType === 'travel' ? (travelGeo?.lat ?? null) : undefined,
+            travelLng: remType === 'travel' ? (travelGeo?.lng ?? null) : undefined,
             leaveType: remType === 'leave' ? leaveType : undefined,
             leaveReason: remType === 'leave' ? leaveReason.trim() : undefined,
             returnDate: remType !== 'normal' ? returnDate : undefined,
@@ -381,14 +398,21 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
       if ((remType === 'travel' || remType === 'leave') && manilaNowStr >= startDateTime) {
         let fullStatus = ''
         if (remType === 'travel') {
-          fullStatus = `Official Travel — ${travelActivity.trim()} at ${travelLocation.trim()} (${selectedDateStr} ${remTime} to ${returnDate} ${returnTime})`
+          fullStatus = buildTravelStatus({
+            activity: travelActivity.trim(),
+            location: travelLocation.trim(),
+            dateRange: `${selectedDateStr} ${remTime} to ${returnDate} ${returnTime}`,
+            lat: travelGeo?.lat, lng: travelGeo?.lng,
+          })
         } else {
           fullStatus = `On Leave — ${leaveType}: ${leaveReason.trim()} (${selectedDateStr} ${remTime} to ${returnDate} ${returnTime})`
         }
         // Update Supabase in real-time
         updatePresence(userId, fullStatus).catch(err => console.error('Realtime add presence fail:', err))
         isCurrentlyApplied = true
-        window.dispatchEvent(new Event('presence-auto-updated'))
+        window.dispatchEvent(new CustomEvent('presence-auto-updated', {
+          detail: { status: fullStatus }
+        }))
       }
 
       const newReminder = {
@@ -402,6 +426,8 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
         type: remType,
         travelActivity: remType === 'travel' ? travelActivity.trim() : undefined,
         travelLocation: remType === 'travel' ? travelLocation.trim() : undefined,
+        travelLat: remType === 'travel' ? (travelGeo?.lat ?? null) : undefined,
+        travelLng: remType === 'travel' ? (travelGeo?.lng ?? null) : undefined,
         leaveType: remType === 'leave' ? leaveType : undefined,
         leaveReason: remType === 'leave' ? leaveReason.trim() : undefined,
         returnDate: remType !== 'normal' ? returnDate : undefined,
@@ -420,7 +446,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
     setRemColor('gold')
     setRemType('normal')
     setTravelActivity('')
-    setTravelLocation('')
+    setTravelLocation(''); setTravelGeo(null)
     setLeaveType('')
     setLeaveReason('')
     setRemAttachments('')
@@ -437,6 +463,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
     setRemType(r.type || 'normal')
     setTravelActivity(r.travelActivity || '')
     setTravelLocation(r.travelLocation || '')
+    setTravelGeo(r.travelLat != null && r.travelLng != null ? { lat: r.travelLat, lng: r.travelLng } : null)
     setLeaveType(r.leaveType || '')
     setLeaveReason(r.leaveReason || '')
     setReturnDate(r.returnDate || r.date)
@@ -492,15 +519,16 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
           <h1 className="mb-0 text-lg sm:text-xl font-bold tracking-tight leading-snug text-slate-900">
             Personal Calendar &amp; Reminders
           </h1>
-          <p className="mb-0 mt-0.5 text-[13px] text-slate-500 font-medium leading-snug">Track your assigned task deadlines and organize personal reminders</p>
         </div>
 
         {/* Stats strip */}
         <div className="flex gap-6 mt-4 pt-4 border-t border-slate-100 flex-wrap">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>Month Task Deadlines: <strong className="text-slate-800">{monthlyTasksCount}</strong></span>
-          </div>
+          {showTaskDeadlines && (
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <span>Month Task Deadlines: <strong className="text-slate-800">{monthlyTasksCount}</strong></span>
+            </div>
+          )}
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
             <span>Month Reminders: <strong className="text-slate-800">{monthlyRemindersCount}</strong></span>
@@ -602,17 +630,15 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                         (() => {
                           const hasActive = dayTasks.some(t => String(t.Archived).toUpperCase() !== 'TRUE')
                           return (
-                            <span className={`text-[7px] sm:text-[9px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded shadow-sm tracking-tighter flex items-center gap-0.5 select-none leading-none scale-90 sm:scale-100
+                            <span className={`text-[7px] sm:text-[9px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded shadow-sm tracking-tighter select-none leading-none scale-90 sm:scale-100
                               ${hasActive ? 'bg-emerald-600 text-white' : 'bg-slate-400 text-white opacity-80'}`}>
-                              <i className={`bi ${hasActive ? 'bi-clipboard-check-fill' : 'bi-archive-fill'} text-[8px] sm:text-[10px]`} />
                               <span className="hidden xs:inline">{dayTasks.length} {dayTasks.length === 1 ? 'Task' : 'Tasks'}</span>
                               <span className="xs:hidden">{dayTasks.length}T</span>
                             </span>
                           )
                         })()
                       ) : hasReminders ? (
-                        <span className="text-[7px] sm:text-[9px] font-black uppercase bg-amber-500 text-white px-1 sm:px-1.5 py-0.5 rounded shadow-sm tracking-tighter flex items-center gap-0.5 select-none leading-none scale-90 sm:scale-100">
-                          <i className="bi bi-bell-fill text-[8px] sm:text-[10px]" />
+                        <span className="text-[7px] sm:text-[9px] font-black uppercase bg-amber-500 text-white px-1 sm:px-1.5 py-0.5 rounded shadow-sm tracking-tighter select-none leading-none scale-90 sm:scale-100">
                           <span className="hidden xs:inline">{dayReminders.length} Rem</span>
                           <span className="xs:hidden">{dayReminders.length}R</span>
                         </span>
@@ -688,6 +714,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
             <div className="p-5 space-y-4">
               
               {/* ── Deadlines Section ── */}
+              {showTaskDeadlines && (
               <div>
                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -705,15 +732,12 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                           key={t.TaskID} 
                           className={`border rounded-xl p-3 transition-all flex flex-col gap-2 relative group cursor-pointer hover:shadow-sm
                             ${isArchived 
-                              ? 'bg-slate-50/40 border-slate-200 border-dashed opacity-75 hover:opacity-100 hover:300' 
-                              : 'bg-slate-50 border-slate-200 hover:200'}`}
+                              ? 'bg-slate-50/40 border-slate-200 border-dashed opacity-75 hover:opacity-100 hover:border-slate-300' 
+                              : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}
                           onClick={() => setSelectedDetailTask(t)}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[9px] font-black bg-emerald-50 border border-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase leading-none">
-                                Task
-                              </span>
                               {isArchived && (
                                 <span className="text-[8px] font-black uppercase bg-slate-200 border border-slate-300 text-slate-500 px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5 select-none">
                                   <i className="bi bi-archive-fill" /> Archived
@@ -752,6 +776,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                   </div>
                 )}
               </div>
+              )}
 
               {/* ── Reminders Section ── */}
               <div className="pt-2 border-t border-slate-100">
@@ -787,7 +812,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                           setRemColor('gold')
                           setRemType('normal')
                           setTravelActivity('')
-                          setTravelLocation('')
+                          setTravelLocation(''); setTravelGeo(null)
                           setLeaveType('')
                           setLeaveReason('')
                           setRemAttachments('')
@@ -905,16 +930,21 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                             autoFocus
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-blue-800 uppercase tracking-wider block">Location / Venue *</label>
-                          <input
-                            className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none"
-                            placeholder="e.g. Manila Hotel, Manila"
+                        <Suspense fallback={
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-blue-800 uppercase tracking-wider block">Location / Venue *</label>
+                            <div className="h-[60px] rounded-lg border border-blue-200 bg-white animate-pulse" />
+                          </div>
+                        }>
+                          <LocationPicker
                             value={travelLocation}
-                            onChange={e => setTravelLocation(e.target.value)}
-                            required
+                            initialCoords={travelGeo}
+                            onChange={({ address, lat, lng }) => {
+                              setTravelLocation(address)
+                              setTravelGeo(lat != null && lng != null ? { lat, lng } : null)
+                            }}
                           />
-                        </div>
+                        </Suspense>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <label className="text-[9px] font-black text-blue-800 uppercase tracking-wider block">Start Time</label>
@@ -961,7 +991,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                             onChange={e => setLeaveType(e.target.value)}
                             required
                           >
-                            <option value="">-- Select Leave --</option>
+                            <option value="">Select Leave</option>
                             <option value="Vacation Leave">Vacation Leave</option>
                             <option value="Sick Leave">Sick Leave</option>
                             <option value="Maternity Leave">Maternity Leave</option>
@@ -1077,7 +1107,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                           setRemColor('gold')
                           setRemType('normal')
                           setTravelActivity('')
-                          setTravelLocation('')
+                          setTravelLocation(''); setTravelGeo(null)
                           setLeaveType('')
                           setLeaveReason('')
                           setRemAttachments('')
@@ -1195,82 +1225,86 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white border border-slate-100 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in-up">
             
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-[#016837] to-[#027a42] px-6 py-4 flex items-center justify-between text-white">
-              <div>
-                <span className="text-[9px] font-black tracking-widest uppercase bg-white/20 px-2 py-0.5 rounded font-mono">
-                  {selectedDetailTask.TaskID}
-                </span>
-                <h3 className="text-sm sm:text-base font-black mt-1 leading-tight">
-                  {selectedDetailTask.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim()}
-                </h3>
+            {/* Modal Header — same pattern as the other standardised modals */}
+            <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-green-800">
+              <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i className="bi bi-clipboard-check text-white text-base" aria-hidden="true" />
               </div>
-              <button 
-                type="button" 
+              <div className="min-w-0 flex-1">
+                <p className="mb-0 truncate text-white font-semibold text-[15px] leading-tight tracking-tight">
+                  {selectedDetailTask.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || selectedDetailTask.Title}
+                </p>
+                <p className="mb-0 mt-0.5 truncate text-green-100/80 text-[11px] font-medium leading-tight">
+                  {getDocNo(selectedDetailTask)}
+                </p>
+              </div>
+              <button
+                type="button"
                 onClick={() => setSelectedDetailTask(null)}
-                className="text-white/85 hover:text-white text-2xl font-bold p-1 leading-none select-none transition-colors"
+                aria-label="Close"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
               >
-                &times;
+                <i className="bi bi-x-lg text-sm" />
               </button>
             </div>
 
             {/* Modal Body */}
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               
-              {/* Badges row */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md border
-                  ${selectedDetailTask.Priority === 'Urgent' 
-                    ? 'bg-red-50 border-red-200 text-red-700' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-                  Priority: {selectedDetailTask.Priority || 'Normal'}
+              {/* Status chips */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1
+                  ${selectedDetailTask.Priority === 'Urgent'
+                    ? 'bg-red-50 text-red-700 ring-red-200'
+                    : 'bg-slate-50 text-slate-700 ring-slate-200'}`}>
+                  {selectedDetailTask.Priority || 'Normal'}
                 </span>
-                
-                <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-green-50 border-green-200 text-green-800">
-                  Category: {selectedDetailTask.Category || 'General'}
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                  {selectedDetailTask.Category || 'General'}
                 </span>
-
-                <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-blue-50 border-blue-200 text-blue-800">
-                  Status: {selectedDetailTask.Status}
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1
+                  ${selectedDetailTask.Status === 'Completed'
+                    ? 'bg-green-50 text-green-700 ring-green-200'
+                    : selectedDetailTask.Status === 'Received'
+                      ? 'bg-blue-50 text-blue-700 ring-blue-200'
+                      : 'bg-amber-50 text-amber-700 ring-amber-200'}`}>
+                  {selectedDetailTask.Status}
                 </span>
-
                 {String(selectedDetailTask.Archived).toUpperCase() === 'TRUE' && (
-                  <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-100 300 text-slate-600 flex items-center gap-1.5 leading-none">
-                    <i className="bi bi-archive-fill text-slate-500" /> Archived Task
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-300">
+                    Archived
                   </span>
                 )}
               </div>
 
               {/* Instructions */}
               <div className="space-y-1">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Instructions</h4>
-                <div className="bg-slate-50/80 border border-slate-100 rounded-xl p-3.5 text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">
+                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Instructions</h4>
+                <div className="whitespace-pre-wrap rounded-xl border border-slate-200 p-3.5 text-[13px] leading-relaxed text-slate-700">
                   {selectedDetailTask.Instructions || <span className="italic text-slate-400">No instructions provided.</span>}
                 </div>
               </div>
 
               {/* Details Grid */}
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="space-y-1">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Deadline</h4>
-                  <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <i className="bi bi-calendar-event text-emerald-700 text-sm" />
+              <dl className="grid grid-cols-2 gap-4">
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Deadline</dt>
+                  <dd className="m-0 mt-1 text-[13px] font-semibold text-slate-700">
                     {selectedDetailTask.Deadline ? new Date(selectedDetailTask.Deadline).toLocaleDateString('en-PH', { dateStyle: 'long' }) : 'No deadline'}
-                  </p>
+                  </dd>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Assigned At</h4>
-                  <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <i className="bi bi-clock text-slate-400 text-sm" />
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Assigned</dt>
+                  <dd className="m-0 mt-1 text-[13px] font-semibold text-slate-700">
                     {selectedDetailTask.CreatedAt ? new Date(selectedDetailTask.CreatedAt).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : 'Unknown'}
-                  </p>
+                  </dd>
                 </div>
-              </div>
+              </dl>
 
               {/* File Attachments */}
               {selectedDetailTask.FileUrl && (
                 <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Documentation / Attached Files</h4>
+                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Attachments</h4>
                   <div className="flex flex-wrap gap-2">
                     {selectedDetailTask.FileUrl.split('|').map((path, idx) => (
                       <SignedAttachmentLink key={idx} path={path} />
@@ -1286,9 +1320,9 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
               <button
                 type="button"
                 onClick={() => setSelectedDetailTask(null)}
-                className="px-4 py-1.5 bg-[#016837] hover:bg-[#027a42] text-white text-xs font-black uppercase rounded-xl shadow-md transition-all hover:-translate-y-0.5 active:translate-y-0"
+                className="rounded-lg bg-green-800 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2"
               >
-                Close Details
+                Close
               </button>
             </div>
 
@@ -1304,8 +1338,8 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
               <div className="w-12 h-12 bg-red-50 border border-red-200 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl">
                 <i className="bi bi-exclamation-triangle-fill" />
               </div>
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Remove Availability Schedule?</h3>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              <h3 className="mb-0 text-base font-bold tracking-tight text-slate-900">Remove availability schedule?</h3>
+              <p className="mb-0 text-[13px] leading-relaxed text-slate-500">
                 Are you sure you want to delete this {reminderToDelete.type === 'travel' ? 'Official Travel' : 'Leave'} schedule? This will remove the scheduled presence and reset your status to <strong className="text-green-700 font-bold">Available</strong> across the system.
               </p>
             </div>
@@ -1313,7 +1347,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
               <button
                 type="button"
                 onClick={() => setReminderToDelete(null)}
-                className="w-full px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 text-xs font-black uppercase rounded-xl transition-all"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
               >
                 Cancel
               </button>
@@ -1337,9 +1371,9 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask }) {
                   saveReminders(updated)
                   setReminderToDelete(null)
                 }}
-                className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase rounded-xl shadow-md transition-all hover:-translate-y-0.5 active:translate-y-0"
+                className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
               >
-                Yes, Remove
+                Remove
               </button>
             </div>
           </div>
@@ -1416,6 +1450,30 @@ export async function checkAndApplyScheduledPresence(userId, syncCallback) {
     // Output standard YYYY-MM-DD HH:MM
     const manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
 
+    // ── Expire finished travel/leave first ──────────────────────────────
+    for (let r of reminders) {
+      if ((r.type === 'travel' || r.type === 'leave') && r.applied) {
+        const endDateTime = r.returnDate && r.timeEnd
+          ? `${r.returnDate} ${r.timeEnd}`
+          : r.returnDate
+            ? `${r.returnDate} 23:59`
+            : `${r.date} 23:59`
+
+        if (manilaNowStr >= endDateTime) {
+          r.applied = false
+          modified = true
+        }
+      }
+    }
+
+    if (modified && !reminders.some(r => r.applied && (r.type === 'travel' || r.type === 'leave'))) {
+      await updatePresence(userId, 'Available')
+      window.dispatchEvent(new CustomEvent('presence-auto-updated', {
+        detail: { status: 'Available' }
+      }))
+    }
+
+    // ── Then apply any that have just started ───────────────────────────
     for (let r of reminders) {
       if ((r.type === 'travel' || r.type === 'leave') && !r.applied) {
         const startDateTime = `${r.date} ${r.time}`
@@ -1423,7 +1481,13 @@ export async function checkAndApplyScheduledPresence(userId, syncCallback) {
           // The scheduled time has arrived! Update presence.
           let fullStatus = ''
           if (r.type === 'travel') {
-            fullStatus = `Official Travel — ${r.travelActivity || 'Summit'} at ${r.travelLocation || 'Field'} (${r.date} to ${r.returnDate || r.date})`
+            fullStatus = buildTravelStatus({
+              activity: r.travelActivity || 'Summit',
+              location: r.travelLocation || 'Field',
+              dateRange: `${r.date} to ${r.returnDate || r.date}`,
+              filePath: r.attachments ? String(r.attachments).split('|')[0] : '',
+              lat: r.travelLat, lng: r.travelLng,
+            })
           } else {
             fullStatus = `On Leave — ${r.leaveType || 'Leave'}: ${r.leaveReason || 'Reason'} (${r.date} to ${r.returnDate || r.date})`
           }
@@ -1443,6 +1507,8 @@ export async function checkAndApplyScheduledPresence(userId, syncCallback) {
 
     if (modified) {
       localStorage.setItem(`philfida_calendar_reminders_${userId}`, JSON.stringify(reminders))
+      // Tell any mounted calendar/profile view to re-read the reminder list.
+      window.dispatchEvent(new Event('presence-reminders-changed'))
       if (syncCallback) {
         await syncCallback()
       }

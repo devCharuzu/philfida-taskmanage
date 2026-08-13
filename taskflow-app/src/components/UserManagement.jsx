@@ -47,6 +47,8 @@ export default function UserManagement({ users, onSync }) {
   // Approve / Deactivate / Reactivate flow — same password-confirm modal as
   // Delete, themed per action instead of a bare window.prompt().
   const [pendingAction, setPendingAction] = useState(null) // { type, userId }
+  const [editPasswordOpen, setEditPasswordOpen] = useState(false)
+  const [editError, setEditError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
   const filteredUsers = filter === 'All' ? users : users.filter(u => u.AccountStatus === filter)
@@ -90,8 +92,8 @@ export default function UserManagement({ users, onSync }) {
   const handleReactivate = (userId) => requestAction('reactivate', userId)
 
   async function handleSaveEdit() {
-    if (!editRole || !editUnit) return
-    
+    setEditError('')
+
     const validation = validateForm(
       { editRole, editUnit },
       {
@@ -99,24 +101,33 @@ export default function UserManagement({ users, onSync }) {
         editUnit: { required: true, label: editRole === 'Director' ? 'Office' : 'Unit' }
       }
     )
-    
+
     if (!validation.isValid) {
-      alert(Object.values(validation.errors)[0])
+      setEditError(Object.values(validation.errors)[0])
       return
     }
 
+    // Google-auth directors verify via JWT email inside the RPC — no password step.
+    if (await hasSupabaseAuthSession()) {
+      await runSaveEdit('')
+      return
+    }
+    setEditPasswordOpen(true)
+  }
+
+  async function runSaveEdit(password) {
+    if (!editUser) return
     setLoading(editUser.ID + '_edit')
     try {
-      const auth = await directorRpcSecretOrAbort()
-      if (!auth.ok) return
       await withErrorHandling(async () => {
-        await updateUserRole(editUser.ID, editRole, editUnit, session.ID, auth.secret)
+        await updateUserRole(editUser.ID, editRole, editUnit, session.ID, password)
       }, ERROR_MESSAGES.DATABASE)
       await onSync()
+      setEditPasswordOpen(false)
       setEditUser(null)
     } catch (error) {
       console.error('Failed to update user role:', error)
-      alert(`Failed to update user: ${error.message}`)
+      setEditError(error.message || 'Failed to update user. Please try again.')
     } finally {
       setLoading(null)
     }
@@ -362,7 +373,7 @@ export default function UserManagement({ users, onSync }) {
       {/* User Cards - All Screen Sizes */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm w-full">
         {/* Cards Grid View - Responsive for desktop (900px breakpoint) */}
-        <div className="grid grid-cols-1 min-[900px]:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start p-4 md:p-6 lg:p-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-start p-4 md:p-6 lg:p-8">
           {filteredUsers.length === 0 ? (
             <div className="col-span-full text-center py-16 text-slate-400">
               <i className="bi bi-people text-3xl block mb-2 opacity-30" />
@@ -376,7 +387,7 @@ export default function UserManagement({ users, onSync }) {
               onApprove={() => handleApprove(u.ID)}
               onDeactivate={() => handleDeactivate(u.ID)}
               onReactivate={() => handleReactivate(u.ID)}
-              onEdit={() => { setEditUser(u); setEditRole(u.Role); setEditUnit(u.Unit || u.Office || '') }}
+              onEdit={() => { setEditUser(u); setEditRole(u.Role); setEditUnit(u.Unit || u.Office || ''); setEditError('') }}
               onDelete={() => openDeleteConfirm(u)}
             />
           ))}
@@ -387,31 +398,84 @@ export default function UserManagement({ users, onSync }) {
       {editUser && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setEditUser(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-4 py-3 flex items-center justify-between"
-              style={{ background: 'linear-gradient(135deg,#0a2e0a,#155414)' }}>
-              <p className="text-white font-bold text-sm">Edit User — {editUser.Name}</p>
-              <button onClick={() => setEditUser(null)} className="text-green-300 hover:text-white text-xl leading-none">&times;</button>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Header — the action is the title, the person is the subject beneath it.
+                Previously both were crammed into one line as "Edit User — <name>",
+                which left the name competing with the action and truncating badly. */}
+            <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-green-800">
+              <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i className="bi bi-person-gear text-white text-base" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Edit user</p>
+                <p className="mb-0 mt-0.5 truncate text-green-100/80 text-[11px] font-medium leading-tight">{editUser.Name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditUser(null)}
+                aria-label="Close"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              >
+                <i className="bi bi-x-lg text-sm" />
+              </button>
             </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="label">Role</label>
-                <select className="input" value={editRole} onChange={e => { setEditRole(e.target.value); setEditUnit('') }}>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label htmlFor="eu-role" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Role</label>
+                <select
+                  id="eu-role"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none transition-all focus:bg-white focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                  value={editRole}
+                  onChange={e => { setEditRole(e.target.value); setEditUnit(''); setEditError('') }}
+                >
                   <option value="Employee">Unit Personnel</option>
                   <option value="Unit Head">Unit Head</option>
                   <option value="Director">Director</option>
                   <option value="Records">Records</option>
                 </select>
               </div>
-              <div>
-                <label className="label">{editRole === 'Director' ? 'Office' : 'Unit'}</label>
-                <select className="input" value={editUnit} onChange={e => setEditUnit(e.target.value)}>
-                  <option value="">-- Select {editRole === 'Director' ? 'Office' : 'Unit'} --</option>
+              <div className="space-y-1">
+                <label htmlFor="eu-unit" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  {editRole === 'Director' ? 'Office' : 'Unit'}
+                </label>
+                <select
+                  id="eu-unit"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none transition-all focus:bg-white focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                  value={editUnit}
+                  onChange={e => { setEditUnit(e.target.value); setEditError('') }}
+                >
+                  <option value="">Select {editRole === 'Director' ? 'Office' : 'Unit'}</option>
                   {(editRole === 'Director' ? OFFICES : UNITS).map(u => <option key={u}>{u}</option>)}
                 </select>
               </div>
-              <button onClick={handleSaveEdit} disabled={loading === editUser.ID + '_edit'} className="btn-primary w-full py-2.5">
-                {loading === editUser.ID + '_edit' ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> : 'Save Changes'}
+
+              {editError && (
+                <p className="mb-0 flex items-center gap-1.5 text-[11px] font-semibold text-red-600">
+                  <i className="bi bi-exclamation-circle-fill" aria-hidden="true" />{editError}
+                </p>
+              )}
+            </div>
+
+            {/* Footer — Cancel/Save pair, matching the other form modals; the ×
+                used to be the only way to back out. */}
+            <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setEditUser(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={loading === editUser.ID + '_edit'}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-800 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-900 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2"
+              >
+                {loading === editUser.ID + '_edit'
+                  ? <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Saving…</>
+                  : 'Save changes'}
               </button>
             </div>
           </div>
@@ -420,6 +484,20 @@ export default function UserManagement({ users, onSync }) {
       )}
 
       {/* ── APPROVE / DEACTIVATE / REACTIVATE CONFIRM MODAL ── */}
+      {editPasswordOpen && editUser && (
+        <DirectorPasswordModal
+          icon="bi-person-gear"
+          title="Save User Changes"
+          subtitle={`Update role and unit for ${editUser.Name}`}
+          theme="success"
+          confirmLabel="Save"
+          confirmIcon="bi-check-lg"
+          loading={loading === editUser.ID + '_edit'}
+          onCancel={() => setEditPasswordOpen(false)}
+          onConfirm={runSaveEdit}
+        />
+      )}
+
       {pendingAction && (
         <DirectorPasswordModal
           {...ACTION_CONFIG[pendingAction.type]}
@@ -435,39 +513,53 @@ export default function UserManagement({ users, onSync }) {
           onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
 
-            {/* Red header */}
-            <div className="bg-red-600 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <i className="bi bi-person-x-fill text-white text-lg" />
+            {/* Header — same metrics as the other standardised modals, in the
+                destructive colour. It had no close control at all before. */}
+            <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-red-600">
+              <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i className="bi bi-person-x-fill text-white text-base" aria-hidden="true" />
               </div>
-              <div>
-                <p className="text-white font-bold text-sm">Delete Account Permanently</p>
-                <p className="text-red-200 text-xs mt-0.5">This cannot be undone</p>
+              <div className="min-w-0 flex-1">
+                <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Delete account</p>
+                <p className="mb-0 mt-0.5 text-red-100/80 text-[11px] font-medium leading-tight">This cannot be undone</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                aria-label="Close"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              >
+                <i className="bi bi-x-lg text-sm" />
+              </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              {/* Who is being deleted */}
-              <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-xl p-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-800 text-sm">{deleteTarget.Name}</p>
-                  <p className="text-slate-500 text-xs">ID: {deleteTarget.ID} · {deleteTarget.Unit || deleteTarget.Office}</p>
-                </div>
+            <div className="p-6 space-y-4">
+              {/* Who is being deleted. The separator is only rendered when there
+                  is a unit to follow it — it used to print a dangling "·". */}
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3.5">
+                <p className="mb-0 text-sm font-semibold text-slate-900 leading-tight">{deleteTarget.Name}</p>
+                <p className="mb-0 mt-1 text-[11px] text-slate-500 leading-tight">
+                  ID: {deleteTarget.ID}
+                  {(deleteTarget.Unit || deleteTarget.Office) ? ` · ${deleteTarget.Unit || deleteTarget.Office}` : ''}
+                </p>
               </div>
 
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Deleting this account will permanently remove the user, all their assigned tasks, and associated data.
+              <p className="mb-0 text-[13px] leading-relaxed text-slate-600">
+                This permanently removes the user, all their assigned tasks, and associated data.
               </p>
 
               {/* Director password confirmation (manual login only; Google OAuth uses JWT inside RPC). */}
               {oauthForDelete ? (
-                <p className="text-slate-600 text-sm">You are signed in with Google — no director password needed.</p>
+                <p className="mb-0 text-[13px] text-slate-600">You are signed in with Google — no director password needed.</p>
               ) : (
-                <div>
-                  <label className="label">Your Director Password</label>
+                <div className="space-y-1">
+                  <label htmlFor="del-pass" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Your Director Password
+                  </label>
                   <div className="relative">
                     <input
-                      className="input pr-10"
+                      id="del-pass"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 pr-11 text-sm font-medium text-slate-800 outline-none transition-all focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                       type={showPass ? 'text' : 'password'}
                       placeholder="Enter your password to confirm"
                       value={dirPassword}
@@ -476,31 +568,40 @@ export default function UserManagement({ users, onSync }) {
                       autoFocus
                     />
                     <button type="button" onClick={() => setShowPass(!showPass)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      aria-label={showPass ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600">
                       <i className={`bi bi-${showPass ? 'eye-slash' : 'eye'}`} />
                     </button>
                   </div>
                 </div>
               )}
               {deleteError && (
-                <p className="text-red-600 text-xs flex items-center gap-1">
-                  <i className="bi bi-exclamation-circle-fill" />{deleteError}
+                <p className="mb-0 flex items-center gap-1.5 text-[11px] font-semibold text-red-600">
+                  <i className="bi bi-exclamation-circle-fill" aria-hidden="true" />{deleteError}
                 </p>
               )}
+            </div>
 
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setDeleteTarget(null)} className="btn-secondary flex-1 py-2.5">
-                  Cancel
-                </button>
-                <button onClick={handleConfirmDelete}
-                  disabled={deleteLoading || (!oauthForDelete && !dirPassword.trim())}
-                  className="btn-danger flex-1 py-2.5 disabled:opacity-50">
-                  {deleteLoading
-                    ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                    : <><i className="bi bi-trash3-fill" /> Delete</>
-                  }
-                </button>
-              </div>
+            {/* Footer — Cancel carries no colour weight so the destructive action
+                is the only emphasised control, rather than the two sharing width. */}
+            <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleteLoading || (!oauthForDelete && !dirPassword.trim())}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
+              >
+                {deleteLoading
+                  ? <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Deleting…</>
+                  : 'Delete account'}
+              </button>
             </div>
           </div>
         </div>,

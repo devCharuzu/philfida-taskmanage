@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
+import { ensureServiceWorker, permissionState, getSubscription, subscribeToPush } from './lib/notifications'
+import { savePushSubscription } from './lib/api'
 import LoginPage     from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import DirectorPage  from './pages/DirectorPage'
@@ -230,6 +232,23 @@ function useIdleLogout() {
 export default function App() {
   const { hydrated, error } = useHydrated()
   useIdleLogout()
+
+  const sessionId = useStore(s => s.session?.ID)
+  useEffect(() => {
+    ensureServiceWorker()
+  }, [])
+
+  // Keep this device's subscription attached to the current user. Only runs
+  // once permission is already granted — never prompts here (Settings does).
+  useEffect(() => {
+    if (!sessionId || permissionState() !== 'granted') return
+    let alive = true
+    getSubscription()
+      .then(existing => (existing ? existing.toJSON() : subscribeToPush()))
+      .then(sub => { if (alive && sub) savePushSubscription(sessionId, sub) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [sessionId])
 
   return (
     <Routes>

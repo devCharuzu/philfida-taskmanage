@@ -402,8 +402,9 @@ export async function addComment({ taskId, sender, message, files }) {
     ? JSON.stringify({ text: message || '', files: fileUrl })
     : (message || '')
 
+  const senderId = useStore.getState().session?.ID || null
   const { error } = await supabase.from('Comments').insert({
-    TaskID: taskId, SenderName: sender,
+    TaskID: taskId, SenderName: sender, SenderID: senderId ? String(senderId) : null,
     Message: payload, TimeStamp: new Date().toISOString(), HiddenBy: '',
   })
   if (error) throw error
@@ -469,11 +470,46 @@ export async function createNotification(userId, message, type = 'info', taskId 
   // matches no row and fails the constraint, unlike NULL. Every non-task
   // notification (director-registration alert, approval notice) was silently
   // failing this insert until now; the caller only saw a swallowed error.
-  const { error } = await supabase.from('Notifications').insert({
+  const { data, error } = await supabase.from('Notifications').insert({
     UserID: String(userId), Message: message, Type: type,
     IsRead: 'FALSE', CreatedAt: new Date().toISOString(), TaskID: taskId ? String(taskId) : null,
+  }).select('ID').single()
+  if (error) { console.error('createNotification failed:', error.message); return }
+  deliverPush(data?.ID)
+}
+
+// ── PUSH SUBSCRIPTIONS ─────────────────────────────────────
+/** Stores this device's push subscription so the sender's browser can reach it
+ *  even when the recipient's browser is closed. See push-subscriptions.sql. */
+export async function savePushSubscription(userId, subscription) {
+  const keys = subscription?.keys || {}
+  if (!userId || !subscription?.endpoint || !keys.p256dh || !keys.auth) return
+  const { error } = await supabase.rpc('save_push_subscription', {
+    p_user_id: String(userId),
+    p_endpoint: subscription.endpoint,
+    p_p256dh: keys.p256dh,
+    p_auth: keys.auth,
+    p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : '',
   })
-  if (error) console.error('createNotification failed:', error.message)
+  if (error) console.warn('savePushSubscription failed:', error.message)
+}
+
+export async function removePushSubscription(endpoint) {
+  if (!endpoint) return
+  const { error } = await supabase.rpc('delete_push_subscription', { p_endpoint: endpoint })
+  if (error) console.warn('removePushSubscription failed:', error.message)
+}
+
+/** Asks the serverless function to deliver an already-created notification to
+ *  the recipient's devices. Fire-and-forget: push is an enhancement, so a
+ *  failure here must never surface to the user or block the calling action. */
+function deliverPush(notificationId) {
+  if (notificationId == null || typeof fetch === 'undefined') return
+  fetch('/api/push-send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notificationId }),
+  }).catch(() => {})
 }
 
 export async function markNotificationsRead(userId) {
@@ -529,6 +565,38 @@ export async function updateProfile(userId, {
   await refreshGlobalDataForCurrentSession()
 }
 
+// Presence strings carry trailing machine-readable markers appended to the
+// human text: `[TO:<path>]` for the travel-order file and `[GEO:<lat>,<lng>]`
+// for a pinned location. Every display site must strip ALL of them — five
+// separate call sites previously stripped only [TO:], so any new marker would
+// have leaked into the UI as literal text.
+const STATUS_MARKER_RE = /\s*\[(?:TO|GEO):[^\]]*\]/g
+
+/** Builds an "Official Travel" presence string with its markers attached.
+ *  Four call sites (profile toggle, calendar add/edit, profile edit modal, and
+ *  the auto-apply scheduler) each assembled this by hand, and three of them
+ *  omitted the [GEO:] marker — so a pinned location was silently dropped the
+ *  moment the trip was edited or auto-applied. `dateRange` stays caller-supplied
+ *  because the callers legitimately format it differently. */
+export function buildTravelStatus({ activity, location, dateRange, filePath, lat, lng }) {
+  const file = filePath ? ` [TO:${filePath}]` : ''
+  const geo = (lat != null && lng != null && lat !== '' && lng !== '') ? ` [GEO:${lat},${lng}]` : ''
+  return `Official Travel — ${activity} at ${location} (${dateRange})${file}${geo}`
+}
+
+export function stripStatusMarkers(status) {
+  return String(status || '').replace(STATUS_MARKER_RE, '').trim()
+}
+
+/** Reads the pinned coordinates back out of a presence string, if present. */
+export function parseStatusGeo(status) {
+  const m = String(status || '').match(/\[GEO:(-?[\d.]+),(-?[\d.]+)\]/)
+  if (!m) return null
+  const lat = parseFloat(m[1])
+  const lng = parseFloat(m[2])
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
+}
+
 export async function updatePresence(userId, status) {
   // Manual login users (anon) cannot update public.Users directly due to RLS.
   // We use the SECURITY DEFINER RPC to bypass this.
@@ -564,10 +632,25 @@ export function getPriorityClass(priority) {
   return { Urgent: 'priority-urgent', High: 'priority-high', Medium: 'priority-medium', Low: 'priority-low', Normal: 'priority-normal' }[priority] || 'priority-normal'
 }
 
+/** Unsends one of your own messages for everyone in the thread. The row stays
+ *  as a tombstone (Unsent=true, Message cleared) so both sides keep a
+ *  "... unsent a message" placeholder rather than having text silently vanish.
+ *  Ownership is re-checked server-side by the unsend_comment RPC — the client
+ *  only decides whether to *offer* the action. See unsend-comment-rpc.sql. */
+export async function unsendComment(commentId, userId, senderName) {
+  const { error } = await supabase.rpc('unsend_comment', {
+    p_comment_id: commentId,
+    p_user_id: userId ? String(userId) : null,
+    p_sender_name: senderName,
+  })
+  if (error) throw error
+}
+
 export function getUnreadCommentCount(comments, taskId, sessionName) {
   return comments.filter(c =>
     String(c.TaskID) === String(taskId) &&
     c.SenderName !== sessionName &&
+    !c.Unsent &&
     !String(c.HiddenBy || '').includes(sessionName)
   ).length
 }
