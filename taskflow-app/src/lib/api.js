@@ -72,7 +72,7 @@ export async function getSignedFileUrl(path) {
 // but login now uses loginUser() which only returns a single user matched by ID.
 export async function getAllUsers() {
   // Never '*' — that would include Password. See SECURITY-lock-passwords.sql.
-  const { data, error } = await supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region, SignatoryName, SignatoryDesignation')
+  const { data, error } = await supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region')
   if (error) throw error
   return data
 }
@@ -237,24 +237,12 @@ export async function updateUserRole(userId, role, unit, actorDirectorId, direct
   if (error) throw error
 }
 
-/** Routing-slip signatory for the Director's own account. Pass null/empty
- *  name+designation to clear the override (falls back to the Director's own
- *  Name/Designation wherever the print template reads it). */
-export async function updateDirectorSignatory(directorId, signatoryName, signatoryDesignation, directorPassword = '') {
-  const { error } = await supabase.rpc('director_update_signatory', {
-    p_director_id: directorId,
-    p_director_password: directorPassword || null,
-    p_signatory_name: signatoryName || null,
-    p_signatory_designation: signatoryDesignation || null,
-  })
-  if (error) throw error
-}
 
 // ── DATA FETCH ─────────────────────────────────────────────
 export async function getData(userId, region = 'Region I') {
   const [tasks, users, comments, notifications, history] = await Promise.all([
     supabase.from('Tasks').select('*').eq('Region', region).order('CreatedAt', { ascending: true }),
-    supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region, SignatoryName, SignatoryDesignation').eq('Region', region),
+    supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region').eq('Region', region),
     supabase.from('Comments').select('*').order('ID', { ascending: true }),
     userId
       ? supabase.from('Notifications').select('*')
@@ -808,7 +796,7 @@ export async function handleGoogleCallback(selectedRegion = 'Region I') {
 
   await notifyDirectorsOfRegion(selectedRegion, `🆕 New Google sign-up pending approval: ${name} (${email})`)
 
-  const { data: newUser } = await supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region, SignatoryName, SignatoryDesignation').eq('ID', newId).single()
+  const { data: newUser } = await supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region').eq('ID', newId).single()
   return { user: newUser, isNew: true }
 }
 

@@ -51,7 +51,6 @@ export default function UnitHeadPage() {
   const toggleSidebarCollapsed = () => setSidebarCollapsed(v => { localStorage.setItem('pf_sidebar_collapsed', v ? '0' : '1'); return !v })
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
-  const [globalPrintPreview, setGlobalPrintPreview] = useState(null)
   const [editTask,           setEditTask]           = useState(null)
 
 
@@ -182,277 +181,8 @@ export default function UnitHeadPage() {
     finally { setLoadingTask(null) }
   }
 
-  function handleGlobalPrintPreview(task) {
-    setGlobalPrintPreview(task)
-  }
 
-  function handleConfirmGlobalPrint() {
-    if (!globalPrintPreview) return
 
-    // Signatory is the region's Director, not the Unit Head printing —
-    // routing slips are signed off by the Director regardless of who dispatches.
-    const regionDirector = globalData.users.find(u => u.Role === 'Director' && u.AccountStatus === 'Active' && u.Region === session?.Region)
-    const signatoryName = regionDirector?.SignatoryName || regionDirector?.Name || ''
-    const signatoryDesignation = regionDirector?.SignatoryDesignation || regionDirector?.Designation || 'OIC-Regional Director'
-
-    const { hasUrgent, hasPriority, hasConfidential, checkboxStates, approvalStates, allPurposes } = parseCheckboxesFromTask(globalPrintPreview)
-    
-    // Clean remarks - remove Purpose and Action lines as they're shown in checkboxes
-    const cleanRemarks = (text) => {
-      if (!text) return 'Please acknowledge the receipt of this document. Thanks.'
-      return text
-        .replace(/^Purpose:[\s\S]*?(?=Action:|Remarks:|$)/mi, '')
-        .replace(/^Action:.*$/gmi, '')
-        .replace(/^From:.*$/gmi, '')
-        .replace(/\n\n+/g, '\n')
-        .trim() || 'Please acknowledge the receipt of this document. Thanks.'
-    }
-    const remarksText = cleanRemarks(globalPrintPreview.Description || globalPrintPreview.Instructions)
-    
-    // All possible action checkboxes from CreateTaskForm
-    const allActionOptions = [
-      'For compliance',
-      'For appropriate action',
-      'For information',
-      'Please review/comment',
-      'Please draft reply',
-      'Please monitor/follow up',
-      'Please handle',
-      'Please attend',
-      'Please see me',
-      'Please disseminate/circulate',
-      'Please return/forward to:',
-      'Please schedule',
-      'Please file',
-    ]
-    
-    // Generate action checkboxes - show all options, check the selected ones
-    const actionCheckboxesHtml = allActionOptions.map(option => {
-      const isChecked = allPurposes.includes(option)
-      return `<div class="action-item"><div class="checkbox ${isChecked ? 'checked' : ''}"></div><span>${option}</span></div>`
-    }).join('')
-    
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Action/Routing Slip - ${globalPrintPreview.TaskID}</title>
-        <style>
-          body { font-family: Cambria, 'Times New Roman', serif; padding: 30px; line-height: 1.4; font-size: 12pt; background: #fff; }
-          .page-wrapper { width: 160mm; margin: 20mm auto; border: 1px solid #ccc; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); background: #fff; }
-          .container { max-width: 100%; border: 2px solid #000; padding: 25px; }
-          .header { display: flex; align-items: center; gap: 15px; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-          .logo-placeholder { width: 80px; height: 80px; border: 1px dashed #999; display: flex; align-items: center; justify-content: center; flex-shrink-0; background: #f9f9f9; }
-          .logo-placeholder img { max-width: 100%; max-height: 100%; object-fit: contain; }
-          .logo-text { font-size: 8pt; color: #999; text-align: center; }
-          .header-content { flex: 1; text-align: center; }
-          .agency-name { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-          .title { font-size: 18pt; font-weight: bold; text-transform: uppercase; }
-          .field-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
-          .field { display: flex; align-items: center; border-bottom: 1px solid #000; padding: 5px 0; }
-          .field-label { font-weight: bold; min-width: 100px; font-size: 10pt; }
-          .field-value { flex: 1; padding-left: 10px; }
-          .checkboxes { display: flex; gap: 40px; margin: 20px 0; padding: 10px 0; border-bottom: 1px solid #000; }
-          .checkbox-item { display: flex; align-items: center; gap: 8px; }
-          .checkbox { width: 18px; height: 18px; border: 2px solid #000; }
-          .checkbox.checked { background: #000; }
-          .checkbox.checked::after { content: '✓'; color: white; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-          .section { margin: 20px 0; padding: 15px; border: 1px solid #000; }
-          .section-title { font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 11pt; }
-          .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-          .action-item { display: flex; align-items: center; gap: 8px; }
-          .approval-section { display: flex; gap: 40px; margin-top: 15px; }
-          .approval-item { display: flex; align-items: center; gap: 8px; }
-          .remarks-box { min-height: 100px; padding: 10px; margin-top: 10px; border: 1px solid #000; white-space: pre-wrap; }
-          .signature-section { margin-top: 40px; text-align: center; }
-          .signature-line { border-bottom: 2px solid #000; width: 300px; margin: 40px auto 10px auto; }
-          .signature-label { font-size: 10pt; font-weight: bold; }
-          @media print { body { padding: 0; } .container { border: none; } }
-          @media screen and (max-width: 640px) {
-            .page-wrapper { width: 100%; margin: 0; padding: 8px; transform: scale(0.45); transform-origin: top center; }
-            .container { padding: 12px; }
-            .header { flex-direction: column; gap: 8px; }
-            .header-content { text-align: center; }
-            .checkboxes { flex-wrap: wrap; gap: 15px; }
-            .actions-grid { grid-template-columns: 1fr; }
-            .approval-section { flex-wrap: wrap; gap: 15px; }
-            .signature-line { width: 200px; }
-          }
-          @media screen and (min-width: 641px) and (max-width: 768px) {
-            .page-wrapper { width: 100%; margin: 0; transform: scale(0.65); transform-origin: top center; }
-          }
-          @media screen and (min-width: 769px) and (max-width: 1024px) {
-            .page-wrapper { width: 100%; margin: 0; transform: scale(0.85); transform-origin: top center; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="page-wrapper">
-        <div class="container">
-          <div style="text-align: right; font-size:7pt; color: #666; margin-bottom: 5px; padding-right: 5px;">
-            REC-FORM 009/REV 00/17 AUG 2022
-          </div>
-          <div class="header">
-            <div class="logo-placeholder">
-              <img src="/philfida-logo.png" alt="Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'logo-text\\'>[LOGO]</span>';" />
-            </div>
-            <div class="header-content">
-              <div class="agency-name">Philippine Fiber Industry Development Authority<br/>Regional Office XIII</div>
-              <div class="title">ACTION/ROUTING SLIP</div>
-            </div>
-          </div>
-
-          <div style="text-align: right; font-size: 10pt; color: #333; margin-bottom: 10px;">
-            <strong>No: ${globalPrintPreview.DocumentNo || globalPrintPreview.Title.match(/^\[\s*([^\]]+)\s*\]/)?.[1] || globalPrintPreview.TaskID}</strong>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <span class="field-label">DATE:</span>
-              <span class="field-value">${new Date().toLocaleDateString()}</span>
-            </div>
-            <div class="field">
-              <span class="field-label">FOR/TO:</span>
-              <span class="field-value">${session?.Name || '—'}</span>
-            </div>
-          </div>
-
-          <div class="checkboxes">
-            <div class="checkbox-item">
-              <div class="checkbox ${hasUrgent ? 'checked' : ''}"></div>
-              <span>URGENT</span>
-            </div>
-            <div class="checkbox-item">
-              <div class="checkbox ${hasPriority ? 'checked' : ''}"></div>
-              <span>PRIORITY</span>
-            </div>
-            <div class="checkbox-item">
-              <div class="checkbox ${hasConfidential ? 'checked' : ''}"></div>
-              <span>CONFIDENTIAL</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">ACTION:</div>
-            <div class="actions-grid">
-              ${actionCheckboxesHtml}
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">APPROVAL:</div>
-            <div class="approval-section">
-              <div class="approval-item"><div class="checkbox ${approvalStates.noted ? 'checked' : ''}"></div><span>NOTED</span></div>
-              <div class="approval-item"><div class="checkbox ${approvalStates.approved ? 'checked' : ''}"></div><span>APPROVED</span></div>
-              <div class="approval-item"><div class="checkbox ${approvalStates.disapproved ? 'checked' : ''}"></div><span>DISAPPROVED</span></div>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">REMARKS:</div>
-            <div class="remarks-box"><strong>Subject:</strong> ${globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}<br/><br/>${remarksText}</div>
-          </div>
-
-          <div class="signature-section">
-            <div class="signature-line"></div>
-            <div class="signature-label">${signatoryName}</div>
-            <div class="signature-label">${signatoryDesignation}</div>
-          </div>
-
-        </div>
-        </div>
-      </body>
-      </html>
-    `
-    
-    const printWindow = window.open('', '_blank')
-    printWindow.document.write(printContent)
-    printWindow.document.close()
-    printWindow.focus()
-    printWindow.print()
-    printWindow.close()
-    setGlobalPrintPreview(null)
-  }
-
-  function parseCheckboxesFromTask(task) {
-    // Parse checkbox states from database fields
-    // Handle both old format (plain strings) and new format (JSON arrays)
-    let priorityFlags = []
-    let purposeCheckboxes = []
-    
-    try {
-      if (task.PriorityFlags) {
-        // Try to parse as JSON array first
-        priorityFlags = JSON.parse(task.PriorityFlags)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PriorityFlags === 'string') {
-        priorityFlags = task.PriorityFlags.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    try {
-      if (task.PurposeCheckboxes) {
-        // Try to parse as JSON array first
-        purposeCheckboxes = JSON.parse(task.PurposeCheckboxes)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PurposeCheckboxes === 'string') {
-        purposeCheckboxes = task.PurposeCheckboxes.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    // Fallback: if no purpose checkboxes found, try to parse from instructions
-    if (purposeCheckboxes.length === 0) {
-      const instructions = task.Description || task.Instructions || ''
-      const purposeMatch = instructions.match(/Purpose:\s*(.*?)(?=\nAction:|\nRemarks:|\nFrom:|$)/i)
-      if (purposeMatch && purposeMatch[1]) {
-        // Parse comma-separated purposes from instructions
-        purposeCheckboxes = purposeMatch[1].split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    const approvalAction = task.ApprovalAction || ''
-
-    // Map priority flags
-    const hasUrgent = priorityFlags.includes('Urgent') || task.Priority === 'Urgent' || task.Priority === 'High'
-    const hasPriority = priorityFlags.includes('Priority') || task.Priority === 'Medium'
-    const hasConfidential = priorityFlags.includes('Confidential') || task.Category === 'Confidential'
-
-    // Map purpose checkboxes - check for all possible options
-    const checkboxStates = {
-      compliance: purposeCheckboxes.includes('For compliance'),
-      appropriateAction: purposeCheckboxes.includes('For appropriate action'),
-      info: purposeCheckboxes.includes('For information'),
-      review: purposeCheckboxes.includes('Please review/comment'),
-      draftReply: purposeCheckboxes.includes('Please draft reply'),
-      monitor: purposeCheckboxes.includes('Please monitor/follow up'),
-      handle: purposeCheckboxes.includes('Please handle'),
-      attend: purposeCheckboxes.includes('Please attend'),
-      seeMe: purposeCheckboxes.includes('Please see me'),
-      disseminate: purposeCheckboxes.includes('Please disseminate/circulate'),
-      returnForward: purposeCheckboxes.includes('Please return/forward to:'),
-      schedule: purposeCheckboxes.includes('Please schedule'),
-      file: purposeCheckboxes.includes('Please file'),
-    }
-
-    // Map approval action
-    const approvalStates = {
-      noted: approvalAction === 'Noted',
-      approved: approvalAction === 'Approved',
-      disapproved: approvalAction === 'Disapproved',
-    }
-
-    return {
-      hasUrgent,
-      hasPriority,
-      hasConfidential,
-      checkboxStates,
-      approvalStates,
-      allPurposes: purposeCheckboxes, // Return all purposes for dynamic rendering
-    }
-  }
 
   const stats = {
     myActive:      myTasks.filter(t => t.Status !== 'Completed').length,
@@ -464,35 +194,6 @@ export default function UnitHeadPage() {
     <div className="h-dvh flex overflow-hidden page-bg">
 
       {/* Global Print Preview Modal - Above all divs */}
-      {globalPrintPreview && createPortal(
-        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-2 sm:p-4" onClick={() => setGlobalPrintPreview(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800">Print Preview - Action/Routing Slip</h3>
-              <button onClick={() => setGlobalPrintPreview(null)} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
-            </div>
-            <div className="overflow-auto p-6 bg-slate-100" style={{ maxHeight: 'calc(90vh - 140px)' }}>
-              <div className="bg-white p-6 rounded-lg border border-slate-200">
-                <div className="mb-4">
-                  <h4 className="font-semibold text-slate-800 mb-2">{globalPrintPreview.Title.replace(/^\[\s*[^\]]+\s*\]\s*/, '').trim() || globalPrintPreview.Title}</h4>
-                  {globalPrintPreview.DocumentNo && (
-                    <p className="text-sm text-slate-600 mb-2">Document No: {globalPrintPreview.DocumentNo}</p>
-                  )}
-                </div>
-                <div className="flex justify-end gap-3">
-                  <button onClick={() => setGlobalPrintPreview(null)} className="px-6 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50">
-                    Cancel
-                  </button>
-                  <button onClick={handleConfirmGlobalPrint} className="px-6 py-2 rounded-lg font-semibold text-white bg-green-700 hover:bg-green-800">
-                    <i className="bi bi-printer-fill mr-2" /> Print
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* ── SIDEBAR OVERLAY (mobile) ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
@@ -664,7 +365,6 @@ export default function UnitHeadPage() {
                         onStatusUpdate={handleStatusUpdate}
                         onOpenChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
                         onOpenFile={(url, name) => setLightboxFile({ url, name })}
-                        onPrintPreview={handleGlobalPrintPreview}
                         onEdit={() => setEditTask(t)}
                       />
                     ))}
@@ -797,7 +497,6 @@ export default function UnitHeadPage() {
                             onChat={() => setChat({ taskId: t.TaskID, taskTitle: t.Title })}
                             onOpenFile={(url, name) => setLightboxFile({ url, name })}
                             isDirectorAssigned={isDirectorAssigned}
-                            onPrintPreview={handleGlobalPrintPreview}
                             onEdit={() => setEditTask(t)}
                           />
                         )
@@ -1031,91 +730,11 @@ function StatusTimes({ task: t }) {
 }
 
 // ── UnitHeadTaskCard ────────────────────────────────────────────────────────────────
-function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate, onOpenChat, onOpenFile, onPrintPreview, onEdit }) {
+function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate, onOpenChat, onOpenFile, onEdit }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
   const unreadChat = getUnreadCommentCount(comments || [], t.TaskID, session?.Name || '')
 
-  function parseCheckboxesFromTask(task) {
-    // Parse checkbox states from database fields
-    // Handle both old format (plain strings) and new format (JSON arrays)
-    let priorityFlags = []
-    let purposeCheckboxes = []
-    
-    try {
-      if (task.PriorityFlags) {
-        // Try to parse as JSON array first
-        priorityFlags = JSON.parse(task.PriorityFlags)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PriorityFlags === 'string') {
-        priorityFlags = task.PriorityFlags.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    try {
-      if (task.PurposeCheckboxes) {
-        // Try to parse as JSON array first
-        purposeCheckboxes = JSON.parse(task.PurposeCheckboxes)
-      }
-    } catch (e) {
-      // If parsing fails, treat as old format: single string or comma-separated
-      if (typeof task.PurposeCheckboxes === 'string') {
-        purposeCheckboxes = task.PurposeCheckboxes.split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    // Fallback: if no purpose checkboxes found, try to parse from instructions
-    if (purposeCheckboxes.length === 0) {
-      const instructions = task.Description || task.Instructions || ''
-      const purposeMatch = instructions.match(/Purpose:\s*(.*?)(?=\nAction:|\nRemarks:|\nFrom:|$)/i)
-      if (purposeMatch && purposeMatch[1]) {
-        // Parse comma-separated purposes from instructions
-        purposeCheckboxes = purposeMatch[1].split(',').map(s => s.trim()).filter(Boolean)
-      }
-    }
-
-    const approvalAction = task.ApprovalAction || ''
-
-    // Map priority flags
-    const hasUrgent = priorityFlags.includes('Urgent') || task.Priority === 'Urgent' || task.Priority === 'High'
-    const hasPriority = priorityFlags.includes('Priority') || task.Priority === 'Medium'
-    const hasConfidential = priorityFlags.includes('Confidential') || task.Category === 'Confidential'
-
-    // Map purpose checkboxes - check for all possible options
-    const checkboxStates = {
-      compliance: purposeCheckboxes.includes('For compliance'),
-      appropriateAction: purposeCheckboxes.includes('For appropriate action'),
-      info: purposeCheckboxes.includes('For information'),
-      review: purposeCheckboxes.includes('Please review/comment'),
-      draftReply: purposeCheckboxes.includes('Please draft reply'),
-      monitor: purposeCheckboxes.includes('Please monitor/follow up'),
-      handle: purposeCheckboxes.includes('Please handle'),
-      attend: purposeCheckboxes.includes('Please attend'),
-      seeMe: purposeCheckboxes.includes('Please see me'),
-      disseminate: purposeCheckboxes.includes('Please disseminate/circulate'),
-      returnForward: purposeCheckboxes.includes('Please return/forward to:'),
-      schedule: purposeCheckboxes.includes('Please schedule'),
-      file: purposeCheckboxes.includes('Please file'),
-    }
-
-    // Map approval action
-    const approvalStates = {
-      noted: approvalAction === 'Noted',
-      approved: approvalAction === 'Approved',
-      disapproved: approvalAction === 'Disapproved',
-    }
-
-    return {
-      hasUrgent,
-      hasPriority,
-      hasConfidential,
-      checkboxStates,
-      approvalStates,
-      allPurposes: purposeCheckboxes, // Return all purposes for dynamic rendering
-    }
-  }
 
 
 
@@ -1228,10 +847,6 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
           className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
           <i className="bi bi-pencil text-blue-600" /> Edit Task
         </button>
-        <button onClick={() => { onPrintPreview && onPrintPreview(t); setMenuOpen(false) }}
-          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
-          <i className="bi bi-printer-fill text-slate-600" /> Print Task
-        </button>
         <button onClick={() => { onOpenChat(); setMenuOpen(false) }}
           className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
           <i className="bi bi-chat-dots text-green-700" /> Open Chat
@@ -1247,7 +862,7 @@ function UnitHeadTaskCard({ task: t, session, comments, loading, onStatusUpdate,
 }
 
 // ── UnitHeadMonitorCard ────────────────────────────────────────────────────────────────
-function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, history, unreadChat, onChat, onOpenFile, isDirectorAssigned = false, onPrintPreview, onEdit }) {
+function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, history, unreadChat, onChat, onOpenFile, isDirectorAssigned = false, onEdit }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const btnRef = useRef()
 
@@ -1359,10 +974,6 @@ function UnitHeadMonitorCard({ task: t, unit, employee, comments, session, histo
           <button onClick={() => { onEdit && onEdit(); setMenuOpen(false) }}
             className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
             <i className="bi bi-pencil text-blue-600" /> Edit Task
-          </button>
-          <button onClick={() => { onPrintPreview && onPrintPreview(t); setMenuOpen(false) }}
-            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">
-            <i className="bi bi-printer-fill text-slate-600" /> Print Task
           </button>
           <button onClick={() => { onChat(); setMenuOpen(false) }}
             className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 text-left text-slate-700">

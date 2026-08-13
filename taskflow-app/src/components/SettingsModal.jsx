@@ -6,9 +6,7 @@ import {
   getSubscription, notificationsSupported, showLocalNotification,
 } from '../lib/notifications'
 import { savePushSubscription, removePushSubscription } from '../lib/api'
-import { updateDirectorSignatory, hasSupabaseAuthSession } from '../lib/api'
 import { useStore } from '../store/useStore'
-import DirectorPasswordModal from './DirectorPasswordModal'
 
 export default function SettingsModal({ onClose, session }) {
   const updateSession = useStore(s => s.updateSession)
@@ -81,52 +79,10 @@ export default function SettingsModal({ onClose, session }) {
     }
   }
 
-  // Routing-slip signatory (Director only) — unchecked means a custom
-  // person is on file (SignatoryName/Designation already set), checked
-  // means "use my own account name/designation" (no override on file).
-  const [useOwnName, setUseOwnName] = useState(!session?.SignatoryName)
-  const [signatoryName, setSignatoryName] = useState(session?.SignatoryName || '')
-  const [signatoryDesignation, setSignatoryDesignation] = useState(session?.SignatoryDesignation || '')
-  const [savingSignatory, setSavingSignatory] = useState(false)
-  const [signatorySaved, setSignatorySaved] = useState(false)
-  const [signatoryError, setSignatoryError] = useState('')
-  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
-
   function toggleSound(val) {
     setSoundOn(val)
     setSoundEnabled(val)
     if (val) setTimeout(() => playNotifSound(), 100) // preview after state settles
-  }
-
-  async function submitSignatory(password) {
-    const name = useOwnName ? null : signatoryName.trim()
-    const designation = useOwnName ? null : signatoryDesignation.trim()
-    setSavingSignatory(true)
-    try {
-      await updateDirectorSignatory(session.ID, name, designation, password)
-      updateSession({ SignatoryName: name, SignatoryDesignation: designation })
-      setShowPasswordConfirm(false)
-      setSignatorySaved(true)
-      setTimeout(() => setSignatorySaved(false), 2500)
-    } catch (err) {
-      setSignatoryError(err.message || 'Failed to save. Please try again.')
-    } finally {
-      setSavingSignatory(false)
-    }
-  }
-
-  async function handleSaveClick() {
-    setSignatoryError('')
-    if (!useOwnName && !signatoryName.trim()) {
-      setSignatoryError('Enter a signatory name, or check "Use my account name" instead.')
-      return
-    }
-    // Google-auth directors verify via JWT email inside the RPC — no password step needed.
-    if (await hasSupabaseAuthSession()) {
-      submitSignatory('')
-    } else {
-      setShowPasswordConfirm(true)
-    }
   }
 
   return createPortal(
@@ -238,88 +194,11 @@ export default function SettingsModal({ onClose, session }) {
             </button>
           )}
 
-          {/* Routing Slip Signatory — Director only */}
-          {session?.Role === 'Director' && (
-            <>
-              <div className="mt-6 border-t border-slate-100 pt-5">
-                <p className="mb-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Routing Slip Signatory</p>
-
-                {/* The whole row is the control here, so hover feedback is honest. */}
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3.5 transition-colors hover:bg-slate-50">
-                  <input
-                    type="checkbox"
-                    checked={useOwnName}
-                    onChange={e => setUseOwnName(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 flex-shrink-0 accent-green-600"
-                  />
-                  <div className="min-w-0">
-                    <p className="mb-0 text-sm font-semibold text-slate-800 leading-tight">Use my account name and designation</p>
-                    <p className="mb-0 mt-1 text-[11px] text-slate-500 leading-snug">
-                      {useOwnName
-                        ? `Slips will be signed "${session?.Name || 'your account name'}" — ${session?.Designation || 'your designation'}.`
-                        : 'Type a different signatory below.'}
-                    </p>
-                  </div>
-                </label>
-
-                {!useOwnName && (
-                  <div className="mt-2.5 space-y-2.5 rounded-xl border border-slate-200 p-3.5">
-                    <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Signatory name</label>
-                    <input
-                      value={signatoryName}
-                      onChange={e => setSignatoryName(e.target.value)}
-                      placeholder="e.g. Juan Dela Cruz"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
-                    />
-                  </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Designation</label>
-                    <input
-                      value={signatoryDesignation}
-                      onChange={e => setSignatoryDesignation(e.target.value)}
-                      placeholder="e.g. OIC-Regional Director"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
-                    />
-                  </div>
-                  </div>
-                )}
-
-                {signatoryError && <p className="mb-0 mt-2 text-[11px] font-semibold text-red-600">{signatoryError}</p>}
-
-                <button
-                  onClick={handleSaveClick}
-                  disabled={savingSignatory}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-bold text-white btn-primary-gradient transition-colors disabled:opacity-60"
-                >
-                  {savingSignatory
-                    ? <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Saving…</>
-                    : signatorySaved
-                      ? <><i className="bi bi-check-lg" aria-hidden="true" /> Saved</>
-                      : 'Save signatory'}
-                </button>
-              </div>
-            </>
-          )}
-
           {/* slate-300 on white is roughly 1.9:1 — below any legibility floor. */}
           <p className="mb-0 mt-6 text-center text-[10px] text-slate-400">Settings are saved on this device</p>
         </div>
       </div>
 
-      {showPasswordConfirm && (
-        <DirectorPasswordModal
-          icon="bi-pen-fill"
-          title="Save Signatory"
-          subtitle="Confirm to update the routing slip signatory"
-          theme="success"
-          confirmLabel="Save"
-          confirmIcon="bi-check-lg"
-          loading={savingSignatory}
-          onCancel={() => setShowPasswordConfirm(false)}
-          onConfirm={submitSignatory}
-        />
-      )}
     </div>,
     document.body
   )
