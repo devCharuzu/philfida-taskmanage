@@ -103,7 +103,7 @@ if (envErrors.length > 0) {
   if (import.meta.env.DEV) {
     supabaseClient
       .from('Users')
-      .select('count')
+      .select('ID')   // not 'count' — aggregates need table-wide SELECT
       .limit(1)
       .then(({ error }) => {
         if (error) {

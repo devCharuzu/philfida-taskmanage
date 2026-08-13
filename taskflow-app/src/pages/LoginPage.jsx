@@ -43,7 +43,9 @@ export default function LoginPage() {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        const { error } = await supabase.from('Users').select('count').limit(1)
+        // Not select('count'): aggregates need table-wide SELECT, which is
+        // revoked by design. A granted column proves reachability just as well.
+        const { error } = await supabase.from('Users').select('ID').limit(1)
         if (error) {
           if (error.message?.includes('Legacy API keys are disabled')) {
             setConnectionError(`
