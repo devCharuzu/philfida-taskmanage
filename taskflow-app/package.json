@@ -19,7 +19,7 @@
     "zustand": "^4.5.4"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
