@@ -69,7 +69,7 @@ In **SQL Editor**, set a known plain password:
 
 ```sql
 UPDATE public."Users"
-SET "Password" = 'admin123'
+SET "Password" = '<choose-a-strong-password>'
 WHERE "ID" = 'DIR-001';
 ```
 

@@ -71,7 +71,8 @@ export async function getSignedFileUrl(path) {
 // C3 FIX: getAllUsers still exists for director admin use (UserManagement),
 // but login now uses loginUser() which only returns a single user matched by ID.
 export async function getAllUsers() {
-  const { data, error } = await supabase.from('Users').select('*')
+  // Never '*' — that would include Password. See SECURITY-lock-passwords.sql.
+  const { data, error } = await supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region, SignatoryName, SignatoryDesignation')
   if (error) throw error
   return data
 }
@@ -80,22 +81,31 @@ export async function getAllUsers() {
 // Returns the matching user or null; password comparison happens here so the
 // full user list is never sent to the client during login.
 export async function loginUser(userId, password, region) {
-  const { data: user, error } = await supabase
-    .from('Users')
-    .select('*')
-    .eq('ID', userId.trim())
-    .single()
-  if (error || !user) return { error: 'invalid_credentials' }
-  if (user.Password !== password) return { error: 'invalid_credentials' }
-  
-  // Verify region if provided (skip for users without region set yet during migration)
-  if (region && user.Region && user.Region !== region) {
-    return { error: 'invalid_region' }
+  // Verified inside the database by login_user() (SECURITY DEFINER). This used
+  // to SELECT * and compare Password in the browser, which required the anon
+  // role to be able to read the password column — and since the anon key ships
+  // in the client bundle, that made every account's plaintext password
+  // world-readable over the REST API. See SECURITY-lock-passwords.sql.
+  const { data, error } = await supabase.rpc('login_user', {
+    p_id: String(userId).trim(),
+    p_password: password,
+    p_region: region || null,
+  })
+
+  if (error) {
+    console.error('loginUser failed:', error.message)
+    return { error: 'invalid_credentials' }
   }
-  
-  if (user.AccountStatus === 'Pending') return { error: 'pending' }
-  if (user.AccountStatus === 'Deactivated') return { error: 'deactivated' }
-  return { user }
+
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return { error: 'invalid_credentials' }
+  if (row.login_error) return { error: row.login_error }
+
+  const { login_error, ...user } = row
+  // Manual Personnel-ID sessions still need the password to authorise the
+  // director RPCs, which have no JWT to verify against. It is held only in this
+  // user's own browser and is never read back from the server.
+  return { user: { ...user, Password: password } }
 }
 
 // Registration is silent otherwise — the Director only finds a pending
@@ -244,7 +254,7 @@ export async function updateDirectorSignatory(directorId, signatoryName, signato
 export async function getData(userId, region = 'Region I') {
   const [tasks, users, comments, notifications, history] = await Promise.all([
     supabase.from('Tasks').select('*').eq('Region', region).order('CreatedAt', { ascending: true }),
-    supabase.from('Users').select('*').eq('Region', region),
+    supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region, SignatoryName, SignatoryDesignation').eq('Region', region),
     supabase.from('Comments').select('*').order('ID', { ascending: true }),
     userId
       ? supabase.from('Notifications').select('*')
@@ -798,7 +808,7 @@ export async function handleGoogleCallback(selectedRegion = 'Region I') {
 
   await notifyDirectorsOfRegion(selectedRegion, `🆕 New Google sign-up pending approval: ${name} (${email})`)
 
-  const { data: newUser } = await supabase.from('Users').select('*').eq('ID', newId).single()
+  const { data: newUser } = await supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region, SignatoryName, SignatoryDesignation').eq('ID', newId).single()
   return { user: newUser, isNew: true }
 }
 

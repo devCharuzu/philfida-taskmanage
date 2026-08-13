@@ -577,7 +577,7 @@ FOR DELETE USING (
 -- ============================================================
 
 -- Insert default Director account
--- Password: admin123 (bcrypt hashed with cost factor 12)
+-- Password: replace the hash below with one you generate yourself
 INSERT INTO public."Users" (
   "ID", "Name", "Email", "Password", "Role", "Unit", "Office", 
   "Designation", "AccountStatus", "Status"
@@ -613,4 +613,4 @@ SELECT 'PhilFIDA TaskFlow database schema created successfully ✓' as status;
 SELECT 'Tables created: Users, Tasks, Comments, Notifications, TaskHistory' as tables_created;
 SELECT 'Storage bucket created: taskflow-files' as storage_created;
 SELECT 'RLS policies enabled and configured' as rls_status;
-SELECT 'Default Director account: director@philfida.gov.ph / admin123' as default_account;
+SELECT 'Default Director account: director@philfida.gov.ph — set its password manually' as default_account;

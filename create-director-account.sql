@@ -4,7 +4,7 @@
 -- ============================================================
 
 -- Insert Director user with secure password
--- Password: admin123 (hashed with bcrypt)
+-- Password: set your own before running (see note at the bottom)
 -- Email: director@philfida.gov.ph
 -- Change these values as needed for your setup
 
@@ -21,7 +21,7 @@ INSERT INTO public."Users" (
 ) VALUES (
   'System Director',
   'director@philfida.gov.ph',
-  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsJqyX1sO', -- bcrypt hash of 'admin123'
+  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsJqyX1sO', -- REPLACE: bcrypt hash of a password you choose
   'Director',
   'Management',
   'Director Office',
@@ -51,7 +51,7 @@ FROM public."Users"
 WHERE "Role" = 'Director' AND "Email" = 'director@philfida.gov.ph';
 
 -- Output confirmation
-SELECT 'Director account created successfully! Email: director@philfida.gov.ph, Password: admin123' as status;
+SELECT 'Director account created. Set its password manually before first login.' as status;
 
 -- ============================================================
 -- Additional Director Accounts (Optional)
@@ -73,7 +73,7 @@ INSERT INTO public."Users" (
 ) VALUES (
   'John Director',
   'john.doe@philfida.gov.ph',
-  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsJqyX1sO', -- bcrypt hash of 'admin123'
+  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsJqyX1sO', -- REPLACE: bcrypt hash of a password you choose
   'Director',
   'Operations',
   'Operations Office',
