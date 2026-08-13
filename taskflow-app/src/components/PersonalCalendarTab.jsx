@@ -84,82 +84,11 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
     return () => clearInterval(timer)
   }, [])
 
-  // ── Automatic Availability Status Change ─────────────────────
-  useEffect(() => {
-    if (!userId) return
-
-    const checkAvailabilityStatus = () => {
-      const now = new Date()
-      let manilaNowStr = ''
-      try {
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: 'Asia/Manila',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        })
-        const parts = formatter.formatToParts(now)
-        const map = {}
-        parts.forEach(p => { map[p.type] = p.value })
-        manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
-      } catch (error) {
-        manilaNowStr = getManilaDateString(now) + ' ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      }
-
-      const stored = localStorage.getItem(`philfida_calendar_reminders_${userId}`)
-      if (!stored) return
-
-      let reminders = []
-      try { reminders = JSON.parse(stored) } catch (e) { return }
-
-      let needsUpdate = false
-      let updatedReminders = reminders.map(r => {
-        if (!r.applied || (r.type !== 'travel' && r.type !== 'leave')) return r
-
-        const endDateTime = r.returnDate && r.timeEnd 
-          ? `${r.returnDate} ${r.timeEnd}`
-          : r.returnDate 
-            ? `${r.returnDate} 23:59`
-            : `${r.date} 23:59`
-
-        if (manilaNowStr >= endDateTime) {
-          // This reminder has expired, mark as not applied
-          needsUpdate = true
-          return { ...r, applied: false }
-        }
-
-        return r
-      })
-
-      if (needsUpdate) {
-        localStorage.setItem(`philfida_calendar_reminders_${userId}`, JSON.stringify(updatedReminders))
-        setReminders(updatedReminders)
-        window.dispatchEvent(new Event('storage'))
-        window.dispatchEvent(new Event('presence-reminders-changed'))
-
-        // Check if all travel/leave reminders are now unapplied
-        const hasActiveTravelLeave = updatedReminders.some(r => r.applied && (r.type === 'travel' || r.type === 'leave'))
-        
-        if (!hasActiveTravelLeave) {
-          // Automatically set status to Available
-          updatePresence(userId, 'Available').catch(err => console.error('Auto-availability fail:', err))
-          window.dispatchEvent(new CustomEvent('presence-auto-updated', {
-            detail: { status: 'Available' }
-          }))
-        }
-      }
-    }
-
-    // Check immediately on mount
-    checkAvailabilityStatus()
-
-    // Check every minute
-    const interval = setInterval(checkAvailabilityStatus, 60000)
-    return () => clearInterval(interval)
-  }, [userId])
+  // Expiry and activation both live in checkAndApplyScheduledPresence(), which
+  // every page runs on a 30s timer. A second copy used to run here whenever the
+  // calendar tab was mounted, so two writers raced on the same reminder list and
+  // on Users.Status — one of them clearing `applied` while the other set it.
+  // Removed; this component now only reads the list.
 
   // ── Load & Persist Reminders ──────────────────────────────────
   useEffect(() => {
@@ -1433,85 +1362,77 @@ export async function checkAndApplyScheduledPresence(userId, syncCallback) {
     const reminders = JSON.parse(stored)
     let modified = false
 
-    // Get true current time in Asia/Manila (Philippines Standard Time)
+    // True current time in Asia/Manila, as "YYYY-MM-DD HH:MM" so it compares
+    // lexicographically against the stored date/time strings.
     const now = new Date()
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Manila',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
     })
-    const parts = formatter.formatToParts(now)
     const map = {}
-    parts.forEach(p => { map[p.type] = p.value })
-    // Output standard YYYY-MM-DD HH:MM
+    formatter.formatToParts(now).forEach(part => { map[part.type] = part.value })
     const manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
 
-    // ── Expire finished travel/leave first ──────────────────────────────
-    for (let r of reminders) {
-      if ((r.type === 'travel' || r.type === 'leave') && r.applied) {
-        const endDateTime = r.returnDate && r.timeEnd
-          ? `${r.returnDate} ${r.timeEnd}`
-          : r.returnDate
-            ? `${r.returnDate} 23:59`
-            : `${r.date} 23:59`
+    const windowOf = (r) => ({
+      start: `${r.date} ${r.time || '00:00'}`,
+      end: r.returnDate && r.timeEnd ? `${r.returnDate} ${r.timeEnd}`
+         : r.returnDate ? `${r.returnDate} 23:59`
+         : `${r.date} 23:59`,
+    })
 
-        if (manilaNowStr >= endDateTime) {
-          r.applied = false
-          modified = true
-        }
+    const statusFor = (r) => r.type === 'travel'
+      ? buildTravelStatus({
+          activity: r.travelActivity || 'Official Travel',
+          location: r.travelLocation || 'Field',
+          dateRange: `${r.date} to ${r.returnDate || r.date}`,
+          filePath: r.attachments ? String(r.attachments).split('|')[0] : '',
+          lat: r.travelLat, lng: r.travelLng,
+        })
+      : `On Leave — ${r.leaveType || 'Leave'}: ${r.leaveReason || 'Reason'} (${r.date} to ${r.returnDate || r.date})`
+
+    // Reconcile the stored `applied` flag against whether NOW actually falls
+    // inside each reminder's window, and act only on the transitions.
+    //
+    // The previous version expired a finished trip by clearing `applied`, then
+    // a second loop re-applied anything whose start time had passed — which is
+    // every finished trip. That flipped presence between the trip and
+    // "Available" on every 30s tick. A reminder is now applied only while
+    // start <= now < end, so an ended one can never be picked up again.
+    let becameActive = null
+    let anyDeactivated = false
+
+    for (const r of reminders) {
+      if (r.type !== 'travel' && r.type !== 'leave') continue
+      const { start: winStart, end: winEnd } = windowOf(r)
+      const inWindow = manilaNowStr >= winStart && manilaNowStr < winEnd
+
+      if (inWindow && !r.applied) {
+        r.applied = true
+        modified = true
+        becameActive = r
+      } else if (!inWindow && r.applied) {
+        r.applied = false
+        modified = true
+        anyDeactivated = true
       }
     }
 
-    if (modified && !reminders.some(r => r.applied && (r.type === 'travel' || r.type === 'leave'))) {
+    // One write per transition, never one per tick.
+    if (becameActive) {
+      const fullStatus = statusFor(becameActive)
+      await updatePresence(userId, fullStatus)
+      window.dispatchEvent(new CustomEvent('presence-auto-updated', { detail: { status: fullStatus } }))
+    } else if (anyDeactivated && !reminders.some(r => r.applied && (r.type === 'travel' || r.type === 'leave'))) {
       await updatePresence(userId, 'Available')
-      window.dispatchEvent(new CustomEvent('presence-auto-updated', {
-        detail: { status: 'Available' }
-      }))
-    }
-
-    // ── Then apply any that have just started ───────────────────────────
-    for (let r of reminders) {
-      if ((r.type === 'travel' || r.type === 'leave') && !r.applied) {
-        const startDateTime = `${r.date} ${r.time}`
-        if (manilaNowStr >= startDateTime) {
-          // The scheduled time has arrived! Update presence.
-          let fullStatus = ''
-          if (r.type === 'travel') {
-            fullStatus = buildTravelStatus({
-              activity: r.travelActivity || 'Summit',
-              location: r.travelLocation || 'Field',
-              dateRange: `${r.date} to ${r.returnDate || r.date}`,
-              filePath: r.attachments ? String(r.attachments).split('|')[0] : '',
-              lat: r.travelLat, lng: r.travelLng,
-            })
-          } else {
-            fullStatus = `On Leave — ${r.leaveType || 'Leave'}: ${r.leaveReason || 'Reason'} (${r.date} to ${r.returnDate || r.date})`
-          }
-
-          await updatePresence(userId, fullStatus)
-
-          r.applied = true
-          modified = true
-
-          // Fire a custom alert event to prompt UI updates/toasts
-          window.dispatchEvent(new CustomEvent('presence-auto-updated', {
-            detail: { status: fullStatus }
-          }))
-        }
-      }
+      window.dispatchEvent(new CustomEvent('presence-auto-updated', { detail: { status: 'Available' } }))
     }
 
     if (modified) {
       localStorage.setItem(`philfida_calendar_reminders_${userId}`, JSON.stringify(reminders))
       // Tell any mounted calendar/profile view to re-read the reminder list.
       window.dispatchEvent(new Event('presence-reminders-changed'))
-      if (syncCallback) {
-        await syncCallback()
-      }
+      if (syncCallback) await syncCallback()
     }
   } catch (err) {
     console.error('[PRESENCE-SCHEDULER] error:', err)
