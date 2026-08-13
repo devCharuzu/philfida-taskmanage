@@ -53,7 +53,9 @@ AS $$
 DECLARE
   rec public."Users"%ROWTYPE;
 BEGIN
-  SELECT * INTO rec FROM public."Users" WHERE "ID" = btrim(p_id);
+  -- Alias the table: RETURNS TABLE declares output variables named "ID",
+  -- "Name", etc., so an unqualified "ID" here is ambiguous (Postgres 42702).
+  SELECT * INTO rec FROM public."Users" u WHERE u."ID" = btrim(p_id);
 
   -- Same message whether the ID is unknown or the password is wrong, so this
   -- cannot be used to enumerate which employee IDs exist.
