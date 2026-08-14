@@ -17,6 +17,7 @@ import TaskTimeline from '../components/TaskTimeline'
 import UserStatusPopover from '../components/UserStatusPopover'
 import DeadlineProgress from '../components/DeadlineProgress'
 import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
+import AnnouncementsTab from '../components/AnnouncementsTab'
 
 const STATUS_CFG = {
   Available:         { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
@@ -56,6 +57,13 @@ export default function UnitHeadPage() {
 
 
   // Sync presence state with session status (H11 fix for refresh persistence)
+  // "Read more" in the sign-in popup asks the active page to open its tab.
+  useEffect(() => {
+    const go = () => setTab('announcements')
+    window.addEventListener('open-announcements', go)
+    return () => window.removeEventListener('open-announcements', go)
+  }, [])
+
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
@@ -267,6 +275,13 @@ export default function UnitHeadPage() {
             className={`nav-item w-full text-left ${tab === 'calendar' ? 'active' : ''}`}>
             <i className="bi bi-calendar3 text-base" />
             <span className="flex-1 text-sm">Personal Calendar</span>
+          </button>
+
+          {/* Announcements */}
+          <button onClick={() => { setTab('announcements'); setSidebarOpen(false) }}
+            className={`nav-item w-full text-left ${tab === 'announcements' ? 'active' : ''}`}>
+            <i className="bi bi-megaphone text-base" aria-hidden="true" />
+            <span className="flex-1 text-sm">Announcements</span>
           </button>
 
           {/* My Profile */}
@@ -521,6 +536,8 @@ export default function UnitHeadPage() {
           )}
 
           {/* ── PROFILE TAB ── */}
+          {tab === 'announcements' && <AnnouncementsTab />}
+
           {tab === 'profile' && (
             <UserProfileTab presence={presence} setPresence={setPresence} />
           )}

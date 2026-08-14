@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage'
 import DirectorPage  from './pages/DirectorPage'
 import RecordsPage   from './pages/RecordsPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
+import AnnouncementPopup from './components/AnnouncementPopup'
 
 /**
  * Restores Google session from Supabase Auth, or revalidates persisted Personnel-ID session.
@@ -250,7 +251,19 @@ export default function App() {
     return () => { alive = false }
   }, [sessionId])
 
+  const session = useStore(s => s.session)
+
+  // Mounted once here rather than per page, so the popup appears on whichever
+  // dashboard the person lands on after signing in.
+  const goToAnnouncements = () => {
+    // Each role page keeps its own tab state, so ask it to switch via an event
+    // rather than lifting that state up for a single interaction.
+    window.dispatchEvent(new CustomEvent('open-announcements'))
+  }
+
   return (
+    <>
+    {session && <AnnouncementPopup onOpenAnnouncements={goToAnnouncements} />}
     <Routes>
       <Route path="/"          element={<LoginRoute hydrated={hydrated} error={error} />} />
       <Route path="/dashboard" element={<ProtectedRoute hydrated={hydrated} error={error}><DashboardPage /></ProtectedRoute>} />
@@ -259,5 +272,6 @@ export default function App() {
       <Route path="/records"   element={<ProtectedRoute role="Records" hydrated={hydrated} error={error}><RecordsPage /></ProtectedRoute>} />
       <Route path="*"          element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

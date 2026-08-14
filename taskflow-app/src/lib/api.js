@@ -476,6 +476,88 @@ export async function createNotification(userId, message, type = 'info', taskId 
   deliverPush(data?.ID)
 }
 
+// ── ANNOUNCEMENTS ──────────────────────────────────────────
+export const ANNOUNCEMENT_SENDER_ROLES = ['Director', 'Records', 'Unit Head']
+export const canSendAnnouncements = (role) => ANNOUNCEMENT_SENDER_ROLES.includes(role)
+
+/** Posts an announcement to the chosen recipients. Role is re-checked in the
+ *  database — see announcements.sql. Returns the new announcement id. */
+export async function createAnnouncement({ senderId, title, body, files, expiresAt, recipientIds }) {
+  const fileLink = files?.length ? await uploadFiles(files) : ''
+  const { data, error } = await supabase.rpc('create_announcement', {
+    p_sender_id: String(senderId),
+    p_title: title,
+    p_body: body || '',
+    p_file_link: fileLink,
+    p_expires_at: expiresAt || null,
+    p_recipients: recipientIds,
+  })
+  if (error) throw error
+  return data
+}
+
+/** Announcements addressed to this user that are still live.
+ *  Expiry is applied here rather than by a scheduled job — an expired notice
+ *  simply stops being selected, which needs no cron and cannot half-run. */
+export async function getMyAnnouncements(userId) {
+  if (!userId) return []
+  const { data, error } = await supabase
+    .from('AnnouncementRecipients')
+    .select('ID, AnnouncementID, IsRead, Dismissed, Archived, Announcements(*)')
+    .eq('UserID', String(userId))
+  if (error) { console.warn('getMyAnnouncements failed:', error.message); return [] }
+  const now = Date.now()
+  return (data || [])
+    .filter(r => r.Announcements)
+    .filter(r => String(r.Announcements.Archived).toUpperCase() !== 'TRUE')
+    .filter(r => !r.Announcements.ExpiresAt || new Date(r.Announcements.ExpiresAt).getTime() > now)
+    .map(r => ({
+      ...r.Announcements,
+      recipientRowId: r.ID,
+      isRead:    String(r.IsRead).toUpperCase() === 'TRUE',
+      dismissed: String(r.Dismissed).toUpperCase() === 'TRUE',
+      archived:  String(r.Archived).toUpperCase() === 'TRUE',
+    }))
+    .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
+}
+
+/** Announcements this user has sent. */
+export async function getSentAnnouncements(senderId) {
+  if (!senderId) return []
+  const { data, error } = await supabase
+    .from('Announcements')
+    .select('*, AnnouncementRecipients(UserID, IsRead)')
+    .eq('SenderID', String(senderId))
+    .order('CreatedAt', { ascending: false })
+  if (error) { console.warn('getSentAnnouncements failed:', error.message); return [] }
+  return (data || []).map(a => ({
+    ...a,
+    archived: String(a.Archived).toUpperCase() === 'TRUE',
+    recipientCount: a.AnnouncementRecipients?.length || 0,
+    readCount: (a.AnnouncementRecipients || []).filter(r => String(r.IsRead).toUpperCase() === 'TRUE').length,
+  }))
+}
+
+export async function setAnnouncementState(announcementId, userId, { isRead, dismissed, archived } = {}) {
+  const { error } = await supabase.rpc('set_announcement_state', {
+    p_announcement_id: announcementId,
+    p_user_id: String(userId),
+    p_is_read:   isRead   === undefined ? null : !!isRead,
+    p_dismissed: dismissed === undefined ? null : !!dismissed,
+    p_archived:  archived  === undefined ? null : !!archived,
+  })
+  if (error) throw error
+}
+
+export async function archiveAnnouncement(announcementId, senderId, archived) {
+  const { error } = await supabase.rpc('archive_announcement', {
+    p_announcement_id: announcementId,
+    p_sender_id: String(senderId),
+    p_archived: !!archived,
+  })
+  if (error) throw error
+}
+
 // ── PUSH SUBSCRIPTIONS ─────────────────────────────────────
 /** Stores this device's push subscription so the sender's browser can reach it
  *  even when the recipient's browser is closed. See push-subscriptions.sql. */

@@ -12,6 +12,7 @@ import Lightbox from '../components/Lightbox'
 import TaskTimeline from '../components/TaskTimeline'
 import DeadlineProgress from '../components/DeadlineProgress'
 import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
+import AnnouncementsTab from '../components/AnnouncementsTab'
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -31,6 +32,13 @@ export default function DashboardPage() {
   const toggleSidebarCollapsed = () => setSidebarCollapsed(v => { localStorage.setItem('pf_sidebar_collapsed', v ? '0' : '1'); return !v })
   const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
   // Sync presence state with session status (H11 fix for refresh persistence)
+  // "Read more" in the sign-in popup asks the active page to open its tab.
+  useEffect(() => {
+    const go = () => setTab('announcements')
+    window.addEventListener('open-announcements', go)
+    return () => window.removeEventListener('open-announcements', go)
+  }, [])
+
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
@@ -156,6 +164,17 @@ export default function DashboardPage() {
           >
             <i className="bi bi-calendar3 text-base" aria-hidden="true" />
             <span className="flex-1 text-sm">Personal Calendar</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'announcements'}
+            aria-controls="panel-announcements"
+            id="tab-announcements"
+            onClick={() => setTab('announcements')}
+            className={`nav-item w-full text-left mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-yellow-500 ${tab === 'announcements' ? 'active' : ''}`}
+          >
+            <i className="bi bi-megaphone text-base" aria-hidden="true" />
+            <span className="flex-1 text-sm">Announcements</span>
           </button>
           <button
             role="tab"
@@ -326,6 +345,13 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {tab === 'announcements' && (
+            <div id="panel-announcements" role="tabpanel" aria-labelledby="tab-announcements"
+              className="flex-1 flex flex-col overflow-hidden">
+              <AnnouncementsTab />
+            </div>
+          )}
+
           {/* Profile Panel */}
           {tab === 'profile' && (
             <div
@@ -369,6 +395,17 @@ export default function DashboardPage() {
         >
           <i className="bi bi-calendar3 text-xl" aria-hidden="true" />
           <span>Calendar</span>
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'announcements'}
+          aria-controls="panel-announcements"
+          id="mobile-tab-announcements"
+          onClick={() => setTab('announcements')}
+          className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-bold transition-colors relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-600 ${tab === 'announcements' ? 'text-green-800' : 'text-slate-500'}`}
+        >
+          <i className="bi bi-megaphone text-xl" aria-hidden="true" />
+          <span>News</span>
         </button>
         <button
           role="tab"

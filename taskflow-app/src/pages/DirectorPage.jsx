@@ -8,6 +8,7 @@ import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentC
 import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
 import NotificationBell from '../components/NotificationBell'
 import UserProfileTab from '../components/UserProfileTab'
+import AnnouncementsTab from '../components/AnnouncementsTab'
 import CreateTaskForm from '../components/CreateTaskForm'
 import EditTaskModal from '../components/EditTaskModal'
 import ChatModal from '../components/ChatModal'
@@ -51,6 +52,13 @@ export default function DirectorPage() {
   const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
 
   // Sync presence state with session status (persists across refreshes)
+  // "Read more" in the sign-in popup asks the active page to open its tab.
+  useEffect(() => {
+    const go = () => setTab('announcements')
+    window.addEventListener('open-announcements', go)
+    return () => window.removeEventListener('open-announcements', go)
+  }, [])
+
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
@@ -264,6 +272,7 @@ export default function DirectorPage() {
             { key: 'archive', icon: 'bi-archive',        label: 'Archive' },
             { key: 'calendar', icon: 'bi-calendar3',     label: 'Personal Calendar' },
             { key: 'users',   icon: 'bi-people-fill',    label: 'User Management', badge: pendingUsers },
+            { key: 'announcements', icon: 'bi-megaphone', label: 'Announcements' },
             { key: 'profile', icon: 'bi-person-circle',  label: 'My Profile' },
           ].map(item => (
             <button key={item.key} onClick={() => { setTab(item.key); setSidebarOpen(false) }}
@@ -641,6 +650,8 @@ export default function DirectorPage() {
           )}
 
           {/* ── PROFILE TAB ── */}
+          {tab === 'announcements' && <AnnouncementsTab />}
+
           {tab === 'profile' && (
             <UserProfileTab presence={presence} setPresence={setPresence} />
           )}
@@ -700,6 +711,7 @@ export default function DirectorPage() {
           { key: 'archive', icon: 'bi-archive',       label: 'Archive' },
           { key: 'calendar', icon: 'bi-calendar3',    label: 'Calendar' },
           { key: 'users',   icon: 'bi-people-fill',   label: 'Users', badge: pendingUsers },
+          { key: 'announcements', icon: 'bi-megaphone', label: 'News' },
         ].map(item => (
           <button key={item.key} onClick={() => setTab(item.key)}
             className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold transition-colors relative ${tab === item.key ? 'text-green-800' : 'text-slate-400'}`}>

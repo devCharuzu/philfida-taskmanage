@@ -8,6 +8,7 @@ import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentC
 import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
 import NotificationBell from '../components/NotificationBell'
 import UserProfileTab from '../components/UserProfileTab'
+import AnnouncementsTab from '../components/AnnouncementsTab'
 import CreateTaskForm from '../components/CreateTaskForm'
 import EditTaskModal from '../components/EditTaskModal'
 import ChatModal from '../components/ChatModal'
@@ -49,6 +50,13 @@ export default function RecordsPage() {
   const [pendingDispatch, setPendingDispatch] = useState(null)
 
   // Sync presence state with session status (persists across refreshes)
+  // "Read more" in the sign-in popup asks the active page to open its tab.
+  useEffect(() => {
+    const go = () => setTab('announcements')
+    window.addEventListener('open-announcements', go)
+    return () => window.removeEventListener('open-announcements', go)
+  }, [])
+
   useEffect(() => {
     if (session?.Status) setPresence(session.Status)
   }, [session?.Status])
@@ -250,6 +258,7 @@ export default function RecordsPage() {
             { key: 'monitor', icon: 'bi-speedometer2',  label: 'Task Monitor' },
             { key: 'archive', icon: 'bi-archive',       label: 'Archive' },
             { key: 'calendar', icon: 'bi-calendar3',    label: 'Personal Calendar' },
+            { key: 'announcements', icon: 'bi-megaphone', label: 'Announcements' },
             { key: 'profile', icon: 'bi-person-circle',  label: 'My Profile' },
           ].map(item => (
             <button key={item.key} onClick={() => { setTab(item.key); setSidebarOpen(false) }}
@@ -540,6 +549,8 @@ export default function RecordsPage() {
           )}
 
           {/* ── PROFILE TAB ── */}
+          {tab === 'announcements' && <AnnouncementsTab />}
+
           {tab === 'profile' && (
             <UserProfileTab presence={presence} setPresence={setPresence} />
           )}
@@ -593,6 +604,7 @@ export default function RecordsPage() {
           { key: 'monitor',  icon: 'bi-speedometer2', label: 'Monitor' },
           { key: 'archive',  icon: 'bi-archive',      label: 'Archive' },
           { key: 'calendar', icon: 'bi-calendar3',    label: 'Calendar' },
+          { key: 'announcements', icon: 'bi-megaphone', label: 'News' },
           { key: 'profile',  icon: 'bi-person-circle', label: 'Profile' },
         ].map(item => (
           <button key={item.key} onClick={() => setTab(item.key)}
