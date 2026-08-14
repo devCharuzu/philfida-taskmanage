@@ -847,7 +847,7 @@ export async function handleGoogleCallback(selectedRegion = 'Region I') {
   // H7 FIX: Query directly by email instead of fetching all users
   const { data: existing, error: findError } = await supabase
     .from('Users')
-    .select('*')
+    .select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region')
     .ilike('Email', email)
     .maybeSingle()
 

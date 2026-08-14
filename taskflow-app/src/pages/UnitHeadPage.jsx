@@ -212,7 +212,7 @@ export default function UnitHeadPage() {
         <div className="sb-head flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0 border border-white/20">
-              <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
+              <img src="/philfida-logo.png" alt="PhilFIDA Logo" className="w-6 h-6 object-contain"
                 onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:white;">PF</span>' }} />
             </div>
             <div className="sidebar-hide flex flex-col min-w-0">
@@ -222,8 +222,9 @@ export default function UnitHeadPage() {
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <NotificationBell />
-            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
-              <i className="bi bi-x-lg text-base" />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 rounded">
+              <i className="bi bi-x-lg text-base" aria-hidden="true" />
+              <span className="sr-only">Close sidebar</span>
             </button>
           </div>
         </div>

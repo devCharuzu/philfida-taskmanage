@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { loginUser, registerUser, signInWithGoogle, handleGoogleCallback, checkAccountStatus, getDirectorAvailability, UNITS, OFFICES, REGIONS } from '../lib/api'
-import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
+import { withErrorHandling, validateForm, ERROR_MESSAGES } from '../lib/errorHandler'
 
 export default function LoginPage() {
   const [tab, setTab] = useState('login')

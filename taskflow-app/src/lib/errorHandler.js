@@ -9,16 +9,6 @@ export class AppError extends Error {
   }
 }
 
-export const ERROR_TYPES = {
-  NETWORK: 'network',
-  VALIDATION: 'validation',
-  AUTHENTICATION: 'authentication',
-  AUTHORIZATION: 'authorization',
-  DATABASE: 'database',
-  STORAGE: 'storage',
-  GENERAL: 'general'
-}
-
 export const ERROR_MESSAGES = {
   NETWORK: 'Network connection error. Please check your internet connection and try again.',
   DATABASE: 'Database error. Please try again later.',
@@ -140,16 +130,4 @@ export function validateForm(fields, rules) {
     isValid: Object.keys(errors).length === 0,
     errors
   }
-}
-
-/**
- * Error boundary compatible error creator
- */
-export function createBoundaryError(error, errorInfo) {
-  console.error('Boundary Error:', error, errorInfo)
-  return new AppError(
-    'A critical error occurred. The page has been reset to prevent further issues.',
-    'critical',
-    'BOUNDARY_ERROR'
-  )
 }

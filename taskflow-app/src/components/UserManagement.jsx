@@ -10,7 +10,7 @@ import {
   OFFICES,
   hasSupabaseAuthSession,
 } from '../lib/api'
-import { withErrorHandling, validateForm, ERROR_MESSAGES, handleError } from '../lib/errorHandler'
+import { withErrorHandling, validateForm, ERROR_MESSAGES } from '../lib/errorHandler'
 import UserStatusPopover from './UserStatusPopover'
 import DirectorPasswordModal from './DirectorPasswordModal'
 

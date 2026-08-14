@@ -247,20 +247,22 @@ export default function DirectorPage() {
       <aside className={`sidebar-responsive sidebar-gradient fixed md:relative inset-y-0 left-0 z-50 md:z-auto flex flex-col flex-shrink-0 h-full transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
         {/* ── Branding + Notification row ── */}
-        <div className="sb-head flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-              <img src="/philfida-logo.png" alt="PhilFIDA" className="w-6 h-6 object-contain"
-                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:9px;font-weight:900;color:#016837;">PF</span>' }} />
+        <div className="sb-head flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0 border border-white/20">
+              <img src="/philfida-logo.png" alt="PhilFIDA Logo" className="w-6 h-6 object-contain"
+                onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML='<span style="font-size:10px;font-weight:900;color:white;">PF</span>' }} />
             </div>
-            <div className="sidebar-hide">
-              <span className="text-white font-bold text-xs block leading-none">PhilFIDA Task Management System</span>
+            <div className="sidebar-hide flex flex-col min-w-0">
+              <span className="text-white font-black text-[11px] tracking-wider uppercase leading-none">PhilFIDA</span>
+              <span className="text-green-300 font-bold text-[10px] mt-0.5 leading-none">Task Management System</span>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <NotificationBell />
-            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors">
-              <i className="bi bi-x-lg text-base" />
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-green-300 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 rounded">
+              <i className="bi bi-x-lg text-base" aria-hidden="true" />
+              <span className="sr-only">Close sidebar</span>
             </button>
           </div>
         </div>
