@@ -1,13 +1,59 @@
+# OS / editor cruft, anywhere in the tree
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # Build output / deps (were previously committed)
 taskflow-app/node_modules/
 taskflow-app/dist/
+taskflow-app/build/
+node_modules/
+dist/
 
 # Env files — never commit, at any level
 .env
 .env.local
 .env.*.local
+.env.production
+.env.production.local
+!.env.local.example
+!.env.example
+
+# Vercel local project link/state
+.vercel/
+
+# Credentials / keys — should never live in the repo at all
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*service-account*.json
+*serviceAccountKey*.json
+id_rsa*
+id_ed25519*
+
+# DB dumps / backups — may contain live personnel data
+*.sql.bak
+*.dump
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Generated deliverables (guide PDF, ad-hoc screenshots) — build locally, don't ship in git
+*.pdf
+/screenshots/
+/scratch/
+*.scratch.*
 
 # test scaffold — seeds a session from a URL param, must never ship
 taskflow-app/public/__seed.html
