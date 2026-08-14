@@ -412,8 +412,11 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
   }
 
   async function commitStatus(displayKey, fullStatus) {
-    onChange?.(fullStatus)
+    // Write first. onChange() used to run before this, so the toggle moved even
+    // when the write failed — the person saw their new status while every other
+    // account still saw the old one.
     await updatePresence(userId, fullStatus)
+    onChange?.(fullStatus)
     onSync?.()
   }
 
@@ -475,6 +478,7 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
       window.dispatchEvent(new Event('presence-reminders-changed'))
     } catch (error) {
       console.error('Travel update failed:', error)
+      window.alert(`Could not set your availability to Official Travel.\n\n${error.message || 'Please check your connection and try again.'}`)
     } finally {
       setLoading(false)
     }
@@ -530,6 +534,7 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
       window.dispatchEvent(new Event('presence-reminders-changed'))
     } catch (error) {
       console.error('Leave update failed:', error)
+      window.alert(`Could not set your availability to On Leave.\n\n${error.message || 'Please check your connection and try again.'}`)
     } finally {
       setLoading(false)
     }

@@ -274,8 +274,13 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
             } else {
               fullStatus = `On Leave — ${leaveType}: ${leaveReason.trim()} (${selectedDateStr} ${remTime} to ${returnDate} ${returnTime})`
             }
-            // Update Supabase in real-time
-            updatePresence(userId, fullStatus).catch(err => console.error('Realtime edit presence fail:', err))
+            // Surface a failed write instead of marking it applied silently —
+            // the reminder would otherwise look active to this user while the
+            // database, and so every other account, still held the old status.
+            updatePresence(userId, fullStatus).catch(err => {
+              console.error('Realtime edit presence fail:', err)
+              window.alert(`Saved to your calendar, but your availability could not be updated.\n\n${err.message || 'Please try again.'}`)
+            })
             isCurrentlyApplied = true
           }
 
@@ -336,8 +341,11 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
         } else {
           fullStatus = `On Leave — ${leaveType}: ${leaveReason.trim()} (${selectedDateStr} ${remTime} to ${returnDate} ${returnTime})`
         }
-        // Update Supabase in real-time
-        updatePresence(userId, fullStatus).catch(err => console.error('Realtime add presence fail:', err))
+        // Same here: a failed write must not pass for success.
+        updatePresence(userId, fullStatus).catch(err => {
+          console.error('Realtime add presence fail:', err)
+          window.alert(`Saved to your calendar, but your availability could not be updated.\n\n${err.message || 'Please try again.'}`)
+        })
         isCurrentlyApplied = true
         window.dispatchEvent(new CustomEvent('presence-auto-updated', {
           detail: { status: fullStatus }

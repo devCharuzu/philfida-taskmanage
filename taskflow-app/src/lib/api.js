@@ -596,20 +596,24 @@ export function parseStatusGeo(status) {
 }
 
 export async function updatePresence(userId, status) {
-  // Manual login users (anon) cannot update public.Users directly due to RLS.
-  // We use the SECURITY DEFINER RPC to bypass this.
+  // Manual login users (anon) cannot update public.Users directly due to RLS,
+  // so this goes through the SECURITY DEFINER RPC.
   const { error } = await supabase.rpc('user_update_status', {
     p_user_id: userId,
     p_status: status,
     p_verify_password: useStore.getState().session?.Password || ''
   })
-  
+
   if (error) {
+    // Do NOT update the local store here. This previously fell through and
+    // wrote the new status into the session anyway "for optimistic UI", which
+    // meant a failed write looked completely successful to the person making
+    // it while the database — and therefore every other account — still held
+    // the old status. Fail loudly instead so the caller can surface it.
     console.error('[PRESENCE] Update failed:', error.message)
-    // We still update local store for optimistic UI, but refresh will revert it
+    throw new Error(error.message || 'Could not update your availability. Please try again.')
   }
 
-  // Update session in store to reflect the change
   const session = useStore.getState().session
   if (session && String(session.ID) === String(userId)) {
     useStore.getState().updateSession({ Status: status })
