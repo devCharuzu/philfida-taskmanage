@@ -284,6 +284,18 @@ export default function AnnouncementsTab() {
 
   useEffect(() => { refresh() }, [refresh])
 
+  // "Read more" in the sign-in popup asks for one specific announcement.
+  useEffect(() => {
+    if (loading || !inbox.length) return
+    let want = null
+    try { want = sessionStorage.getItem('philfida_open_announcement') } catch { /* ignore */ }
+    if (!want) return
+    try { sessionStorage.removeItem('philfida_open_announcement') } catch { /* ignore */ }
+    const target = inbox.find(a => String(a.ID) === String(want))
+    if (target) open(target)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, inbox])
+
   // Opening an announcement marks it read for this person only.
   async function open(item) {
     setDetail(item); setView('detail')

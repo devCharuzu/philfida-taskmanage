@@ -8,3 +8,6 @@ taskflow-app/dist/
 .env
 .env.local
 .env.*.local
+
+# test scaffold — seeds a session from a URL param, must never ship
+taskflow-app/public/__seed.html

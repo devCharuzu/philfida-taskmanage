@@ -255,9 +255,12 @@ export default function App() {
 
   // Mounted once here rather than per page, so the popup appears on whichever
   // dashboard the person lands on after signing in.
-  const goToAnnouncements = () => {
+  const goToAnnouncements = (announcementId) => {
     // Each role page keeps its own tab state, so ask it to switch via an event
-    // rather than lifting that state up for a single interaction.
+    // rather than lifting that state up for a single interaction. The id is
+    // handed over through sessionStorage because the tab mounts *after* this
+    // event fires — an event payload alone would arrive before any listener.
+    try { sessionStorage.setItem('philfida_open_announcement', String(announcementId ?? '')) } catch { /* ignore */ }
     window.dispatchEvent(new CustomEvent('open-announcements'))
   }
 
