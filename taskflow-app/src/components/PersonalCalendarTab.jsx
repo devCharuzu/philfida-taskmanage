@@ -780,7 +780,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
                           className={`py-1.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase border transition-all text-center flex items-center justify-center gap-1
                             ${remType === 'travel' ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                         >
-                          <i className="bi bi-airplane-fill" /> Travel
+                          <i className="bi bi-airplane-fill" /> Schedule Travel
                         </button>
                         <button
                           type="button"
@@ -788,7 +788,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
                           className={`py-1.5 px-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase border transition-all text-center flex items-center justify-center gap-1
                             ${remType === 'leave' ? 'bg-red-500 text-white border-red-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                         >
-                          <i className="bi bi-calendar-x-fill" /> Leave
+                          <i className="bi bi-calendar-x-fill" /> Schedule Leave
                         </button>
                       </div>
                     </div>
@@ -856,6 +856,12 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
 
                     {remType === 'travel' && (
                       <div className="space-y-3 bg-blue-50/40 p-3 rounded-xl border border-blue-100 animate-in-up">
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200/70 rounded-lg px-3 py-2">
+                          <i className="bi bi-info-circle-fill text-amber-500 text-xs mt-0.5 flex-shrink-0" />
+                          <p className="text-[10px] text-amber-800 font-medium leading-snug">
+                            Please schedule at least <span className="font-bold">1 day before</span> your actual travel date, so other personnel are notified and can prepare in your absence.
+                          </p>
+                        </div>
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-blue-800 uppercase tracking-wider block">Event / Activity Name *</label>
                           <input
@@ -920,6 +926,12 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
 
                     {remType === 'leave' && (
                       <div className="space-y-3 bg-red-50/40 p-3 rounded-xl border border-red-100 animate-in-up">
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200/70 rounded-lg px-3 py-2">
+                          <i className="bi bi-info-circle-fill text-amber-500 text-xs mt-0.5 flex-shrink-0" />
+                          <p className="text-[10px] text-amber-800 font-medium leading-snug">
+                            Please schedule at least <span className="font-bold">1 day before</span> your leave date, so other personnel are notified and can prepare in your absence.
+                          </p>
+                        </div>
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-red-800 uppercase tracking-wider block">Type of Leave *</label>
                           <select
