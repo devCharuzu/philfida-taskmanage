@@ -8,6 +8,16 @@ import {
 import { savePushSubscription, removePushSubscription } from '../lib/api'
 import { useStore } from '../store/useStore'
 
+// ── Mobile app distribution ──────────────────────────────────
+// Android: free direct APK download. Place the built APK where this URL
+// points (e.g. public/downloads/taskflow.apk on the web host, or any file
+// host) and users install it directly — no Play Store needed.
+// iOS: Apple requires a $99/yr Developer account for ANY distribution
+// (TestFlight included); there is no free sideload on iOS. When ready,
+// replace IOS_URL with the TestFlight public link.
+const ANDROID_APK_URL = '/downloads/taskflow.apk'
+const IOS_URL = '' // e.g. 'https://testflight.apple.com/join/XXXXXX'
+
 export default function SettingsModal({ onClose, session }) {
   const updateSession = useStore(s => s.updateSession)
   const [soundOn, setSoundOn] = useState(isSoundEnabled())
@@ -193,6 +203,52 @@ export default function SettingsModal({ onClose, session }) {
               <i className="bi bi-play-circle-fill text-[11px]" aria-hidden="true" /> Preview sound
             </button>
           )}
+
+          {/* ── Mobile App section ── */}
+          <p className="mb-2.5 mt-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mobile App</p>
+
+          <div className="rounded-xl border border-slate-200 p-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-green-100">
+                <i className="bi bi-phone-fill text-base text-green-700" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="mb-0 text-sm font-semibold text-slate-800 leading-tight">TaskFlow on your phone</p>
+                <p className="mb-0 mt-1 text-[11px] text-slate-500 leading-snug">
+                  Same account, same data — tasks, availability and calendar on the go.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <a
+                href={ANDROID_APK_URL}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-green-700 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-green-800 active:scale-[0.98]"
+              >
+                <i className="bi bi-android2" aria-hidden="true" />
+                Android
+              </a>
+              {IOS_URL ? (
+                <a
+                  href={IOS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
+                >
+                  <i className="bi bi-apple" aria-hidden="true" />
+                  iPhone
+                </a>
+              ) : (
+                <span className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold text-slate-400 select-none">
+                  <i className="bi bi-apple" aria-hidden="true" />
+                  iPhone soon
+                </span>
+              )}
+            </div>
+            <p className="mb-0 mt-2.5 text-[10px] leading-snug text-slate-400">
+              Android installs directly from the download (free). iPhone version arrives via TestFlight.
+            </p>
+          </div>
 
           {/* slate-300 on white is roughly 1.9:1 — below any legibility floor. */}
           <p className="mb-0 mt-6 text-center text-[10px] text-slate-400">Settings are saved on this device</p>
