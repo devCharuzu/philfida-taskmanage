@@ -34,6 +34,36 @@ const REGIONS = [
 
 export { UNITS, OFFICES, REGIONS }
 
+const MISSING_PRESENCE_SCHEDULE_RPC_MESSAGE = 'Shared schedule database update is missing. Apply migration 20261013040000_shared_presence_schedules.sql, then retry after the schema cache reloads.'
+
+function isMissingPresenceScheduleRpc(error) {
+  return error?.code === 'PGRST202'
+    || error?.code === '42883'
+    || /user_(get|save|cancel)_presence_schedule.*(not found|schema cache)/i.test(error?.message || '')
+}
+
+function normalizePresenceScheduleError(error) {
+  if (isMissingPresenceScheduleRpc(error)) {
+    return new Error(MISSING_PRESENCE_SCHEDULE_RPC_MESSAGE)
+  }
+  return error
+}
+
+async function getSharedPresenceSchedules(userId) {
+  if (!userId) return []
+  const { data, error } = await supabase.rpc('user_get_presence_schedules', {
+    p_user_id: String(userId),
+    p_verify_password: useStore.getState().session?.Password || '',
+  })
+  if (error) {
+    // Let app pages continue to load before the local migration has been
+    // applied; schedule writes still report a clear error until then.
+    if (isMissingPresenceScheduleRpc(error)) return []
+    throw error
+  }
+  return data || []
+}
+
 // ── FILE UPLOAD ────────────────────────────────────────────
 // H8 FIX: Bucket is private, so use createSignedUrl (1 hour expiry) instead of getPublicUrl
 export async function uploadFiles(fileList) {
@@ -240,7 +270,7 @@ export async function updateUserRole(userId, role, unit, actorDirectorId, direct
 
 // ── DATA FETCH ─────────────────────────────────────────────
 export async function getData(userId, region = 'Region I') {
-  const [tasks, users, comments, notifications, history] = await Promise.all([
+  const [tasks, users, comments, notifications, history, availability] = await Promise.all([
     supabase.from('Tasks').select('*').eq('Region', region).order('CreatedAt', { ascending: true }),
     supabase.from('Users').select('ID, Name, Email, Role, Unit, Office, Designation, ProfilePic, Status, AccountStatus, CreatedAt, UpdatedAt, Region').eq('Region', region),
     supabase.from('Comments').select('*').order('ID', { ascending: true }),
@@ -251,14 +281,42 @@ export async function getData(userId, region = 'Region I') {
           .limit(20)
       : Promise.resolve({ data: [] }),
     supabase.from('TaskHistory').select('*').order('CreatedAt', { ascending: true }),
+    getSharedPresenceSchedules(userId),
   ])
+
+  const failedQuery = [tasks, users, comments, notifications, history].find(({ error }) => error)
+  if (failedQuery) throw failedQuery.error
+
   return {
     tasks:         tasks.data         || [],
     users:         users.data         || [],
     comments:      comments.data      || [],
     notifications: notifications.data || [],
     history:       history.data       || [],
+    availabilitySchedules: availability || [],
   }
+}
+
+export async function getPresenceSchedules(userId) {
+  return getSharedPresenceSchedules(userId)
+}
+
+export async function savePresenceSchedule(userId, schedule) {
+  const { error } = await supabase.rpc('user_save_presence_schedule', {
+    p_user_id: String(userId),
+    p_verify_password: useStore.getState().session?.Password || '',
+    p_schedule: schedule,
+  })
+  if (error) throw normalizePresenceScheduleError(error)
+}
+
+export async function cancelPresenceSchedule(userId, scheduleId = null) {
+  const { error } = await supabase.rpc('user_cancel_presence_schedule', {
+    p_user_id: String(userId),
+    p_verify_password: useStore.getState().session?.Password || '',
+    p_schedule_id: scheduleId == null ? null : String(scheduleId),
+  })
+  if (error) throw normalizePresenceScheduleError(error)
 }
 
 async function refreshGlobalDataForCurrentSession() {
@@ -276,7 +334,7 @@ async function refreshGlobalDataForCurrentSession() {
 export async function logHistory(taskId, action, actor, note = '') {
   const session = useStore.getState().session
   const actorId = session?.ID || null
-  await supabase.from('TaskHistory').insert({
+  return supabase.from('TaskHistory').insert({
     TaskID: String(taskId), Action: action, Actor: actor, ActorID: actorId,
     Note: note, CreatedAt: new Date().toISOString(),
   })
@@ -289,16 +347,26 @@ export async function getTaskHistory(taskId) {
 }
 
 // ── TASKS ──────────────────────────────────────────────────
-export async function createTask({ empId, empName, title, instructions, priority, category, deadline, files, actorName = 'Director', priorityFlags = [], purposeCheckboxes = [], approvalAction = '' }) {
-  const taskId = 'T-' + Date.now()
+function makeTaskId() {
+  const suffix = globalThis.crypto?.randomUUID?.()
+    || Math.random().toString(36).slice(2, 12)
+  return `T-${Date.now()}-${suffix}`
+}
+
+export async function createTasks({ recipients = [], title, instructions, priority, category, deadline, files, actorName = 'Director', priorityFlags = [], purposeCheckboxes = [], approvalAction = '' }) {
+  const uniqueRecipients = [...new Map(
+    recipients
+      .filter(recipient => recipient?.empId != null && String(recipient.empId).trim())
+      .map(recipient => [String(recipient.empId), { ...recipient, empId: String(recipient.empId) }])
+  ).values()]
+  if (uniqueRecipients.length === 0) throw new Error('Select at least one unit personnel.')
+
   const fileUrl = files?.length ? await uploadFiles(files) : ''
-  
-  // Get creator's region
   const session = useStore.getState().session
   const region = session?.Region || 'Region I'
-
-  const { error } = await supabase.from('Tasks').insert({
-    TaskID: taskId, EmployeeID: empId, EmployeeName: empName,
+  const createdAt = new Date().toISOString()
+  const tasks = uniqueRecipients.map(recipient => ({
+    TaskID: makeTaskId(), EmployeeID: recipient.empId, EmployeeName: recipient.empName,
     Title: title, Instructions: instructions,
     FileLink: fileUrl, Status: 'Assigned',
     Archived: 'FALSE', Deadline: deadline || null,
@@ -307,12 +375,32 @@ export async function createTask({ empId, empName, title, instructions, priority
     PurposeCheckboxes: purposeCheckboxes || [],
     ApprovalAction: approvalAction || '',
     Region: region,
-    CreatedAt: new Date().toISOString(),
-  })
+    CreatedAt: createdAt,
+  }))
+
+  const { error } = await supabase.from('Tasks').insert(tasks)
   if (error) throw error
-  await createNotification(empId, `📋 New task assigned to you: "${title}"`, 'task', taskId)
-  // Log history — actor is the dispatcher (fetched from task record)
-  await logHistory(taskId, 'Dispatched', actorName)
+
+  const sideEffects = await Promise.allSettled(tasks.map(async task => {
+    const [, historyResult] = await Promise.all([
+      createNotification(task.EmployeeID, `📋 New task assigned to you: "${title}"`, 'task', task.TaskID),
+      logHistory(task.TaskID, 'Dispatched', actorName),
+    ])
+    if (historyResult?.error) throw historyResult.error
+  }))
+  sideEffects.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`Task ${tasks[index].TaskID} was created, but its notification/history could not be fully recorded:`, result.reason)
+    }
+  })
+  return tasks.map(task => task.TaskID)
+}
+
+export async function createTask({ empId, empName, ...taskDetails }) {
+  const [taskId] = await createTasks({
+    ...taskDetails,
+    recipients: [{ empId, empName }],
+  })
   return taskId
 }
 
@@ -730,12 +818,18 @@ export async function unsendComment(commentId, userId, senderName) {
   if (error) throw error
 }
 
+export function hasUserRead(hiddenBy, sessionName) {
+  const name = String(sessionName || '').trim()
+  if (!name) return false
+  return String(hiddenBy || '').split(',').some((entry) => entry.trim() === name)
+}
+
 export function getUnreadCommentCount(comments, taskId, sessionName) {
   return comments.filter(c =>
     String(c.TaskID) === String(taskId) &&
     c.SenderName !== sessionName &&
     !c.Unsent &&
-    !String(c.HiddenBy || '').includes(sessionName)
+    !hasUserRead(c.HiddenBy, sessionName)
   ).length
 }
 

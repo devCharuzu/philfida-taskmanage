@@ -58,7 +58,6 @@ taskflow-app/
 ├── tailwind.config.js           # Tailwind CSS configuration
 ├── postcss.config.js            # PostCSS configuration
 ├── vercel.json                  # Vercel deployment config
-├── supabase-migration-v2.sql    # Database schema & migrations
 ├── public/
 │   └── google158d2925800a6a22.html  # Google verification
 │   └── philfida-logo.png            # PhilFIDA logo asset
@@ -245,7 +244,7 @@ vercel --prod
 - **File URLs**: Joined by `|` separator in database
 
 #### Database Schema
-See [supabase-migration-v2.sql](./taskflow-app/supabase-migration-v2.sql) for complete schema including:
+See [complete-database-schema-fixed.sql](../complete-database-schema-fixed.sql) in the repo root for the complete schema, including:
 - Column definitions for all tables
 - Relationships and indexes
 - Unit, Region, and AccountStatus enum backfills
@@ -404,7 +403,7 @@ TaskFlow implements several security features to protect user data and system in
 - [x] Supabase project created and configured
 - [x] Google OAuth credentials added to Supabase
 - [x] Environment variables set (Supabase URL & Key)
-- [x] Database migrations applied (`supabase-migration-v2.sql`)
+- [x] Database schema applied (`complete-database-schema-fixed.sql` + the patches listed in `CLAUDE.md`)
 - [x] Storage bucket `taskflow-files` created and made public
 - [x] Admin user created for testing
 - [x] Responsive system implemented across all components

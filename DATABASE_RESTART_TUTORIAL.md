@@ -59,7 +59,7 @@ Copy from **`taskflow-app/.env.local.example`** → `.env.local` locally. On **V
 2. Paste the entire contents of repo root **`complete-database-schema-fixed.sql`** and **Run**.
 3. Confirm success messages at the end (tables, bucket `taskflow-files`, realtime publication).
 4. **Existing projects:** if the schema predates RPCs, also run **`supabase-director-rpcs.sql`** (director approve/delete/role without broken `auth.uid()` RLS).
-5. **Optional:** Run **`taskflow-app/supabase-migration-v2.sql`** after that. On a freshly created DB from step 2, columns `Unit` / `AccountStatus` often already exist; the script uses `IF NOT EXISTS` — safe but usually redundant.
+5. **Existing projects:** replay the incremental patches listed under "SQL Patch Files" in `CLAUDE.md`, in the order given there. A fresh DB from step 2 already has all of them except the ones marked not applied.
 
 ### Director bootstrap + manual login (important)
 

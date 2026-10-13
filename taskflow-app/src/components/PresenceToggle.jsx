@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, lazy, Suspense} from 'react'
 import { createPortal } from 'react-dom'
 const LocationPicker = lazy(() => import('./LocationPicker'))
-import { updatePresence, uploadFiles } from '../lib/api'
+import { updatePresence, uploadFiles, getPresenceSchedules, savePresenceSchedule, cancelPresenceSchedule } from '../lib/api'
+import { createPresenceScheduleId, isPresenceScheduleVisible, toCalendarReminder, toPresenceScheduleRecord } from '../lib/availability'
 import { checkAndApplyScheduledPresence } from './PersonalCalendarTab'
 
 // ── Exported helper: normalizes stored status string to base key ──
@@ -401,32 +402,48 @@ function LeaveModal({ onConfirm, onCancel }) {
 // active automatically when their window starts.
 function UpcomingSchedules({ userId }) {
   const [items, setItems] = useState([])
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!userId) return
-    const load = () => {
+    let active = true
+    const load = async () => {
       try {
         const stored = localStorage.getItem(`philfida_calendar_reminders_${userId}`)
-        const all = stored ? JSON.parse(stored) : []
-        setItems(
-          all
-            .filter(r => (r.type === 'travel' || r.type === 'leave') && !r.applied)
-            .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+        const localItems = stored ? JSON.parse(stored) : []
+        const sharedItems = (await getPresenceSchedules(userId)).filter(schedule => String(schedule.UserID) === String(userId))
+        if (!active) return
+        const sharedIds = new Set(sharedItems.map(schedule => String(schedule.ID)))
+        const legacyItems = localItems.filter(item =>
+          (item.type === 'travel' || item.type === 'leave')
+          && !item.shared
+          && !sharedIds.has(String(item.id))
+          && !item.applied
+          && isPresenceScheduleVisible(item)
         )
+        const scheduleItems = sharedItems
+          .map(schedule => toCalendarReminder(schedule, localItems.find(item => String(item.id) === String(schedule.ID))))
+          .filter(item => !item.applied && isPresenceScheduleVisible(item))
+        setItems([...legacyItems, ...scheduleItems].sort((a, b) =>
+          `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)
+        ))
+        setError('')
       } catch (e) {
-        console.error(e)
+        console.error('[PRESENCE-SCHEDULES] Could not load upcoming schedules:', e)
+        if (active) setError('Upcoming schedules could not be refreshed.')
       }
     }
     load()
     window.addEventListener('storage', load)
     window.addEventListener('presence-reminders-changed', load)
     return () => {
+      active = false
       window.removeEventListener('storage', load)
       window.removeEventListener('presence-reminders-changed', load)
     }
   }, [userId])
 
-  function cancelItem(id) {
+  async function cancelItem(id) {
     const target = items.find(i => i.id === id)
     if (!target) return
     const when = target.date ? `${fmtShort(target.date)}${target.returnDate && target.returnDate !== target.date ? ` → ${fmtShort(target.returnDate)}` : ''}` : ''
@@ -435,14 +452,18 @@ function UpcomingSchedules({ userId }) {
       : `leave${target.leaveType ? ` (${target.leaveType})` : ''}`
     if (!window.confirm(`Cancel this scheduled ${label}${when ? ` on ${when}` : ''}?`)) return
     try {
+      if (target.shared) await cancelPresenceSchedule(userId, id)
       const key = `philfida_calendar_reminders_${userId}`
       const stored = localStorage.getItem(key)
       const all = stored ? JSON.parse(stored) : []
       localStorage.setItem(key, JSON.stringify(all.filter(r => r.id !== id)))
+      setItems(current => current.filter(item => String(item.id) !== String(id)))
+      setError('')
       window.dispatchEvent(new Event('storage'))
       window.dispatchEvent(new Event('presence-reminders-changed'))
     } catch (e) {
-      console.error(e)
+      console.error('[PRESENCE-SCHEDULES] Could not cancel schedule:', e)
+      setError(e.message || 'Could not cancel this schedule. Please try again.')
     }
   }
 
@@ -453,6 +474,7 @@ function UpcomingSchedules({ userId }) {
       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2">
         Upcoming Schedules ({items.length})
       </p>
+      {error && <p role="alert" className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</p>}
       <div className="space-y-1.5">
         {items.map(r => {
           const isTravel = r.type === 'travel'
@@ -528,6 +550,7 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
       }
       setLoading(true)
       try {
+        await cancelPresenceSchedule(userId)
         await commitStatus('Available', 'Available')
 
         // Clear active travel/leave reminders from local storage
@@ -541,6 +564,8 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
         localStorage.setItem(key, JSON.stringify(filtered))
         window.dispatchEvent(new Event('storage'))
         window.dispatchEvent(new Event('presence-reminders-changed'))
+      } catch (error) {
+        window.alert(`Could not reset availability.\n\n${error.message || 'Please try again.'}`)
       } finally {
         setLoading(false)
       }
@@ -599,9 +624,10 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
       const firstPath = await uploadFirst(details.files)
 
       const { key, reminders } = readReminders()
+      const id = createPresenceScheduleId('travel')
       // Keep existing reminders — several future schedules may coexist.
-      reminders.push({
-        id: 'scheduled-travel-' + Date.now(),
+      const reminder = {
+        id,
         title: `Official Travel: ${details.eventName} at ${details.location}`,
         notes: `Scheduled travel. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
         time: details.timeStart,
@@ -615,9 +641,13 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
         travelLng: details.lng ?? null,
         returnDate: details.dateEnd,
         attachments: firstPath || '',
-        applied: false
-      })
+        applied: false,
+        shared: true,
+      }
+      await savePresenceSchedule(userId, toPresenceScheduleRecord(reminder))
+      reminders.push(reminder)
       writeReminders(key, reminders)
+      await onSync?.()
       // If the scheduled window has already started (e.g. scheduled for today),
       // apply it right away instead of waiting for the next scheduler tick.
       await checkAndApplyScheduledPresence(userId, onSync)
@@ -645,9 +675,10 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
       const firstPath = await uploadFirst(details.files)
 
       const { key, reminders } = readReminders()
+      const id = createPresenceScheduleId('leave')
       // Keep existing reminders — several future schedules may coexist.
-      reminders.push({
-        id: 'scheduled-leave-' + Date.now(),
+      const reminder = {
+        id,
         title: `On Leave: ${details.leaveType} — ${details.reason}`,
         notes: `Scheduled leave. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
         time: details.timeStart,
@@ -659,9 +690,13 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
         leaveReason: details.reason,
         returnDate: details.dateEnd,
         attachments: firstPath || '',
-        applied: false
-      })
+        applied: false,
+        shared: true,
+      }
+      await savePresenceSchedule(userId, toPresenceScheduleRecord(reminder))
+      reminders.push(reminder)
       writeReminders(key, reminders)
+      await onSync?.()
       // If the scheduled window has already started (e.g. scheduled for today),
       // apply it right away instead of waiting for the next scheduler tick.
       await checkAndApplyScheduledPresence(userId, onSync)

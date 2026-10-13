@@ -168,7 +168,7 @@ The system uses a combination of standard RLS and **Security Definer RPCs**.
 ## 🔧 Maintenance & Troubleshooting
 
 ### Common Tasks
-- **Updating Schema**: Run SQL scripts found in the root directory (e.g., `supabase-migration-v2.sql`) in the Supabase SQL Editor.
+- **Updating Schema**: Run the SQL patch files in the repo root in the Supabase SQL Editor. `complete-database-schema-fixed.sql` is the canonical full schema; `CLAUDE.md` lists which incremental patches have been applied.
 - **Audio Issues**: Modern browsers block audio until user interaction. The app "unlocks" audio on the first click in `main.jsx`.
 - **Sync Delays**: Realtime updates depend on WebSocket stability. The app falls back to a 30-second poll if the connection is interrupted.
 

@@ -14,6 +14,7 @@ import DeadlineProgress from '../components/DeadlineProgress'
 import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
 import AnnouncementsTab from '../components/AnnouncementsTab'
 import PersonnelStatusPanel from '../components/PersonnelStatusPanel'
+import { UpcomingAvailabilityButton as UpcomingAvailabilityPanel } from '../components/UpcomingAvailabilityPanel'
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -258,6 +259,7 @@ export default function DashboardPage() {
 
               {/* ── PERSONNEL AVAILABILITY ── */}
               <PersonnelStatusPanel users={personnel} />
+              <UpcomingAvailabilityPanel schedules={globalData.availabilitySchedules || []} />
 
               {myTasks.length > 0 && (
                 <div className="px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white/95 flex-shrink-0 flex items-center gap-2.5 flex-wrap">

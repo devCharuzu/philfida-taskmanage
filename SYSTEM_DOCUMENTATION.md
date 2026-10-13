@@ -25,7 +25,6 @@ taskflow-app/
 ├── postcss.config.js
 ├── tailwind.config.js
 ├── vercel.json
-├── supabase-migration-v2.sql
 ├── src/
 │   ├── App.jsx
 │   ├── main.jsx
@@ -223,7 +222,7 @@ npm run build
 ## 14. Database setup (Supabase)
 - **`complete-database-schema-fixed.sql`** (repo root): run in the SQL Editor for a fresh project—creates tables, RLS policies (including **`anon`** policies on **`Users`** for Personnel ID login and pending self-registration), **director user-management RPCs** (`director_*`, SECURITY DEFINER), storage, and realtime publication.
 - **`supabase-director-rpcs.sql`**: standalone patch to add/update those RPCs on older databases.
-- **`taskflow-app/supabase-migration-v2.sql`**: incremental migration that adds `Unit` and `AccountStatus` on `Users` and backfills `AccountStatus` to `Active` for existing deployments.
+- **Incremental patches** (repo root, applied by hand in order): see the applied-patch list in `CLAUDE.md`. `Unit` and `AccountStatus` on `Users` are part of the canonical schema above and need no separate migration.
 - **`DATABASE_RESTART_TUTORIAL.md`**: step-by-step teardown/repoint/recreate checklist for prod + local (new project, OAuth, env vars, RLS quirks for anon login/register).
 
 ## 15. Recommended Documentation Inclusion

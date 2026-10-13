@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { createTask } from '../lib/api'
+import { createTasks } from '../lib/api'
 import { withErrorHandling, validateForm, ERROR_MESSAGES } from '../lib/errorHandler'
+import { formatPresenceScheduleRange, getPresenceScheduleLabel } from '../lib/availability'
+import { getDispatchRecipients, getSchedulesForPersonnel } from '../lib/dispatch'
 
 const ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.mp4,.mp3,.mov,.avi,.csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
 const STATUS_CONFIG = {
-  Available:         { pill: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500', ring: 'ring-emerald-400' },
-  'Official Travel': { pill: 'bg-blue-100 text-blue-800 border-blue-200',          dot: 'bg-blue-500',    ring: 'ring-blue-400'    },
-  'On Leave':        { pill: 'bg-red-100 text-red-700 border-red-200',              dot: 'bg-red-500',     ring: 'ring-red-400'     },
+  Available:         { pill: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' },
+  'Official Travel': { pill: 'bg-blue-100 text-blue-800 border-blue-200',          dot: 'bg-blue-500' },
+  'On Leave':        { pill: 'bg-red-100 text-red-700 border-red-200',             dot: 'bg-red-500' },
 }
 
 
@@ -19,13 +21,6 @@ function getStatusKey(status) {
   if (status.startsWith('Official Travel')) return 'Official Travel'
   if (status.startsWith('On Leave'))        return 'On Leave'
   return 'Available'
-}
-
-function getStatusLabel(status) {
-  const key = getStatusKey(status)
-  if (key === 'Official Travel') return '(On Travel)'
-  if (key === 'On Leave')        return '(On Leave)'
-  return ''
 }
 
 const PRIORITY_FLAGS = [
@@ -72,11 +67,12 @@ function SectionLabel({ num, title }) {
   )
 }
 
-export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDispatchConfirm, pendingDispatch, setPendingDispatch, setPersonnelModalOpen, setSelectedPersonnel, onCloseDrawer }) {
+export default function CreateTaskForm({ users, availabilitySchedules = [], onSync, setDispatchConfirm, setPendingDispatch, setPersonnelModalOpen, setSelectedPersonnel, onCloseDrawer }) {
   const session = useStore(s => s.session)
 
   // ── State ────────────────────────────────────────────────────
-  const [empId,        setEmpId]        = useState('')
+  const [selectedEmpIds, setSelectedEmpIds] = useState([])
+  const [personnelSearch, setPersonnelSearch] = useState('')
   const [taskNo,       setTaskNo]       = useState('')
   const [deadline,     setDeadline]     = useState('')
   const [priorities,   setPriorities]   = useState([])   // multi-select
@@ -91,28 +87,10 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
   const [success,      setSuccess]      = useState('')
   const [error,        setError]        = useState('')
 
-  // Reset form when drawer closes (dispatchConfirm becomes null after confirmation)
-  useEffect(() => {
-    if (dispatchConfirm === null && pendingDispatch === null) {
-      setEmpId('')
-      setTaskNo('')
-      setDeadline('')
-      setPriorities([])
-      setPurposes([])
-      setForwardTo('')
-      setAction('')
-      setRemarks('')
-      setFiles([])
-      setError('')
-      setSuccess('')
-    }
-  }, [dispatchConfirm, pendingDispatch])
-
   const employees    = users.filter(u => u.Role !== 'Director' && u.AccountStatus === 'Active')
-  const selectedEmp  = employees.find(u => String(u.ID) === String(empId))
-  const empStatus    = selectedEmp?.Status || 'Available'
-  const empStatusKey = getStatusKey(empStatus)
-  const needsConfirm = empStatusKey !== 'Available'
+  const { recipients: selectedEmployees, warnings: availabilityWarnings } = getDispatchRecipients(
+    employees, selectedEmpIds, availabilitySchedules,
+  )
 
   const grouped = {
     Available:         employees.filter(u => getStatusKey(u.Status || 'Available') === 'Available'),
@@ -125,6 +103,18 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
   }
   function togglePurpose(key) {
     setPurposes(prev => prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key])
+  }
+
+  function toggleEmployee(id) {
+    const normalizedId = String(id)
+    setSelectedEmpIds(previous => previous.includes(normalizedId)
+      ? previous.filter(value => value !== normalizedId)
+      : [...previous, normalizedId]
+    )
+  }
+
+  function getEmployeeSchedules(employee) {
+    return getSchedulesForPersonnel(availabilitySchedules, employee.ID)
   }
 
   function buildTitle() {
@@ -148,14 +138,38 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
     return lines.join('\n')
   }
 
+  function buildDispatchPayload(recipients = selectedEmployees) {
+    const priorityVal = priorities.includes('Urgent') ? 'Urgent'
+      : priorities.includes('Priority') ? 'High'
+      : 'Normal'
+    return {
+      recipients: recipients.map(employee => ({ empId: String(employee.ID), empName: employee.Name })),
+      title: buildTitle(),
+      instructions: buildInstructions(),
+      priority: priorityVal,
+      category: priorities.includes('Confidential') ? 'Confidential' : 'General',
+      deadline,
+      files,
+      actorName: session?.Name || 'Director',
+      priorityFlags: priorities,
+      purposeCheckboxes: purposes,
+      approvalAction: action,
+    }
+  }
+
   async function doDispatch() {
     setLoading(true); setError(''); setSuccess('')
+
+    if (selectedEmployees.length === 0) {
+      setError('Select at least one unit personnel.')
+      setLoading(false)
+      return
+    }
     
     // Validate form before submission
     const validation = validateForm(
-      { empId, title, senderName },
+      { title: title.trim(), senderName: senderName.trim() },
       {
-        empId: { required: true, label: 'Unit personnel' },
         title: { required: true, label: 'Task title' },
         senderName: { required: true, label: 'Sender name' }
       }
@@ -168,34 +182,17 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
     }
 
     try {
-      const priorityVal = priorities.includes('Urgent') ? 'Urgent'
-        : priorities.includes('Priority') ? 'High'
-        : 'Normal'
-
       await withErrorHandling(async () => {
-        await createTask({
-          empId,
-          empName:      selectedEmp.Name,
-          title:        buildTitle(),
-          instructions: buildInstructions(),
-          priority:     priorityVal,
-          category:     priorities.includes('Confidential') ? 'Confidential' : 'General',
-          deadline,
-          files,
-          actorName:    session?.Name || 'Director',
-          priorityFlags: priorities,
-          purposeCheckboxes: purposes,
-          approvalAction: action,
-        })
+        await createTasks(buildDispatchPayload())
       }, ERROR_MESSAGES.DATABASE)
 
       await onSync()
 
       setTaskNo(''); setTitle(''); setDeadline(''); setFiles([])
       setPriorities([]); setPurposes([]); setForwardTo('')
-      setAction(''); setRemarks(''); setEmpId('')
+      setAction(''); setRemarks(''); setSelectedEmpIds([])
       setSenderName(session?.Name || '')
-      setSuccess(`Task dispatched to ${selectedEmp.Name}.`)
+      setSuccess(`Task dispatched to ${selectedEmployees.length} ${selectedEmployees.length === 1 ? 'person' : 'people'}.`)
       setTimeout(() => setSuccess(''), 4000)
       setTimeout(() => {
         onCloseDrawer?.()
@@ -207,27 +204,13 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!empId)   { setError('Please select a unit personnel.'); return }
-    if (!title)   { setError('Please enter a task title.'); return }
-    if (needsConfirm) {
-      const priorityVal = priorities.includes('Urgent') ? 'Urgent'
-        : priorities.includes('Priority') ? 'High'
-        : 'Normal'
-      setPendingDispatch({
-        empId,
-        empName: selectedEmp.Name,
-        title: buildTitle(),
-        instructions: buildInstructions(),
-        priority: priorityVal,
-        category: priorities.includes('Confidential') ? 'Confidential' : 'General',
-        deadline,
-        files,
-        actorName: session?.Name || 'Director',
-        priorityFlags: priorities,
-        purposeCheckboxes: purposes,
-        approvalAction: action,
-      })
-      setDispatchConfirm(selectedEmp)
+    setError('')
+    if (selectedEmployees.length === 0) { setError('Select at least one unit personnel.'); return }
+    if (!title.trim()) { setError('Please enter a task title.'); return }
+
+    if (availabilityWarnings.length > 0) {
+      setPendingDispatch(buildDispatchPayload())
+      setDispatchConfirm({ recipients: selectedEmployees, warnings: availabilityWarnings })
       setPersonnelModalOpen?.(false)
       setSelectedPersonnel?.(null)
       return
@@ -241,56 +224,115 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
       {/* ── 1. AVAILABILITY PREVIEW + ASSIGN ── */}
       <div>
         <SectionLabel num="1" title="Assign To" />
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5 mb-2 card-enhanced">
+        <div className="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 card-enhanced">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white p-3">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Search unit personnel</span>
+              <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true" />
+              <input
+                type="search"
+                value={personnelSearch}
+                onChange={event => setPersonnelSearch(event.target.value)}
+                placeholder="Search name or unit"
+                className="input w-full py-2 pl-8 pr-3 text-xs input-enhanced focus-ring"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setSelectedEmpIds(grouped.Available.map(employee => String(employee.ID)))}
+              disabled={loading || grouped.Available.length === 0}
+              className="min-h-9 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-[11px] font-bold text-green-800 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Select available
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedEmpIds([])}
+              disabled={loading || selectedEmpIds.length === 0}
+              className="min-h-9 rounded-lg px-2 py-2 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="border-b border-slate-200 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="mb-0 text-xs font-bold text-slate-700">
+                {selectedEmployees.length} selected <span className="font-medium text-slate-400">of {employees.length}</span>
+              </p>
+              <span className="text-[10px] font-medium text-slate-400">Each person gets a separate task</span>
+            </div>
+            {selectedEmployees.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedEmployees.map(employee => (
+                  <span key={employee.ID} className="inline-flex max-w-full items-center gap-1 rounded-full border border-green-200 bg-green-50 py-1 pl-2.5 pr-1 text-[10px] font-semibold text-green-900">
+                    <span className="max-w-[180px] truncate">{employee.Name}</span>
+                    <button type="button" onClick={() => toggleEmployee(employee.ID)} aria-label={`Remove ${employee.Name}`} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-green-700 hover:bg-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
+                      <i className="bi bi-x" aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="max-h-64 space-y-3 overflow-y-auto p-3">
           {employees.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-2">No personnel found.</p>
           ) : Object.entries(grouped).map(([status, group]) => {
-            if (group.length === 0) return null
+            const query = personnelSearch.trim().toLowerCase()
+            const matching = group.filter(employee => !query ||
+              `${employee.Name || ''} ${employee.Unit || ''} ${employee.Office || ''}`.toLowerCase().includes(query)
+            )
+            if (matching.length === 0) return null
             const cfg = STATUS_CONFIG[getStatusKey(status)]
             return (
               <div key={status}>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <StatusDot status={status} />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{status} ({group.length})</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{status} ({matching.length})</span>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {group.map(u => (
-                    <button key={u.ID} type="button" onClick={() => setEmpId(String(u.ID))}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all
-                        ${String(empId) === String(u.ID)
-                          ? `${cfg.pill} ring-2 ${cfg.ring} ring-offset-1 shadow-sm`
-                          : `${cfg.pill} hover:ring-1 ${cfg.ring} hover:ring-offset-1`}`}>
-                      <StatusDot status={status} />
-                      {u.Name}
-                    </button>
-                  ))}
+                <div className="space-y-1.5">
+                  {matching.map(employee => {
+                    const selected = selectedEmpIds.includes(String(employee.ID))
+                    const schedules = getEmployeeSchedules(employee)
+                    return (
+                    <label key={employee.ID} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-2.5 py-2 transition-colors ${selected ? `${cfg.pill} shadow-sm` : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={loading}
+                        onChange={() => toggleEmployee(employee.ID)}
+                        aria-label={`Assign task to ${employee.Name}`}
+                        className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-300 text-green-700 focus:ring-green-600"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                          <StatusDot status={employee.Status || 'Available'} />
+                          <span className="truncate">{employee.Name}</span>
+                        </span>
+                        <span className="mt-0.5 block truncate pl-3.5 text-[10px] text-slate-500">{employee.Unit || employee.Office || 'Unit not set'}</span>
+                        {schedules.length > 0 && (
+                          <span className="mt-1 block pl-3.5 text-[10px] font-semibold text-amber-800">
+                            Upcoming {getPresenceScheduleLabel(schedules[0])} · {formatPresenceScheduleRange(schedules[0])}
+                            {schedules.length > 1 ? ` +${schedules.length - 1}` : ''}
+                          </span>
+                        )}
+                      </span>
+                      <span className="sr-only">{selected ? 'Selected' : 'Not selected'}</span>
+                    </label>
+                    )
+                  })}
                 </div>
               </div>
             )
           })}
-        </div>
-        {selectedEmp && (
-          <div className={`mt-1 rounded-xl border overflow-hidden ${STATUS_CONFIG[getStatusKey(empStatus)]?.pill || ''}`}>
-            <div className="flex items-center gap-2 text-xs font-semibold px-3 py-2">
-              <StatusDot status={empStatus} />
-              <span>Selected: <span className="font-bold">{selectedEmp.Name}</span></span>
-              <span className="ml-auto font-semibold">{empStatusKey}</span>
-            </div>
-            {empStatusKey !== 'Available' && empStatus !== empStatusKey && (
-              <div className="px-3 pb-2 text-[10px] opacity-80 leading-relaxed border-t border-current/10 pt-1.5">
-                {empStatus.replace(/^(Official Travel|On Leave)\s*—\s*/, '')}
-              </div>
-            )}
+          {employees.length > 0 && Object.values(grouped).every(group => {
+            const query = personnelSearch.trim().toLowerCase()
+            return group.every(employee => !`${employee.Name || ''} ${employee.Unit || ''} ${employee.Office || ''}`.toLowerCase().includes(query))
+          }) && <p className="py-3 text-center text-xs text-slate-400">No personnel match “{personnelSearch}”.</p>}
           </div>
-        )}
-        {/* Fallback dropdown */}
-        <select className="input mt-2 text-xs input-enhanced focus-ring" value={empId} onChange={e => setEmpId(e.target.value)} required>
-          <option value="">Select Unit Personnel</option>
-          {employees.map(u => {
-            const s = getStatusLabel(u.Status)
-            return <option key={u.ID} value={u.ID}>{u.Name} — {u.Unit || u.Office} {s}</option>
-          })}
-        </select>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -466,10 +508,10 @@ export default function CreateTaskForm({ users, onSync, dispatchConfirm, setDisp
         {success && <div className="bg-green-50 border border-green-200 text-green-700 text-xs rounded-lg px-3 py-2 flex items-center gap-2"><i className="bi bi-check-circle-fill" />{success}</div>}
 
         {/* Submit */}
-        <button className="btn-primary w-full py-3 btn-enhanced focus-ring" disabled={loading}>
+        <button className="btn-primary w-full py-3 btn-enhanced focus-ring" disabled={loading || selectedEmployees.length === 0}>
           {loading
             ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Dispatching...</>
-            : <><i className="bi bi-send-fill" /> Dispatch Task</>}
+            : <><i className="bi bi-send-fill" /> Dispatch to {selectedEmployees.length} {selectedEmployees.length === 1 ? 'person' : 'people'}</>}
         </button>
       </form>
 

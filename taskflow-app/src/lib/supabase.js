@@ -11,19 +11,26 @@ const debugLog = (message, data = null) => {
   }
 }
 
+// A local Supabase stack (`supabase start`) serves plain http on 127.0.0.1 and
+// issues a JWT anon key, so the https/sb_ rules below would reject it — and in
+// dev these errors throw rather than warn, so the app would not render at all.
+// Deployed builds always have an https URL, which makes this false and leaves
+// both rules fully in force.
+const isLocalSupabase = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(SUPABASE_URL || '')
+
 // Environment validation
 const validateEnvironment = () => {
   const errors = []
 
   if (!SUPABASE_URL) {
     errors.push('VITE_SUPABASE_URL is missing')
-  } else if (!SUPABASE_URL.startsWith('https://')) {
-    errors.push('VITE_SUPABASE_URL must be a valid HTTPS URL')
+  } else if (!SUPABASE_URL.startsWith('https://') && !isLocalSupabase) {
+    errors.push('VITE_SUPABASE_URL must be a valid HTTPS URL, or a local Supabase stack (http://127.0.0.1:54321)')
   }
 
   if (!SUPABASE_PUBLISHABLE_KEY) {
     errors.push('VITE_SUPABASE_PUBLISHABLE_KEY is missing')
-  } else if (!SUPABASE_PUBLISHABLE_KEY.startsWith('sb_')) {
+  } else if (!SUPABASE_PUBLISHABLE_KEY.startsWith('sb_') && !isLocalSupabase) {
     errors.push('VITE_SUPABASE_PUBLISHABLE_KEY appears invalid (should start with sb_)')
   } else if (SUPABASE_PUBLISHABLE_KEY.length < 30) {
     errors.push('VITE_SUPABASE_PUBLISHABLE_KEY appears incomplete (too short)')

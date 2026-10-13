@@ -28,6 +28,7 @@ export function permissionState() {
 }
 
 let swReadyPromise = null
+let pushSubscriptionPromise = null
 
 /** Registers the worker once and resolves to its registration. */
 export function ensureServiceWorker() {
@@ -89,9 +90,19 @@ export async function getSubscription() {
   return reg.pushManager.getSubscription()
 }
 
-/** Subscribes this device for push. Returns the subscription JSON or null. */
-export async function subscribeToPush() {
-  if (!pushSupported() || !VAPID_PUBLIC_KEY) return null
+/** Subscribes once even when development StrictMode replays startup effects. */
+export function subscribeToPush() {
+  if (!pushSupported() || !VAPID_PUBLIC_KEY) return Promise.resolve(null)
+  if (!pushSubscriptionPromise) {
+    pushSubscriptionPromise = createPushSubscription().finally(() => {
+      pushSubscriptionPromise = null
+    })
+  }
+  return pushSubscriptionPromise
+}
+
+/** Performs one subscription attempt and returns the subscription JSON or null. */
+async function createPushSubscription() {
   const reg = await ensureServiceWorker()
   if (!reg) return null
   try {
@@ -103,7 +114,7 @@ export async function subscribeToPush() {
     })
     return sub.toJSON()
   } catch (e) {
-    console.warn('[PUSH] subscribe failed:', e)
+    console.warn('[PUSH] subscribe failed:', e?.name || 'Error', e?.message || String(e))
     return null
   }
 }

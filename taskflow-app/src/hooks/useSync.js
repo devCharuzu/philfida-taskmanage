@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../store/useStore'
-import { getData } from '../lib/api'
+import { getData, getPresenceSchedules } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { unlockAudio, playNotifSound } from '../lib/notifSound'
 import { showLocalNotification, permissionState } from '../lib/notifications'
@@ -83,12 +83,36 @@ export function useSync() {
     if (!session) return
     try {
       const data = await getData(session.ID, session.Region || 'Central Office')
-      if (data) useStore.getState().setGlobalData(data)
+      if (data && useStore.getState().session?.ID === session.ID) useStore.getState().setGlobalData(data)
       return data
     } catch (e) {
       console.error('Sync failed', e)
     }
   }, []) // intentionally no deps — always reads fresh from store
+
+  // Schedule details are only readable through a credential-checked RPC, so
+  // they do not use Postgres Changes (which requires direct table SELECT).
+  // Poll this small roster separately so another account sees new filings
+  // promptly without refreshing tasks, chat, and history every few seconds.
+  const syncAvailability = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      const availabilitySchedules = await getPresenceSchedules(sessionId)
+      if (useStore.getState().session?.ID !== sessionId) return
+      const current = useStore.getState().globalData
+      if (JSON.stringify(current.availabilitySchedules || []) !== JSON.stringify(availabilitySchedules)) {
+        useStore.getState().setGlobalData({ ...current, availabilitySchedules })
+      }
+    } catch (error) {
+      console.warn('Availability sync failed', error)
+    }
+  }, [sessionId])
+
+  useEffect(() => {
+    // Both the personal calendar and presence form emit this after a saved filing.
+    window.addEventListener('presence-reminders-changed', syncAvailability)
+    return () => window.removeEventListener('presence-reminders-changed', syncAvailability)
+  }, [syncAvailability])
 
   // Single owner of "new unread notification -> sound + OS push + bell ring".
   // This hook mounts exactly once per page. NotificationBell renders twice
@@ -229,6 +253,7 @@ export function useSync() {
           console.warn('Failed to create Users subscription:', err)
         }
       }
+
     }
 
     // M6 FIX: When realtime is active, poll every 2 min as a heartbeat only.
@@ -239,6 +264,7 @@ export function useSync() {
     // without risking silent missed updates. Revisit if verified safe on-device.
     const pollingInterval = useRealtime ? 120000 : 15000
     const fallback = setInterval(sync, pollingInterval)
+    const availabilityFallback = useRealtime ? setInterval(syncAvailability, 15000) : null
 
     return () => {
       channelsRef.current.forEach(ch => {
@@ -246,8 +272,9 @@ export function useSync() {
       })
       channelsRef.current = []
       clearInterval(fallback)
+      if (availabilityFallback) clearInterval(availabilityFallback)
     }
-  }, [sessionId, sync])
+  }, [sessionId, sync, syncAvailability])
 
   return { sync }
 }

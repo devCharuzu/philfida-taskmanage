@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../store/useStore'
-import { addComment, markChatRead, markChatNotificationsRead, parseMsg, unsendComment } from '../lib/api'
+import { addComment, markChatRead, markChatNotificationsRead, parseMsg, unsendComment, hasUserRead } from '../lib/api'
 import Lightbox from './Lightbox'
 
 const ICON_MAP = {
@@ -57,7 +57,7 @@ export default function ChatModal({ taskId, taskTitle, onClose, onSync }) {
       comments: currentData.comments.map(c =>
         String(c.TaskID) === String(taskId) &&
         c.SenderName !== session.Name &&
-        !String(c.HiddenBy || '').includes(session.Name)
+        !hasUserRead(c.HiddenBy, session.Name)
           ? { ...c, HiddenBy: c.HiddenBy ? `${c.HiddenBy},${session.Name}` : session.Name }
           : c
       ),

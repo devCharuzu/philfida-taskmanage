@@ -9,8 +9,8 @@ import DashboardPage from './pages/DashboardPage'
 import DirectorPage  from './pages/DirectorPage'
 import RecordsPage   from './pages/RecordsPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
+import UpcomingAvailabilityPanel from './components/UpcomingAvailabilityPanel'
 import AnnouncementPopup from './components/AnnouncementPopup'
-import AvailabilityWelcomeModal from './components/AvailabilityWelcomeModal'
 
 /**
  * Restores Google session from Supabase Auth, or revalidates persisted Personnel-ID session.
@@ -235,6 +235,7 @@ export default function App() {
   const { hydrated, error } = useHydrated()
   useIdleLogout()
 
+  const availabilitySchedules = useStore(s => s.globalData.availabilitySchedules)
   const sessionId = useStore(s => s.session?.ID)
   useEffect(() => {
     ensureServiceWorker()
@@ -268,7 +269,7 @@ export default function App() {
   return (
     <>
     {session && <AnnouncementPopup onOpenAnnouncements={goToAnnouncements} />}
-    {session && <AvailabilityWelcomeModal />}
+    {hydrated && session && <UpcomingAvailabilityPanel key={session.ID} schedules={availabilitySchedules || []} />}
     <Routes>
       <Route path="/"          element={<LoginRoute hydrated={hydrated} error={error} />} />
       <Route path="/dashboard" element={<ProtectedRoute hydrated={hydrated} error={error}><DashboardPage /></ProtectedRoute>} />

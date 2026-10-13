@@ -4,13 +4,15 @@ import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
-import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTask } from '../lib/api'
+import { toggleArchive, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, deleteTask, deleteTasks, restoreTasks, logHistory, createTasks } from '../lib/api'
 import PresenceToggle, { normalizeStatus } from '../components/PresenceToggle'
 import PersonnelStatusPanel from '../components/PersonnelStatusPanel'
+import { UpcomingAvailabilityButton as UpcomingAvailabilityPanel } from '../components/UpcomingAvailabilityPanel'
 import NotificationBell from '../components/NotificationBell'
 import UserProfileTab from '../components/UserProfileTab'
 import AnnouncementsTab from '../components/AnnouncementsTab'
 import CreateTaskForm from '../components/CreateTaskForm'
+import DispatchAvailabilityConfirm from '../components/DispatchAvailabilityConfirm'
 import EditTaskModal from '../components/EditTaskModal'
 import ChatModal from '../components/ChatModal'
 import Lightbox from '../components/Lightbox'
@@ -48,6 +50,20 @@ export default function DirectorPage() {
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
   const [autoUpdateAlert, setAutoUpdateAlert] = useState(null)
+
+  async function confirmDispatch() {
+    if (!pendingDispatch) return
+    await createTasks(pendingDispatch)
+    await sync()
+    setDispatchConfirm(null)
+    setPendingDispatch(null)
+    setDrawerOpen(false)
+  }
+
+  function cancelDispatch() {
+    setDispatchConfirm(null)
+    setPendingDispatch(null)
+  }
 
   // Sync presence state with session status (persists across refreshes)
   // "Read more" in the sign-in popup asks the active page to open its tab.
@@ -321,6 +337,7 @@ export default function DirectorPage() {
               </div>
 
               <PersonnelStatusPanel ref={personnelPanelRef} users={nonDirectors} />
+              <UpcomingAvailabilityPanel schedules={globalData.availabilitySchedules || []} />
 
               {/* ── FILTER BAR ── */}
               <div className="px-4 md:px-8 py-3 bg-slate-50/50 border-b border-slate-200 flex flex-wrap items-center gap-3">
@@ -614,7 +631,7 @@ export default function DirectorPage() {
       </div>{/* end flex-1 flex flex-col */}
 
       {/* ── DISPATCH DRAWER (slide-in from right) ── */}
-      {drawerOpen && !dispatchConfirm && (
+      {drawerOpen && (
         <>
           <div id="drawer-backdrop" className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
           <div id="drawer-content" className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 flex flex-col shadow-2xl"
@@ -642,13 +659,10 @@ export default function DirectorPage() {
             <div className="flex-1 overflow-y-auto p-5">
               <CreateTaskForm
                 users={globalData.users}
+                availabilitySchedules={globalData.availabilitySchedules || []}
                 onSync={async () => { await sync() }}
-                dispatchConfirm={dispatchConfirm}
                 setDispatchConfirm={setDispatchConfirm}
-                pendingDispatch={pendingDispatch}
                 setPendingDispatch={setPendingDispatch}
-                setPersonnelModalOpen={setPersonnelModalOpen}
-                setSelectedPersonnel={setSelectedPersonnel}
                 onCloseDrawer={() => setDrawerOpen(false)}
               />
             </div>
@@ -688,69 +702,12 @@ export default function DirectorPage() {
 
 
 
-      {/* ── DISPATCH CONFIRM MODAL ── */}
-      {dispatchConfirm && createPortal(
-        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setDispatchConfirm(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative z-popover">
-            <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <i className="bi bi-exclamation-triangle-fill text-white text-lg" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-sm leading-none">Availability Notice</p>
-                <p className="text-amber-100 text-xs mt-0.5">Please confirm before dispatching</p>
-              </div>
-            </div>
-            <div className="p-5">
-              <div className={`flex items-center gap-3 p-3 rounded-xl border mb-4 ${
-                dispatchConfirm.Status?.startsWith('Official Travel') ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                dispatchConfirm.Status?.startsWith('On Leave') ? 'bg-red-100 text-red-800 border-red-200' :
-                'bg-emerald-100 text-emerald-800 border-emerald-200'
-              }`}>
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  dispatchConfirm.Status?.startsWith('Official Travel') ? 'bg-blue-500' :
-                  dispatchConfirm.Status?.startsWith('On Leave') ? 'bg-red-500' : 'bg-emerald-500'
-                }`} />
-                <div>
-                  <p className="font-bold text-sm">{dispatchConfirm.Name}</p>
-                  <p className="text-xs mt-0.5">Currently: <span className="font-semibold">
-                    {dispatchConfirm.Status?.startsWith('Official Travel') ? 'Official Travel' :
-                     dispatchConfirm.Status?.startsWith('On Leave') ? 'On Leave' : 'Available'}
-                  </span></p>
-                </div>
-              </div>
-              <p className="text-slate-600 text-sm mb-5 leading-relaxed">
-                This personnel is currently <strong>
-                  {dispatchConfirm.Status?.startsWith('Official Travel') ? 'Official Travel' :
-                   dispatchConfirm.Status?.startsWith('On Leave') ? 'On Leave' : 'Unavailable'}
-                </strong> and may not be able to act immediately. Dispatch anyway?
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => { setDispatchConfirm(null); setPendingDispatch(null) }} className="btn-secondary flex-1 py-2.5 btn-enhanced focus-ring">Cancel</button>
-                <button onClick={async () => {
-                  if (pendingDispatch) {
-                    try {
-                      await createTask(pendingDispatch)
-                      await sync()
-                      setDispatchConfirm(null)
-                      setPendingDispatch(null)
-                      setDrawerOpen(false)
-                    } catch (error) {
-                      console.error('Dispatch failed:', error)
-                      setDispatchConfirm(null)
-                      setPendingDispatch(null)
-                    }
-                  }
-                }} className="btn-primary flex-1 py-2.5 btn-enhanced focus-ring">
-                  Dispatch Anyway
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <DispatchAvailabilityConfirm
+        dispatchConfirm={dispatchConfirm}
+        pendingDispatch={pendingDispatch}
+        onCancel={cancelDispatch}
+        onConfirm={confirmDispatch}
+      />
 
       {deleteConfirm && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

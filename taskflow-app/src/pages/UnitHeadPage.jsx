@@ -4,13 +4,15 @@ import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { useSync } from '../hooks/useSync'
-import { setTaskStatus, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, logHistory, createTask } from '../lib/api'
+import { setTaskStatus, getStatusBadgeClass, getPriorityClass, getUnreadCommentCount, logHistory, createTasks } from '../lib/api'
 import NotificationBell from '../components/NotificationBell'
 import UserProfileTab from '../components/UserProfileTab'
 import ChatModal from '../components/ChatModal'
 import FileThumb from '../components/FileThumb'
 import Lightbox from '../components/Lightbox'
 import CreateTaskForm from '../components/CreateTaskForm'
+import DispatchAvailabilityConfirm from '../components/DispatchAvailabilityConfirm'
+import { UpcomingAvailabilityButton as UpcomingAvailabilityPanel } from '../components/UpcomingAvailabilityPanel'
 import EditTaskModal from '../components/EditTaskModal'
 import { normalizeStatus } from '../components/PresenceToggle'
 import TaskTimeline from '../components/TaskTimeline'
@@ -34,6 +36,7 @@ export default function UnitHeadPage() {
     comments:      rawGlobal?.comments      ?? [],
     notifications: rawGlobal?.notifications ?? [],
     history:       rawGlobal?.history       ?? [],
+    availabilitySchedules: rawGlobal?.availabilitySchedules ?? [],
   }
   const { sync }   = useSync()
   const navigate = useNavigate()
@@ -53,6 +56,20 @@ export default function UnitHeadPage() {
   const [dispatchConfirm, setDispatchConfirm] = useState(null)
   const [pendingDispatch, setPendingDispatch] = useState(null)
   const [editTask,           setEditTask]           = useState(null)
+
+  async function confirmDispatch() {
+    if (!pendingDispatch) return
+    await createTasks(pendingDispatch)
+    await sync()
+    setDispatchConfirm(null)
+    setPendingDispatch(null)
+    setDrawerOpen(false)
+  }
+
+  function cancelDispatch() {
+    setDispatchConfirm(null)
+    setPendingDispatch(null)
+  }
 
 
 
@@ -360,6 +377,7 @@ export default function UnitHeadPage() {
                   </div>
                 </div>
               )}
+              <UpcomingAvailabilityPanel schedules={globalData.availabilitySchedules || []} />
 
               {/* ── TASK CARDS ── */}
               <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-4 pb-0">
@@ -469,6 +487,7 @@ export default function UnitHeadPage() {
                   </div>
                 </div>
               )}
+              <UpcomingAvailabilityPanel schedules={globalData.availabilitySchedules || []} />
 
               {/* ── TASK CARDS ── */}
               <div className="flex-1 overflow-auto px-4 md:px-6 lg:px-8 pt-4 pb-0">
@@ -570,7 +589,7 @@ export default function UnitHeadPage() {
       </nav>
 
       {/* ── ASSIGN DRAWER ── */}
-      {drawerOpen && !dispatchConfirm && (
+      {drawerOpen && (
         <>
           <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
           <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 flex flex-col shadow-2xl"
@@ -598,10 +617,9 @@ export default function UnitHeadPage() {
             <div className="flex-1 overflow-y-auto p-5">
               <CreateTaskForm
                 users={unitEmployees.map(u => ({ ...u, Role: 'Employee' }))}
+                availabilitySchedules={globalData.availabilitySchedules || []}
                 onSync={async () => { await sync(); setDrawerOpen(false) }}
-                dispatchConfirm={dispatchConfirm}
                 setDispatchConfirm={setDispatchConfirm}
-                pendingDispatch={pendingDispatch}
                 setPendingDispatch={setPendingDispatch}
                 onCloseDrawer={() => setDrawerOpen(false)}
               />
@@ -614,69 +632,12 @@ export default function UnitHeadPage() {
       {lightboxFile && <Lightbox file={lightboxFile} onClose={() => setLightboxFile(null)} />}
       {editTask     && <EditTaskModal task={editTask} onClose={() => setEditTask(null)} onSync={sync} />}
 
-      {/* ── DISPATCH CONFIRM MODAL ── */}
-      {dispatchConfirm && createPortal(
-        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setDispatchConfirm(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative z-popover">
-            <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <i className="bi bi-exclamation-triangle-fill text-white text-lg" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-sm leading-none">Availability Notice</p>
-                <p className="text-amber-100 text-xs mt-0.5">Please confirm before dispatching</p>
-              </div>
-            </div>
-            <div className="p-5">
-              <div className={`flex items-center gap-3 p-3 rounded-xl border mb-4 ${
-                dispatchConfirm.Status?.startsWith('Official Travel') ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                dispatchConfirm.Status?.startsWith('On Leave') ? 'bg-red-100 text-red-800 border-red-200' :
-                'bg-emerald-100 text-emerald-800 border-emerald-200'
-              }`}>
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  dispatchConfirm.Status?.startsWith('Official Travel') ? 'bg-blue-500' :
-                  dispatchConfirm.Status?.startsWith('On Leave') ? 'bg-red-500' : 'bg-emerald-500'
-                }`} />
-                <div>
-                  <p className="font-bold text-sm">{dispatchConfirm.Name}</p>
-                  <p className="text-xs mt-0.5">Currently: <span className="font-semibold">
-                    {dispatchConfirm.Status?.startsWith('Official Travel') ? 'Official Travel' :
-                     dispatchConfirm.Status?.startsWith('On Leave') ? 'On Leave' : 'Available'}
-                  </span></p>
-                </div>
-              </div>
-              <p className="text-slate-600 text-sm mb-5 leading-relaxed">
-                This personnel is currently <strong>
-                  {dispatchConfirm.Status?.startsWith('Official Travel') ? 'Official Travel' :
-                   dispatchConfirm.Status?.startsWith('On Leave') ? 'On Leave' : 'Unavailable'}
-                </strong> and may not be able to act immediately. Dispatch anyway?
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => { setDispatchConfirm(null); setPendingDispatch(null) }} className="btn-secondary flex-1 py-2.5 btn-enhanced focus-ring">Cancel</button>
-                <button onClick={async () => {
-                  if (pendingDispatch) {
-                    try {
-                      await createTask(pendingDispatch)
-                      await sync()
-                      setDispatchConfirm(null)
-                      setPendingDispatch(null)
-                      setDrawerOpen(false)
-                    } catch (error) {
-                      console.error('Dispatch failed:', error)
-                      setDispatchConfirm(null)
-                      setPendingDispatch(null)
-                    }
-                  }
-                }} className="btn-primary flex-1 py-2.5 btn-enhanced focus-ring">
-                  Dispatch Anyway
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <DispatchAvailabilityConfirm
+        dispatchConfirm={dispatchConfirm}
+        pendingDispatch={pendingDispatch}
+        onCancel={cancelDispatch}
+        onConfirm={confirmDispatch}
+      />
       {/* ── AUTO-UPDATE TOAST ALERT ── */}
       {autoUpdateAlert && (
         <div className="fixed top-4 right-4 z-toast max-w-sm w-full bg-green-900 text-white rounded-xl shadow-lg border border-green-800/60 p-4 animate-in-right flex items-start gap-3">

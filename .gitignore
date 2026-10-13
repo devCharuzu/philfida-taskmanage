@@ -3,6 +3,7 @@
 Thumbs.db
 .vscode/
 .idea/
+.claude/settings.local.json
 *.swp
 *.swo
 *~
@@ -26,6 +27,10 @@ dist/
 # Vercel local project link/state
 .vercel/
 
+# Build caches
+.cache/
+.turbo/
+
 # Credentials / keys — should never live in the repo at all
 *.pem
 *.key
@@ -37,7 +42,8 @@ dist/
 id_rsa*
 id_ed25519*
 
-# DB dumps / backups — may contain live personnel data
+# DB dumps / backups — contain live personnel data AND plain-text passwords
+/backups/
 *.sql.bak
 *.dump
 *.backup
@@ -57,3 +63,6 @@ npm-debug.log*
 
 # test scaffold — seeds a session from a URL param, must never ship
 taskflow-app/public/__seed.html
+
+# Never publish production exports nested under the frontend.
+taskflow-app/backups/*.sql

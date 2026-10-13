@@ -1,5 +1,7 @@
 import { useState, useEffect, lazy, Suspense} from 'react'
-import { updatePresence, uploadFiles, getSignedFileUrl, buildTravelStatus} from '../lib/api'
+import { updatePresence, uploadFiles, getSignedFileUrl, buildTravelStatus, getPresenceSchedules, savePresenceSchedule, cancelPresenceSchedule } from '../lib/api'
+import { getManilaDateTimeString, getPresenceScheduleWindow, toCalendarReminder, toPresenceScheduleRecord } from '../lib/availability'
+import { useStore } from '../store/useStore'
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June", 
@@ -93,28 +95,77 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
   // ── Load & Persist Reminders ──────────────────────────────────
   useEffect(() => {
     if (!userId) return
-    const loadReminders = () => {
+    let active = true
+    const loadReminders = async () => {
       const stored = localStorage.getItem(`philfida_calendar_reminders_${userId}`)
+      let localReminders = []
       if (stored) {
-        try { setReminders(JSON.parse(stored)) } catch (e) { console.error(e) }
+        try { localReminders = JSON.parse(stored) } catch (e) { console.error(e) }
+      }
+      try {
+        const sharedSchedules = (await getPresenceSchedules(userId)).filter(schedule => String(schedule.UserID) === String(userId))
+        if (!active) return
+        const sharedIds = new Set(sharedSchedules.map(schedule => String(schedule.ID)))
+        const localScheduleById = new Map(localReminders.map(reminder => [String(reminder.id), reminder]))
+        const ordinaryReminders = localReminders.filter(reminder => reminder.type !== 'travel' && reminder.type !== 'leave')
+        const legacySchedules = localReminders.filter(reminder =>
+          (reminder.type === 'travel' || reminder.type === 'leave')
+          && !reminder.shared
+          && !sharedIds.has(String(reminder.id))
+        )
+        const merged = [
+          ...ordinaryReminders,
+          ...legacySchedules,
+          ...sharedSchedules.map(schedule => toCalendarReminder(schedule, localScheduleById.get(String(schedule.ID)))),
+        ]
+        setReminders(merged)
+      } catch (e) {
+        console.error('[PRESENCE-SCHEDULES] Could not load shared calendar schedules:', e)
+        if (active) setReminders(localReminders)
       }
     }
     loadReminders()
     window.addEventListener('storage', loadReminders)
     window.addEventListener('presence-reminders-changed', loadReminders)
     return () => {
+      active = false
       window.removeEventListener('storage', loadReminders)
       window.removeEventListener('presence-reminders-changed', loadReminders)
     }
   }, [userId])
 
-  const saveReminders = (updated) => {
-    setReminders(updated)
+  const saveReminders = async (updated) => {
+    const previousSchedules = reminders.filter(reminder => reminder.shared && (reminder.type === 'travel' || reminder.type === 'leave'))
+    const nextSchedules = updated.filter(reminder => reminder.type === 'travel' || reminder.type === 'leave')
+    const nextScheduleIds = new Set(nextSchedules.map(reminder => String(reminder.id)))
+    try {
+      for (const schedule of nextSchedules) {
+        const previous = reminders.find(reminder => String(reminder.id) === String(schedule.id))
+        const isChanged = !previous?.shared
+          || JSON.stringify(toPresenceScheduleRecord(previous)) !== JSON.stringify(toPresenceScheduleRecord(schedule))
+        if (isChanged) await savePresenceSchedule(userId, toPresenceScheduleRecord(schedule))
+      }
+      for (const removed of previousSchedules) {
+        if (!nextScheduleIds.has(String(removed.id))) await cancelPresenceSchedule(userId, removed.id)
+      }
+    } catch (error) {
+      console.error('[PRESENCE-SCHEDULES] Could not save shared calendar schedules:', error)
+      window.alert(`Could not save this availability schedule.\n\n${error.message || 'Please check your connection and try again.'}`)
+      return false
+    }
+
+    const persisted = updated.map(reminder =>
+      reminder.type === 'travel' || reminder.type === 'leave'
+        ? { ...reminder, shared: true }
+        : reminder
+    )
+    setReminders(persisted)
     if (userId) {
-      localStorage.setItem(`philfida_calendar_reminders_${userId}`, JSON.stringify(updated))
+      localStorage.setItem(`philfida_calendar_reminders_${userId}`, JSON.stringify(persisted))
       window.dispatchEvent(new Event('storage'))
       window.dispatchEvent(new Event('presence-reminders-changed'))
     }
+    return true
   }
 
   // Get today's date string in Manila time zone
@@ -186,7 +237,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
   }
 
   // ── Reminder Handlers ─────────────────────────────────────────
-  const handleAddReminder = (e) => {
+  const handleAddReminder = async (e) => {
     e.preventDefault()
     
     if (selectedDateStr < todayStr) {
@@ -374,7 +425,7 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
       updated = [...reminders, newReminder]
     }
 
-    saveReminders(updated)
+    if (!await saveReminders(updated)) return
 
     // Reset Form
     setRemTitle('')
@@ -1304,6 +1355,8 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
                 type="button"
                 onClick={async () => {
                   const id = reminderToDelete.id
+                  const updated = reminders.filter(r => r.id !== id)
+                  if (!await saveReminders(updated)) return
                   // If it's active or applied, reset user status in Supabase to 'Available'
                   if (reminderToDelete.applied) {
                     try {
@@ -1316,8 +1369,6 @@ export default function PersonalCalendarTab({ tasks, userId, onViewTask, showTas
                       console.error('[PRESENCE-RESET] Error resetting status:', e)
                     }
                   }
-                  const updated = reminders.filter(r => r.id !== id)
-                  saveReminders(updated)
                   setReminderToDelete(null)
                 }}
                 className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
@@ -1373,33 +1424,45 @@ function SignedAttachmentLink({ path }) {
 }
 
 // ── Background Automated Presence Scheduler Helper ────────────────────────
-export async function checkAndApplyScheduledPresence(userId, syncCallback) {
+export async function checkAndApplyScheduledPresence(userId, syncCallback, now = new Date()) {
   if (!userId) return
-  const stored = localStorage.getItem(`philfida_calendar_reminders_${userId}`)
-  if (!stored) return
 
   try {
-    const reminders = JSON.parse(stored)
-    let modified = false
+    const key = `philfida_calendar_reminders_${userId}`
+    const stored = localStorage.getItem(key)
+    const localReminders = stored ? JSON.parse(stored) : []
+    let remoteSchedules = []
+    let remoteReadSucceeded = true
+    try {
+      remoteSchedules = (await getPresenceSchedules(userId)).filter(schedule => String(schedule.UserID) === String(userId))
+    } catch (error) {
+      remoteReadSucceeded = false
+      console.warn('[PRESENCE-SCHEDULER] Shared schedules could not be loaded; using this device cache.', error)
+    }
 
-    // True current time in Asia/Manila, as "YYYY-MM-DD HH:MM" so it compares
-    // lexicographically against the stored date/time strings.
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Manila',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    })
-    const map = {}
-    formatter.formatToParts(now).forEach(part => { map[part.type] = part.value })
-    const manilaNowStr = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`
+    const remoteIds = new Set(remoteSchedules.map(schedule => String(schedule.ID)))
+    const localById = new Map(localReminders.map(reminder => [String(reminder.id), reminder]))
+    const ordinaryReminders = localReminders.filter(reminder => reminder.type !== 'travel' && reminder.type !== 'leave')
+    const legacyLocalSchedules = localReminders.filter(reminder =>
+      (reminder.type === 'travel' || reminder.type === 'leave')
+      && !reminder.shared
+      && !remoteIds.has(String(reminder.id))
+    )
+    const sharedReminders = remoteSchedules.map(schedule =>
+      toCalendarReminder(schedule, localById.get(String(schedule.ID)))
+    )
+    const reminders = [
+      ...ordinaryReminders,
+      ...legacyLocalSchedules,
+      ...sharedReminders,
+      ...(!remoteReadSucceeded
+        ? localReminders.filter(reminder => reminder.shared && !remoteIds.has(String(reminder.id)))
+        : []),
+    ]
+    let modified = JSON.stringify(reminders) !== JSON.stringify(localReminders)
 
-    const windowOf = (r) => ({
-      start: `${r.date} ${r.time || '00:00'}`,
-      end: r.returnDate && r.timeEnd ? `${r.returnDate} ${r.timeEnd}`
-         : r.returnDate ? `${r.returnDate} 23:59`
-         : `${r.date} 23:59`,
-    })
+    const manilaNowStr = getManilaDateTimeString(now)
+    const windowOf = getPresenceScheduleWindow
 
     const statusFor = (r) => r.type === 'travel'
       ? buildTravelStatus({
@@ -1438,18 +1501,34 @@ export async function checkAndApplyScheduledPresence(userId, syncCallback) {
       }
     }
 
-    // One write per transition, never one per tick.
-    if (becameActive) {
-      const fullStatus = statusFor(becameActive)
-      await updatePresence(userId, fullStatus)
-      window.dispatchEvent(new CustomEvent('presence-auto-updated', { detail: { status: fullStatus } }))
-    } else if (anyDeactivated && !reminders.some(r => r.applied && (r.type === 'travel' || r.type === 'leave'))) {
+    const activeSchedules = reminders
+      .filter(r => (r.type === 'travel' || r.type === 'leave') && manilaNowStr >= windowOf(r).start && manilaNowStr < windowOf(r).end)
+      .sort((a, b) => windowOf(a).start.localeCompare(windowOf(b).start))
+    const activeSchedule = activeSchedules.at(-1)
+    const previousSharedScheduleWasActive = remoteReadSucceeded && localReminders.some(reminder =>
+      reminder.shared && reminder.applied && !remoteIds.has(String(reminder.id))
+    )
+    const session = useStore.getState().session
+    const currentUser = useStore.getState().globalData.users.find(user => String(user.ID) === String(userId))
+    const currentStatus = String(session?.ID) === String(userId)
+      ? session?.Status || currentUser?.Status || 'Available'
+      : currentUser?.Status || 'Available'
+
+    // One write per transition, never one per tick. Reading the shared schedule
+    // also lets a signed-in user activate a schedule saved from another device.
+    if (activeSchedule) {
+      const fullStatus = statusFor(activeSchedule)
+      if (fullStatus !== currentStatus || becameActive) {
+        await updatePresence(userId, fullStatus)
+        window.dispatchEvent(new CustomEvent('presence-auto-updated', { detail: { status: fullStatus } }))
+      }
+    } else if ((anyDeactivated || previousSharedScheduleWasActive) && !activeSchedules.length && currentStatus !== 'Available') {
       await updatePresence(userId, 'Available')
       window.dispatchEvent(new CustomEvent('presence-auto-updated', { detail: { status: 'Available' } }))
     }
 
     if (modified) {
-      localStorage.setItem(`philfida_calendar_reminders_${userId}`, JSON.stringify(reminders))
+      localStorage.setItem(key, JSON.stringify(reminders))
       // Tell any mounted calendar/profile view to re-read the reminder list.
       window.dispatchEvent(new Event('presence-reminders-changed'))
       if (syncCallback) await syncCallback()

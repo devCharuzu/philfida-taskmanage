@@ -42,20 +42,25 @@ const mobileSafeStorage = {
   }
 }
 
+const emptyGlobalData = () => ({ tasks: [], users: [], comments: [], notifications: [], history: [], availabilitySchedules: [] })
+
 const persistStorage = createJSONStorage(() => mobileSafeStorage)
 
 export const useStore = create(
   persist(
     (set) => ({
       session: null,
-      globalData: { tasks: [], users: [], comments: [], notifications: [], history: [] },
+      globalData: emptyGlobalData(),
       // Bumped once, in one place (useSync), whenever a genuinely new unread
       // notification arrives — NotificationBell watches this to trigger its
       // ring animation instead of re-detecting "new" itself.
       notifyPulse: 0,
       bumpNotifyPulse: () => set((state) => ({ notifyPulse: state.notifyPulse + 1 })),
-      setSession: (session) => set({ session }),
-      clearSession: () => set({ session: null }),
+      setSession: (session) => set(state => ({
+        session,
+        ...(state.session?.ID !== session?.ID ? { globalData: emptyGlobalData() } : {}),
+      })),
+      clearSession: () => set({ session: null, globalData: emptyGlobalData() }),
       setGlobalData: (data) => set((state) => ({
         globalData: typeof data === 'function' ? data(state.globalData) : data
       })),
@@ -68,9 +73,6 @@ export const useStore = create(
       version: 2,
       partialize: (state) => ({ session: state.session }),
       storage: persistStorage,
-      onRehydrateStorage: () => (state) => {
-        console.log('Store rehydrated:', state)
-      }
     }
   )
 )
