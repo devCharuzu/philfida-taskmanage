@@ -10,6 +10,7 @@ import DirectorPage  from './pages/DirectorPage'
 import RecordsPage   from './pages/RecordsPage'
 import UnitHeadPage  from './pages/UnitHeadPage'
 import AnnouncementPopup from './components/AnnouncementPopup'
+import AvailabilityWelcomeModal from './components/AvailabilityWelcomeModal'
 
 /**
  * Restores Google session from Supabase Auth, or revalidates persisted Personnel-ID session.
@@ -267,6 +268,7 @@ export default function App() {
   return (
     <>
     {session && <AnnouncementPopup onOpenAnnouncements={goToAnnouncements} />}
+    {session && <AvailabilityWelcomeModal />}
     <Routes>
       <Route path="/"          element={<LoginRoute hydrated={hydrated} error={error} />} />
       <Route path="/dashboard" element={<ProtectedRoute hydrated={hydrated} error={error}><DashboardPage /></ProtectedRoute>} />
