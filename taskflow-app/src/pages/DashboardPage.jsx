@@ -13,6 +13,7 @@ import TaskTimeline from '../components/TaskTimeline'
 import DeadlineProgress from '../components/DeadlineProgress'
 import PersonalCalendarTab, { checkAndApplyScheduledPresence } from '../components/PersonalCalendarTab'
 import AnnouncementsTab from '../components/AnnouncementsTab'
+import PersonnelStatusPanel from '../components/PersonnelStatusPanel'
 
 export default function DashboardPage() {
   const session    = useStore(s => s.session)
@@ -106,6 +107,11 @@ export default function DashboardPage() {
   const completedCount = myTasks.filter(t => t.Status === 'Completed').length
   const assignedCount  = myTasks.filter(t => t.Status === 'Assigned').length
   const receivedCount  = myTasks.filter(t => t.Status === 'Received').length
+
+  // All active personnel (same roster the Director sees) so employees can
+  // check each other's availability. globalData.users is already scoped to
+  // the viewer's region by getData().
+  const personnel = globalData.users.filter(u => u.Role !== 'Director' && u.AccountStatus === 'Active')
 
   return (
     <div className="h-dvh flex overflow-hidden page-bg">
@@ -249,6 +255,9 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
+
+              {/* ── PERSONNEL AVAILABILITY ── */}
+              <PersonnelStatusPanel users={personnel} />
 
               {myTasks.length > 0 && (
                 <div className="px-4 md:px-6 lg:px-8 py-3 border-b border-slate-200 bg-white/95 flex-shrink-0 flex items-center gap-2.5 flex-wrap">
