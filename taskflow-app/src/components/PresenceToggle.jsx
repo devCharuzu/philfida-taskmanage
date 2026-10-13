@@ -1,9 +1,13 @@
-import { useState, useRef, lazy, Suspense} from 'react'
+import { useState, useEffect, useRef, lazy, Suspense} from 'react'
 import { createPortal } from 'react-dom'
 const LocationPicker = lazy(() => import('./LocationPicker'))
-import { updatePresence, uploadFiles, buildTravelStatus } from '../lib/api'
+import { updatePresence, uploadFiles } from '../lib/api'
+import { checkAndApplyScheduledPresence } from './PersonalCalendarTab'
 
 // ── Exported helper: normalizes stored status string to base key ──
+// NOTE: the stored status prefixes ('Official Travel', 'On Leave') are unchanged
+// so existing data, parsing and the scheduler keep working. Only the
+// user-facing labels were renamed to "Schedule Travel" / "Schedule Leave".
 export function normalizeStatus(raw) {
   if (!raw) return 'Available'
   if (raw.startsWith('Official Travel')) return 'Official Travel'
@@ -26,19 +30,33 @@ const OPTIONS = [
   },
   {
     value:    'Official Travel',
-    label:    'Travel',
+    label:    'Schedule Travel',
     active:   'bg-blue-600 text-white border-blue-700 shadow-sm',
     inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:border-blue-300',
     dot:      'bg-blue-400',
   },
   {
     value:    'On Leave',
-    label:    'Leave',
+    label:    'Schedule Leave',
     active:   'bg-red-500 text-white border-red-600 shadow-sm',
     inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-red-50 hover:border-red-300',
     dot:      'bg-red-400',
   },
 ]
+
+// ── Scheduling helpers ──────────────────────────────────────────
+// Today's date in Asia/Manila as YYYY-MM-DD (the timezone the scheduler uses).
+function manilaToday() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
+}
+
+// "2026-10-20" → "Oct 20" for compact display.
+function fmtShort(dateStr) {
+  if (!dateStr) return ''
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!y || !m || !d) return dateStr
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 function ChangeConfirmModal({ current, target, onConfirm, onCancel }) {
   const from = OPTIONS.find(o => o.value === current)
@@ -86,8 +104,9 @@ function ChangeConfirmModal({ current, target, onConfirm, onCancel }) {
   )
 }
 
-// ── Travel Modal ──────────────────────────────────────────────
+// ── Travel Modal (schedule only) ────────────────────────────────
 function TravelModal({ onConfirm, onCancel }) {
+  const [busy, setBusy]           = useState(false)
   const [eventName, setEventName] = useState('')
   const [location,  setLocation]  = useState('')
   const [geo,       setGeo]       = useState(null)   // { lat, lng } once pinned
@@ -99,29 +118,35 @@ function TravelModal({ onConfirm, onCancel }) {
 
   const fileInputRef = useRef(null)
   const [files, setFiles] = useState([])
+  const today = manilaToday()
 
   function handleSubmit(e) {
     e.preventDefault()
     if (!eventName || !location || !dateStart || !dateEnd) { setError('All fields are required.'); return }
-    if (files.length === 0) { setError('Travel Order file is required.'); return }
+    if (dateStart < today) { setError('Start date cannot be in the past.'); return }
     if (dateEnd < dateStart) { setError('End date must be after start date.'); return }
     if (dateEnd === dateStart && timeEnd <= timeStart) { setError('End time must be after start time on same day.'); return }
-    onConfirm({ eventName, location, lat: geo?.lat ?? null, lng: geo?.lng ?? null, dateStart, timeStart, dateEnd, timeEnd, files })
+    setError('')
+    setBusy(true)
+    Promise.resolve(onConfirm({ eventName, location, lat: geo?.lat ?? null, lng: geo?.lng ?? null, dateStart, timeStart, dateEnd, timeEnd, files }))
+      .then(res => { if (res?.ok) onCancel() })
+      .catch(() => {})
+      .finally(() => setBusy(false))
   }
 
   return createPortal(
     <>
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9998] animate-in fade-in duration-300" />
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300 overflow-y-auto"
         onClick={e => e.target === e.currentTarget && onCancel()}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 my-4">
           <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-blue-700">
             <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
               <i className="bi bi-airplane-fill text-white text-base" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Official Travel</p>
-              <p className="mb-0 mt-0.5 text-blue-100/80 text-[11px] font-medium leading-tight">Travel order required</p>
+              <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Schedule Travel</p>
+              <p className="mb-0 mt-0.5 text-blue-100/80 text-[11px] font-medium leading-tight">Plan ahead — activates automatically</p>
             </div>
             <button
               type="button"
@@ -132,16 +157,16 @@ function TravelModal({ onConfirm, onCancel }) {
               <i className="bi bi-x-lg text-sm" />
             </button>
           </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
-          <div className="space-y-1">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold animate-in fade-in duration-200"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
+          <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Event / Activity Name</label>
-            <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+            <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
               placeholder="e.g. Regional Fiber Industry Summit"
               value={eventName} onChange={e => setEventName(e.target.value)} autoFocus />
           </div>
           <Suspense fallback={
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location / Venue</label>
               <div className="h-[60px] rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
             </div>
@@ -154,37 +179,43 @@ function TravelModal({ onConfirm, onCancel }) {
               }}
             />
           </Suspense>
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200/70 rounded-xl px-4 py-3">
+            <i className="bi bi-info-circle-fill text-amber-500 text-sm mt-0.5 flex-shrink-0" />
+            <p className="text-[11px] text-amber-800 font-medium leading-snug">
+              Please schedule at least <span className="font-bold">1 day before</span> your actual travel date, so other personnel are notified and can prepare in your absence.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Start</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
-                type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                type="date" min={today} value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time Start</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
                 type="time" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date End</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
-                type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                type="date" min={dateStart || today} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time End</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
                 type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
               <span>Travel Order Attachment</span>
-              <span className="text-red-500 font-black">REQUIRED</span>
+              <span className="text-slate-400 font-bold">OPTIONAL — ATTACH LATER</span>
             </label>
             <div className="relative">
-              <input type="file" ref={fileInputRef} className="hidden" 
+              <input type="file" ref={fileInputRef} className="hidden"
                 onChange={e => setFiles(Array.from(e.target.files))} />
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed transition-all
@@ -196,11 +227,16 @@ function TravelModal({ onConfirm, onCancel }) {
               </button>
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100">Cancel</button>
-            <button type="submit" className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onCancel} disabled={busy} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={busy} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100"
               style={{ background: 'linear-gradient(135deg, #1e40af, #2563eb)' }}>
-              Confirm Travel
+              {busy ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Scheduling…
+                </span>
+              ) : 'Schedule Travel'}
             </button>
           </div>
         </form>
@@ -211,8 +247,9 @@ function TravelModal({ onConfirm, onCancel }) {
   )
 }
 
-// ── Leave Modal ───────────────────────────────────────────────
+// ── Leave Modal (schedule only) ─────────────────────────────────
 function LeaveModal({ onConfirm, onCancel }) {
+  const [busy, setBusy]           = useState(false)
   const [leaveType, setLeaveType] = useState('')
   const [reason,    setReason]    = useState('')
   const [dateStart, setDateStart] = useState('')
@@ -222,31 +259,37 @@ function LeaveModal({ onConfirm, onCancel }) {
   const [error,     setError]     = useState('')
   const [files, setFiles] = useState([])
   const fileInputRef = useRef(null)
+  const today = manilaToday()
 
   function handleSubmit(e) {
     e.preventDefault()
     if (!leaveType) { setError('Please select a leave type.'); return }
     if (!reason.trim()) { setError('Please provide a reason for the leave.'); return }
     if (!dateStart || !dateEnd) { setError('Start and end dates are required.'); return }
-    if (new Date(dateStart) > new Date(dateEnd)) { setError('Start date cannot be after end date.'); return }
+    if (dateStart < today) { setError('Start date cannot be in the past.'); return }
+    if (dateEnd < dateStart) { setError('End date must be after start date.'); return }
     if (dateEnd === dateStart && timeEnd <= timeStart) { setError('End time must be after start time on same day.'); return }
-    if (files.length === 0) { setError('Leave attachment is required.'); return }
-    onConfirm({ leaveType, reason, dateStart, timeStart, dateEnd, timeEnd, files })
+    setError('')
+    setBusy(true)
+    Promise.resolve(onConfirm({ leaveType, reason, dateStart, timeStart, dateEnd, timeEnd, files }))
+      .then(res => { if (res?.ok) onCancel() })
+      .catch(() => {})
+      .finally(() => setBusy(false))
   }
 
   return createPortal(
     <>
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9998] animate-in fade-in duration-300" />
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300"
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300 overflow-y-auto"
         onClick={e => e.target === e.currentTarget && onCancel()}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 my-4">
           <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl bg-red-700">
             <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center flex-shrink-0">
               <i className="bi bi-calendar-x-fill text-white text-base" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">On Leave</p>
-              <p className="mb-0 mt-0.5 text-red-100/80 text-[11px] font-medium leading-tight">Leave details required</p>
+              <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Schedule Leave</p>
+              <p className="mb-0 mt-0.5 text-red-100/80 text-[11px] font-medium leading-tight">Plan ahead — activates automatically</p>
             </div>
             <button
               type="button"
@@ -257,18 +300,18 @@ function LeaveModal({ onConfirm, onCancel }) {
               <i className="bi bi-x-lg text-sm" />
             </button>
           </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
-          <div className="space-y-1">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+          {error && <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl px-4 py-3 font-bold animate-in fade-in duration-200"><i className="bi bi-exclamation-circle-fill" />{error}</div>}
+          <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Type of Leave</label>
             <div className="grid grid-cols-2 gap-1.5">
               {LEAVE_TYPES.map(type => {
                 const active = leaveType === type
                 return (
                   <button key={type} type="button" onClick={() => setLeaveType(type)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase text-left transition-all
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase text-left transition-all duration-200 active:scale-95
                       ${active ? 'bg-red-600 text-white border-red-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-red-50 hover:border-red-200'}`}>
-                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors duration-200
                       ${active ? 'border-white' : 'border-slate-300'}`}>
                       {active && <span className="w-2 h-2 rounded-full bg-white block" />}
                     </div>
@@ -278,43 +321,49 @@ function LeaveModal({ onConfirm, onCancel }) {
               })}
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason</label>
-            <textarea className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium resize-none" 
+            <textarea className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium resize-none"
               rows={2} placeholder="Brief reason for leave..."
               value={reason} onChange={e => setReason(e.target.value)} />
           </div>
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200/70 rounded-xl px-4 py-3">
+            <i className="bi bi-info-circle-fill text-amber-500 text-sm mt-0.5 flex-shrink-0" />
+            <p className="text-[11px] text-amber-800 font-medium leading-snug">
+              Please schedule at least <span className="font-bold">1 day before</span> your leave date, so other personnel are notified and can prepare in your absence.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Start</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
-                type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium"
+                type="date" min={today} value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time Start</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium"
                 type="time" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date End</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
-                type="date" min={dateStart} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium"
+                type="date" min={dateStart || today} value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time End</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium" 
+              <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all font-medium"
                 type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
               <span>Leave File Attachment</span>
-              <span className="text-red-500 font-black">REQUIRED</span>
+              <span className="text-slate-400 font-bold">OPTIONAL — ATTACH LATER</span>
             </label>
             <div className="relative">
-              <input type="file" ref={fileInputRef} className="hidden" 
+              <input type="file" ref={fileInputRef} className="hidden"
                 onChange={e => setFiles(Array.from(e.target.files))} />
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed transition-all
@@ -326,11 +375,16 @@ function LeaveModal({ onConfirm, onCancel }) {
               </button>
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100">Cancel</button>
-            <button type="submit" className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-red-900/20 active:scale-95 transition-all"
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onCancel} disabled={busy} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all border border-slate-100 disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={busy} className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white rounded-xl shadow-lg shadow-red-900/20 active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100"
               style={{ background: 'linear-gradient(135deg, #991b1b, #dc2626)' }}>
-              Confirm Leave
+              {busy ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Scheduling…
+                </span>
+              ) : 'Schedule Leave'}
             </button>
           </div>
         </form>
@@ -338,6 +392,93 @@ function LeaveModal({ onConfirm, onCancel }) {
     </div>
     </>,
     document.body
+  )
+}
+
+// ── Upcoming scheduled travel/leave ───────────────────────────
+// Shows reminders that are scheduled for the future (applied === false).
+// The existing scheduler (checkAndApplyScheduledPresence) flips them to
+// active automatically when their window starts.
+function UpcomingSchedules({ userId }) {
+  const [items, setItems] = useState([])
+
+  useEffect(() => {
+    if (!userId) return
+    const load = () => {
+      try {
+        const stored = localStorage.getItem(`philfida_calendar_reminders_${userId}`)
+        const all = stored ? JSON.parse(stored) : []
+        setItems(
+          all
+            .filter(r => (r.type === 'travel' || r.type === 'leave') && !r.applied)
+            .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+        )
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener('presence-reminders-changed', load)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener('presence-reminders-changed', load)
+    }
+  }, [userId])
+
+  function cancelItem(id) {
+    const target = items.find(i => i.id === id)
+    if (!target) return
+    const when = target.date ? `${fmtShort(target.date)}${target.returnDate && target.returnDate !== target.date ? ` → ${fmtShort(target.returnDate)}` : ''}` : ''
+    const label = target.type === 'travel'
+      ? `travel${target.travelActivity ? ` (${target.travelActivity})` : ''}`
+      : `leave${target.leaveType ? ` (${target.leaveType})` : ''}`
+    if (!window.confirm(`Cancel this scheduled ${label}${when ? ` on ${when}` : ''}?`)) return
+    try {
+      const key = `philfida_calendar_reminders_${userId}`
+      const stored = localStorage.getItem(key)
+      const all = stored ? JSON.parse(stored) : []
+      localStorage.setItem(key, JSON.stringify(all.filter(r => r.id !== id)))
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('presence-reminders-changed'))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2">
+        Upcoming Schedules ({items.length})
+      </p>
+      <div className="space-y-1.5">
+        {items.map(r => {
+          const isTravel = r.type === 'travel'
+          const title = isTravel
+            ? r.travelActivity || 'Travel'
+            : `${r.leaveType || 'Leave'}`
+          const when = r.date ? `${fmtShort(r.date)}${r.returnDate && r.returnDate !== r.date ? ` → ${fmtShort(r.returnDate)}` : ''}` : ''
+          return (
+            <div key={r.id}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-colors ${isTravel ? 'bg-blue-50/60 border-blue-100' : 'bg-red-50/60 border-red-100'}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isTravel ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                <i className={`bi ${isTravel ? 'bi-airplane-fill' : 'bi-calendar-x-fill'} text-sm`} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold text-slate-700 truncate leading-tight">{title}</p>
+                {when && <p className="text-[11px] text-slate-400 font-medium mt-0.5">{when}</p>}
+              </div>
+              <button type="button" onClick={() => cancelItem(r.id)} title="Cancel schedule"
+                className="flex-shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-600 px-2.5 py-1.5 rounded-lg hover:bg-white transition-all active:scale-95">
+                Cancel
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -380,7 +521,7 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
   async function handleChangeConfirmed() {
     setModal(null)
     if (pendingTarget === 'Available') {
-      const confirmed = window.confirm(`Note: Resetting your availability to "Available" will also clear/delete any active Travel or Leave reminders on your Personal Calendar. Do you want to proceed?`)
+      const confirmed = window.confirm(`Note: Resetting your availability to "Available" will also clear/delete any active or scheduled Travel or Leave reminders on your Personal Calendar. Do you want to proceed?`)
       if (!confirmed) {
         setPendingTarget(null)
         return
@@ -420,45 +561,49 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
     onSync?.()
   }
 
-  async function confirmTravel(details) {
-    const confirmed = window.confirm(`Note: Setting your availability to "Official Travel" will also create/update a corresponding travel reminder on your Personal Calendar for these dates. Do you want to proceed?`)
-    if (!confirmed) return
+  function readReminders() {
+    const key = `philfida_calendar_reminders_${userId}`
+    const stored = localStorage.getItem(key)
+    let reminders = []
+    if (stored) {
+      try { reminders = JSON.parse(stored) } catch (e) {}
+    }
+    return { key, reminders }
+  }
 
-    setModal(null)
+  function writeReminders(key, reminders) {
+    localStorage.setItem(key, JSON.stringify(reminders))
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('presence-reminders-changed'))
+  }
+
+  async function uploadFirst(files) {
+    if (!files?.length) return ''
+    // uploadFiles() returns a pipe-delimited STRING of paths (e.g. "uploads/abc.pdf")
+    // NOT an array — use .split('|')[0] to get the first path, not [0] (first character).
+    const urlStr = await uploadFiles(files)
+    return urlStr ? urlStr.split('|')[0] : ''
+  }
+
+  async function confirmTravel(details) {
+    const range = details.dateEnd !== details.dateStart
+      ? `${details.dateStart} to ${details.dateEnd}`
+      : details.dateStart
+    const confirmed = window.confirm(
+      `Schedule this travel for ${range}?\n\nYour status will stay as-is and switch to "Schedule Travel" automatically on the start date.`
+    )
+    if (!confirmed) return { cancelled: true }
+
     setLoading(true)
     try {
-      let firstPath = ''
-      if (details.files?.length > 0) {
-        // uploadFiles() returns a pipe-delimited STRING of paths (e.g. "uploads/abc.pdf")
-        // NOT an array — use .split('|')[0] to get the first path, not [0] (first character).
-        const urlStr = await uploadFiles(details.files)
-        firstPath = urlStr ? urlStr.split('|')[0] : null
-      }
+      const firstPath = await uploadFirst(details.files)
 
-      const fullStatus = buildTravelStatus({
-        activity: details.eventName,
-        location: details.location,
-        dateRange: `${details.dateStart} ${details.timeStart} to ${details.dateEnd} ${details.timeEnd}`,
-        filePath: firstPath,
-        lat: details.lat,
-        lng: details.lng,
-      })
-      await commitStatus('travel', fullStatus)
-
-      // Write reminder to local storage
-      const key = `philfida_calendar_reminders_${userId}`
-      const stored = localStorage.getItem(key)
-      let reminders = []
-      if (stored) {
-        try { reminders = JSON.parse(stored) } catch (e) {}
-      }
-      // Filter out existing travel/leave reminders
-      reminders = reminders.filter(r => r.type !== 'travel' && r.type !== 'leave')
-      
-      const newReminder = {
-        id: 'active-travel-' + Date.now(),
+      const { key, reminders } = readReminders()
+      // Keep existing reminders — several future schedules may coexist.
+      reminders.push({
+        id: 'scheduled-travel-' + Date.now(),
         title: `Official Travel: ${details.eventName} at ${details.location}`,
-        notes: `Official Travel schedule. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
+        notes: `Scheduled travel. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
         time: details.timeStart,
         timeEnd: details.timeEnd,
         date: details.dateStart,
@@ -470,53 +615,41 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
         travelLng: details.lng ?? null,
         returnDate: details.dateEnd,
         attachments: firstPath || '',
-        applied: true
-      }
-      reminders.push(newReminder)
-      localStorage.setItem(key, JSON.stringify(reminders))
-      window.dispatchEvent(new Event('storage'))
-      window.dispatchEvent(new Event('presence-reminders-changed'))
+        applied: false
+      })
+      writeReminders(key, reminders)
+      // If the scheduled window has already started (e.g. scheduled for today),
+      // apply it right away instead of waiting for the next scheduler tick.
+      await checkAndApplyScheduledPresence(userId, onSync)
+      return { ok: true }
     } catch (error) {
-      console.error('Travel update failed:', error)
-      window.alert(`Could not set your availability to Official Travel.\n\n${error.message || 'Please check your connection and try again.'}`)
+      console.error('Schedule travel failed:', error)
+      window.alert(`Could not schedule your travel.\n\n${error.message || 'Please check your connection and try again.'}`)
+      return { error: true }
     } finally {
       setLoading(false)
     }
   }
 
   async function confirmLeave(details) {
-    const confirmed = window.confirm(`Note: Setting your availability to "On Leave" will also create/update a corresponding leave reminder on your Personal Calendar for these dates. Do you want to proceed?`)
-    if (!confirmed) return
+    const range = details.dateEnd !== details.dateStart
+      ? `${details.dateStart} to ${details.dateEnd}`
+      : details.dateStart
+    const confirmed = window.confirm(
+      `Schedule this leave for ${range}?\n\nYour status will stay as-is and switch to "Schedule Leave" automatically on the start date.`
+    )
+    if (!confirmed) return { cancelled: true }
 
-    setModal(null)
     setLoading(true)
     try {
-      let fileInfo = ''
-      let firstPath = ''
-      if (details.files?.length > 0) {
-        const urlStr = await uploadFiles(details.files)
-        firstPath = urlStr ? urlStr.split('|')[0] : null
-        if (firstPath) {
-          fileInfo = ` [TO:${firstPath}]`
-        }
-      }
+      const firstPath = await uploadFirst(details.files)
 
-      const full = `On Leave — ${details.leaveType}: ${details.reason} (${details.dateStart} ${details.timeStart} to ${details.dateEnd} ${details.timeEnd})${fileInfo}`
-      await commitStatus('On Leave', full)
-
-      // Write reminder to local storage
-      const key = `philfida_calendar_reminders_${userId}`
-      const stored = localStorage.getItem(key)
-      let reminders = []
-      if (stored) {
-        try { reminders = JSON.parse(stored) } catch (e) {}
-      }
-      reminders = reminders.filter(r => r.type !== 'travel' && r.type !== 'leave')
-
-      const newReminder = {
-        id: 'active-leave-' + Date.now(),
+      const { key, reminders } = readReminders()
+      // Keep existing reminders — several future schedules may coexist.
+      reminders.push({
+        id: 'scheduled-leave-' + Date.now(),
         title: `On Leave: ${details.leaveType} — ${details.reason}`,
-        notes: `Leave schedule. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
+        notes: `Scheduled leave. Start: ${details.dateStart} ${details.timeStart}. Return: ${details.dateEnd} ${details.timeEnd}.`,
         time: details.timeStart,
         timeEnd: details.timeEnd,
         date: details.dateStart,
@@ -526,15 +659,17 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
         leaveReason: details.reason,
         returnDate: details.dateEnd,
         attachments: firstPath || '',
-        applied: true
-      }
-      reminders.push(newReminder)
-      localStorage.setItem(key, JSON.stringify(reminders))
-      window.dispatchEvent(new Event('storage'))
-      window.dispatchEvent(new Event('presence-reminders-changed'))
+        applied: false
+      })
+      writeReminders(key, reminders)
+      // If the scheduled window has already started (e.g. scheduled for today),
+      // apply it right away instead of waiting for the next scheduler tick.
+      await checkAndApplyScheduledPresence(userId, onSync)
+      return { ok: true }
     } catch (error) {
-      console.error('Leave update failed:', error)
-      window.alert(`Could not set your availability to On Leave.\n\n${error.message || 'Please check your connection and try again.'}`)
+      console.error('Schedule leave failed:', error)
+      window.alert(`Could not schedule your leave.\n\n${error.message || 'Please check your connection and try again.'}`)
+      return { error: true }
     } finally {
       setLoading(false)
     }
@@ -547,34 +682,37 @@ export default function PresenceToggle({ value, userId, onChange, onSync, size =
 
   return (
     <>
-    <div className={`
-      ${size === 'large' 
-        ? 'grid grid-cols-1 sm:grid-cols-3 gap-3 w-full' 
-        : 'flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl shadow-sm flex-shrink-0'}
-    `}>
-      {OPTIONS.map(opt => {
-        const isActive = displayValue === opt.value
-        return (
-          <button key={opt.value} type="button"
-            onClick={() => handleClick(opt.value)}
-            title={isActive ? `Currently: ${value}` : `Switch to ${opt.value}`}
-            disabled={isActive || loading}
-            className={`flex items-center justify-center gap-2 font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1
-              ${size === 'large' ? 'px-4 py-3 text-[13px] rounded-xl border' : 'px-3 py-2 text-[11px] sm:text-xs rounded-lg border'}
-              ${isActive
-                ? `${opt.active} cursor-default`
-                : `${opt.inactive} ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`
-              }`}>
-            {loading && isActive ? (
-              <span className={`${size === 'large' ? 'w-4 h-4 border-[3px]' : 'w-2 h-2 border-2'} border-white/30 border-t-white rounded-full animate-spin flex-shrink-0`} />
-            ) : (
-              <span className={`${size === 'large' ? 'w-2.5 h-2.5' : 'w-2 h-2'} rounded-full flex-shrink-0 ${isActive ? 'bg-white' : opt.dot}`} />
-            )}
-            <span className={size === 'large' ? 'uppercase tracking-wide' : ''}>{opt.label}</span>
-            {isActive && !loading && <i className={`bi bi-check2 ml-0.5 ${size === 'large' ? 'text-base' : 'text-[10px]'}`} />}
-          </button>
-        )
-      })}
+    <div>
+      <div className={`
+        ${size === 'large'
+          ? 'grid grid-cols-1 sm:grid-cols-3 gap-3 w-full'
+          : 'flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl shadow-sm flex-shrink-0'}
+      `}>
+        {OPTIONS.map(opt => {
+          const isActive = displayValue === opt.value
+          return (
+            <button key={opt.value} type="button"
+              onClick={() => handleClick(opt.value)}
+              title={isActive ? `Currently: ${value}` : `Switch to ${opt.label}`}
+              disabled={isActive || loading}
+              className={`flex items-center justify-center gap-2 font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1
+                ${size === 'large' ? 'px-4 py-3 text-[13px] rounded-xl border' : 'px-3 py-2 text-[11px] sm:text-xs rounded-lg border'}
+                ${isActive
+                  ? `${opt.active} cursor-default`
+                  : `${opt.inactive} ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`
+                }`}>
+              {loading && isActive ? (
+                <span className={`${size === 'large' ? 'w-4 h-4 border-[3px]' : 'w-2 h-2 border-2'} border-white/30 border-t-white rounded-full animate-spin flex-shrink-0`} />
+              ) : (
+                <span className={`${size === 'large' ? 'w-2.5 h-2.5' : 'w-2 h-2'} rounded-full flex-shrink-0 ${isActive ? 'bg-white' : opt.dot}`} />
+              )}
+              <span className={size === 'large' ? 'uppercase tracking-wide' : ''}>{opt.label}</span>
+              {isActive && !loading && <i className={`bi bi-check2 ml-0.5 ${size === 'large' ? 'text-base' : 'text-[10px]'}`} />}
+            </button>
+          )
+        })}
+      </div>
+      <UpcomingSchedules userId={userId} />
     </div>
 
       {modal === 'confirm' && (
