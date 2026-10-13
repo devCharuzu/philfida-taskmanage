@@ -71,7 +71,7 @@ export default function UserProfileTab({ presence, setPresence }) {
   }
 
   const handleEditActivePresenceClick = (statusData) => {
-    const isTravel = statusData.type === 'Official Travel'
+    const isTravel = statusData.type === 'Schedule Travel'
     
     // Find active reminder in reminders list to preserve original dates and times if possible
     const activeReminder = reminders.find(r => r.applied && (r.type === 'travel' || r.type === 'leave'))
@@ -102,7 +102,7 @@ export default function UserProfileTab({ presence, setPresence }) {
     if (!editingReminder) return
     
     const isTravel = editingReminder.type === 'travel'
-    const confirmed = window.confirm(`Note: Modifying your active ${isTravel ? 'Official Travel' : 'Leave'} details here will also update the corresponding calendar reminder on your Personal Calendar. Do you want to proceed?`)
+    const confirmed = window.confirm(`Note: Modifying your active ${isTravel ? 'Schedule Travel' : 'Leave'} details here will also update the corresponding calendar reminder on your Personal Calendar. Do you want to proceed?`)
     if (!confirmed) return
 
     // Travel goes through buildTravelStatus below; only the leave string is built here.
@@ -389,7 +389,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                       const dates = dateMatch ? dateMatch[1] : ''
                       const rest = content.replace(/\s*\(.*?\)$/, '')
                       const parts = rest.split(' at ')
-                      return { type: 'Official Travel', title: parts[0], location: parts[1] || '', dates, fileUrl, attachments }
+                      return { type: 'Schedule Travel', title: parts[0], location: parts[1] || '', dates, fileUrl, attachments }
                     }
 
                     if (cleanStr.startsWith('On Leave — ')) {
@@ -398,7 +398,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                       const dates = dateMatch ? dateMatch[1] : ''
                       const rest = content.replace(/\s*\(.*?\)$/, '')
                       const parts = rest.split(': ')
-                      return { type: 'On Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl, attachments }
+                      return { type: 'Schedule Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl, attachments }
                     }
 
                     return { type: 'Away', title: cleanStr, fileUrl, attachments }
@@ -406,13 +406,13 @@ export default function UserProfileTab({ presence, setPresence }) {
 
                   if (!statusData) return null
 
-                  const statusTheme = statusData.type === 'Official Travel'
+                  const statusTheme = statusData.type === 'Schedule Travel'
                     ? {
                         bg: 'bg-blue-50/50 border-blue-200',
                         buttonClass: 'bg-blue-600 hover:bg-blue-700',
                         labelClass: 'text-blue-600'
                       }
-                    : statusData.type === 'On Leave'
+                    : statusData.type === 'Schedule Leave'
                     ? {
                         bg: 'bg-rose-50/50 border-rose-200',
                         buttonClass: 'bg-rose-600 hover:bg-rose-700',
@@ -435,10 +435,10 @@ export default function UserProfileTab({ presence, setPresence }) {
                         <dl className="mt-3 grid grid-cols-2 gap-4 border-t border-slate-200/70 pt-3">
                           <div className="min-w-0">
                             <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                              {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
+                              {statusData.type === 'Schedule Travel' ? 'Location' : 'Reason'}
                             </dt>
                             <dd className="m-0 mt-1 text-[13px] font-semibold leading-snug text-slate-700">
-                              {(statusData.type === 'Official Travel' ? statusData.location : statusData.reason) || '—'}
+                              {(statusData.type === 'Schedule Travel' ? statusData.location : statusData.reason) || '—'}
                             </dd>
                           </div>
                           <div className="min-w-0">
@@ -696,13 +696,13 @@ export default function UserProfileTab({ presence, setPresence }) {
                             ? 'bg-blue-50 text-blue-700 ring-blue-200'
                             : 'bg-rose-50 text-rose-700 ring-rose-200'
                         }`}
-                      aria-label={`Director status: ${normalizeStatus(director.Status)}`}
+                      aria-label={`Director status: ${normalizeStatus(director.Status) === 'Official Travel' ? 'Schedule Travel' : normalizeStatus(director.Status) === 'On Leave' ? 'Schedule Leave' : normalizeStatus(director.Status)}`}
                     >
                       <span className={`h-1.5 w-1.5 rounded-full
                         ${normalizeStatus(director.Status) === 'Available' ? 'bg-emerald-500'
                           : normalizeStatus(director.Status) === 'Official Travel' ? 'bg-blue-500' : 'bg-rose-500'}`}
                         aria-hidden="true" />
-                      {normalizeStatus(director.Status)}
+                      {normalizeStatus(director.Status) === 'Official Travel' ? 'Schedule Travel' : normalizeStatus(director.Status) === 'On Leave' ? 'Schedule Leave' : normalizeStatus(director.Status)}
                     </span>
                   </div>
 
@@ -718,7 +718,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                         const dates = dateMatch ? dateMatch[1] : ''
                         const rest = content.replace(/\s*\(.*?\)$/, '')
                         const parts = rest.split(' at ')
-                        return { type: 'Official Travel', title: parts[0], location: parts[1] || '', dates, fileUrl }
+                        return { type: 'Schedule Travel', title: parts[0], location: parts[1] || '', dates, fileUrl }
                       }
 
                       if (cleanStr.startsWith('On Leave — ')) {
@@ -727,18 +727,18 @@ export default function UserProfileTab({ presence, setPresence }) {
                         const dates = dateMatch ? dateMatch[1] : ''
                         const rest = content.replace(/\s*\(.*?\)$/, '')
                         const parts = rest.split(': ')
-                        return { type: 'On Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl }
+                        return { type: 'Schedule Leave', title: parts[0], reason: parts[1] || '', dates, fileUrl }
                       }
 
                       return { type: 'Away', title: cleanStr, fileUrl }
                     })()
 
-                    const dirTheme = statusData.type === 'Official Travel'
+                    const dirTheme = statusData.type === 'Schedule Travel'
                       ? {
                           blockBg: 'bg-blue-50/50 border-blue-200',
                           labelColor: 'text-blue-600'
                         }
-                      : statusData.type === 'On Leave'
+                      : statusData.type === 'Schedule Leave'
                       ? {
                           blockBg: 'bg-rose-50/50 border-rose-200',
                           labelColor: 'text-rose-600'
@@ -759,7 +759,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                           <dl className="mt-3 grid grid-cols-2 gap-4 border-t border-slate-200/70 pt-3">
                             <div className="min-w-0">
                               <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                {statusData.type === 'Official Travel' ? 'Location' : 'Reason'}
+                                {statusData.type === 'Schedule Travel' ? 'Location' : 'Reason'}
                               </dt>
                               <dd className="m-0 mt-1 text-[13px] font-semibold leading-snug text-slate-700">{statusData.location || statusData.reason || '—'}</dd>
                             </div>
@@ -846,7 +846,7 @@ export default function UserProfileTab({ presence, setPresence }) {
                 <div className="min-w-0 flex-1">
                   <p className="mb-0 text-white font-semibold text-[15px] leading-tight tracking-tight">Edit availability</p>
                   <p className={`mb-0 mt-0.5 text-[11px] font-medium leading-tight ${subtitleText}`}>
-                    {isTravel ? 'Official Travel' : 'On Leave'}
+                    {isTravel ? 'Schedule Travel' : 'Schedule Leave'}
                   </p>
                 </div>
                 <button
